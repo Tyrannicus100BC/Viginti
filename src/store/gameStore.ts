@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { Card, DealerHand, PlayerHand } from '../types';
 import { createStandardDeck, shuffleDeck } from '../logic/deck';
-import { getBlackjackScore, evaluatePokerHand } from '../logic/scoring';
+import { getBlackjackScore, evaluateHandScore } from '../logic/scoring';
 import { calculateTargetScore } from '../logic/casinoConfig';
 
 interface GameState {
@@ -18,6 +18,7 @@ interface GameState {
   // Physics Scoring State
   scoringDetails: { handId: number; score: number; sourceId: string } | null;
   isCollectingChips: boolean;
+  discardPile: Card[];
 
   isInitialDeal: boolean;
   
@@ -56,6 +57,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   scoringHandIndex: -1, 
   scoringDetails: null,
   isCollectingChips: false,
+  discardPile: [],
   isInitialDeal: true,
   animationSpeed: 1,
   setAnimationSpeed: (speed) => set({ animationSpeed: speed }),
@@ -115,6 +117,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         targetScore: calculateTargetScore(1),
         handsRemaining: 3,
         round: 1,
+        discardPile: [],
         isInitialDeal: true
     });
   },
@@ -282,11 +285,11 @@ export const useGameStore = create<GameState>((set, get) => ({
         if (h.isBust) win = false;
         else if (h.blackjackValue === 21) win = true; 
         else if (dVal > 21) win = true;
-        else if (h.blackjackValue > dVal) win = true;
+        else if (h.blackjackValue >= dVal) win = true;
         else win = false; 
         
         if (win) {
-            const score = evaluatePokerHand(h.cards);
+            const score = evaluateHandScore(h.cards, win);
             return { ...h, finalScore: score, resultRevealed: false };
         } else {
             return { ...h, finalScore: null, resultRevealed: false }; 
@@ -317,17 +320,32 @@ export const useGameStore = create<GameState>((set, get) => ({
         set({ playerHands: animatingHands });
         
         const hand = animatingHands[i];
-        const scoreData = hand?.finalScore;
+        const scoreData = hand.finalScore;
         const isWin = !!scoreData;
-        
-        await wait(isWin ? 700 : 700); // Reduced from 1000
+        const criteriaCount = scoreData?.criteria?.length || 0;
+        // Animation timing:
+        // Initial: 300
+        // Chips Phase: criteriaCount * (100 + 400) = N * 500
+        // Pre-Mult: 200
+        // Mult Reveal: 300
+        // Mult Phase: criteriaCount * (100 + 400) = N * 500
+        // Post Mult: 400
+        // Finalize: 500
+        // Buffer: 200
+        // Total Base: 300 + 200 + 300 + 400 + 500 + 200 = 1900ms
+        // Total Per Item: 1000ms
+        const animationDuration = isWin 
+            ? 1900 + (criteriaCount * 1000)
+            : 700; 
+
+        await wait(animationDuration);
         
         if (isWin && scoreData) {
             // Trigger Physics Chips to Pot
             set({ 
                 scoringDetails: { 
                     handId: hand.id, 
-                    score: scoreData.totalScore, 
+                    score: scoreData.finalScore, 
                     sourceId: `hand-score-${hand.id}` 
                 } 
             });
@@ -346,7 +364,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     set({ scoringHandIndex: -1 });
     
     // Check if there are any winnings to collect
-    const totalWinnings = animatingHands.reduce((acc, h) => acc + (h.finalScore?.totalScore || 0), 0);
+    const totalWinnings = animatingHands.reduce((acc, h) => acc + (h.finalScore?.finalScore || 0), 0);
     
     if (totalWinnings > 0) {
         // Wait 1.4s after last chips were dropped (indicated by loop finishing)
@@ -362,7 +380,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   chipCollectionComplete: () => {
       const { playerHands, totalScore, targetScore, handsRemaining } = get();
       
-      const totalWinnings = playerHands.reduce((acc, h) => acc + (h.finalScore?.totalScore || 0), 0);
+      const totalWinnings = playerHands.reduce((acc, h) => acc + (h.finalScore?.finalScore || 0), 0);
       const newTotalScore = totalScore + totalWinnings;
       
       const hasReachedTarget = newTotalScore >= targetScore;
@@ -398,16 +416,7 @@ export const useGameStore = create<GameState>((set, get) => ({
           // Set target based on casino number
           newTargetScore = calculateTargetScore(newRound);
 
-          // Cycle cards back into deck and shuffle for the new casino
-          const usedCards = [
-            ...dealer.cards,
-            ...playerHands.flatMap(h => h.cards)
-          ];
-          const fullDeck = [...deck, ...usedCards];
-          for (let i = fullDeck.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [fullDeck[i], fullDeck[j]] = [fullDeck[j], fullDeck[i]];
-          }
+          const fullDeck = shuffleDeck(createStandardDeck()); // Always a fresh 52 cards for new casino
 
           const emptyHands: PlayerHand[] = Array.from({ length: INITIAL_HAND_COUNT }, (_, i) => ({
               id: i,
@@ -426,6 +435,7 @@ export const useGameStore = create<GameState>((set, get) => ({
               targetScore: newTargetScore,
               totalScore: newTotalScore,
               handsRemaining: newHandsRemaining,
+              discardPile: [],
               dealerMessage: null
           });
           return;
@@ -434,26 +444,25 @@ export const useGameStore = create<GameState>((set, get) => ({
       // Decrement deals when dealing a new hand (and not advancing casino)
       const newHandsRemaining = currentState.handsRemaining - 1;
       
-      const usedCards = [
+      const additionalDiscard = [
           ...dealer.cards,
           ...playerHands.flatMap(h => h.cards)
       ];
       
-      const fullDeck = [...deck, ...usedCards];
-      // Basic Fisher-Yates shuffle
-      for (let i = fullDeck.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [fullDeck[i], fullDeck[j]] = [fullDeck[j], fullDeck[i]];
-      }
+      const newDiscardPile = [...currentState.discardPile, ...additionalDiscard];
+      const deckRef = [...deck];
       
+      // If deck is getting dangerously low, we might need a fallback, 
+      // but according to requirements we only shuffle when changing casinos.
+      // 52 cards should usually last for 3 rounds.
+
       const newHands: PlayerHand[] = [];
-      const deckRef = fullDeck; // Mutable for pop
 
         // Deal 3 hands
         for (let i = 0; i < INITIAL_HAND_COUNT; i++) {
             const card = deckRef.pop()!;
             card.isFaceUp = true;
-            card.origin = 'deck'; // Ensure origin is reset for new round
+            card.origin = 'deck';
             newHands.push({
                 id: i,
                 cards: [card],
@@ -479,8 +488,8 @@ export const useGameStore = create<GameState>((set, get) => ({
             },
             drawnCard: null,
             phase: 'playing',
-            // round, targetScore, totalScore Unchanged
             handsRemaining: newHandsRemaining,
+            discardPile: newDiscardPile,
             isInitialDeal: true
         });
         

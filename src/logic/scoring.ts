@@ -1,4 +1,4 @@
-import type { Card, HandScore, PokerHandType } from '../types';
+import type { Card, HandScore, ScoringCriterionId, ScoringDetail } from '../types';
 
 export const RANK_VALUES: Record<string, number> = {
   '2': 2, '3': 3, '4': 4, '5': 5,
@@ -6,11 +6,26 @@ export const RANK_VALUES: Record<string, number> = {
   '10': 10, 'J': 10, 'Q': 10, 'K': 10, 'A': 11
 };
 
-// For poker comparison (order)
 const POKER_ORDER: Record<string, number> = {
   '2': 2, '3': 3, '4': 4, '5': 5,
   '6': 6, '7': 7, '8': 8, '9': 9,
   '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14
+};
+
+interface ScoringRule {
+  id: ScoringCriterionId;
+  name: string;
+  chips: number;
+  mult: number;
+}
+
+export const SCORING_RULES: Record<ScoringCriterionId, ScoringRule> = {
+  'win': { id: 'win', name: 'Win', chips: 0, mult: 0 },
+  'viginti': { id: 'viginti', name: 'Viginti', chips: 5, mult: 0.25 },
+  'two_cards': { id: 'two_cards', name: 'Two Cards', chips: 5, mult: 0.5 },
+  'rank_match': { id: 'rank_match', name: 'Rank Match', chips: 2, mult: 1 },
+  'suit_match': { id: 'suit_match', name: 'Suit Match', chips: 3, mult: 1 },
+  'sequence': { id: 'sequence', name: 'Sequence', chips: 4, mult: 1 }
 };
 
 export function getBlackjackScore(cards: Card[]): number {
@@ -31,181 +46,186 @@ export function getBlackjackScore(cards: Card[]): number {
   return score;
 }
 
-export const MULTIPLIERS: Record<PokerHandType, number> = {
-  'mini_royal_flush': 30,
-  'straight_flush': 15,
-  'three_of_a_kind': 10,
-  'straight': 5,
-  'flush': 3,
-  'one_pair': 2,
-  'high_card': 1
-};
+export function evaluateHandScore(cards: Card[], isWin: boolean): HandScore {
+  const blackjackScore = getBlackjackScore(cards);
+  const criteria: ScoringDetail[] = [];
 
-function getFaceSum(cards: Card[]): number {
-  return cards.reduce((sum, c) => sum + RANK_VALUES[c.rank], 0);
-}
-
-function isFlush(cards: Card[]): boolean {
-  if (cards.length < 3) return false;
-  const suit = cards[0].suit;
-  return cards.every(c => c.suit === suit);
-}
-
-function isStraight(cards: Card[]): boolean {
-  if (cards.length < 3) return false;
-  const values = cards.map(c => POKER_ORDER[c.rank]).sort((a, b) => a - b);
-  // Handle A-2-3 (A=14, 2=2, 3=3) -> special check? 
-  // 3-card poker straights: A-2-3 is usually allowed? Or Q-K-A?
-  // Let's assume strict neighbors.
-  // Special Case: A-2-3. A is 14. 2,3,14. 
-  // If we want low Ace support for straights:
-  const hasAce = values.includes(14);
+  // 1. Win / Viginti
+  const isViginti = blackjackScore === 21;
   
-  // Check standard sequence
-  let sequence = true;
-  for (let i = 0; i < values.length - 1; i++) {
-    if (values[i + 1] !== values[i] + 1) {
-      sequence = false;
-      break;
-    }
+  if (isViginti) {
+     criteria.push({
+         id: 'viginti',
+         name: SCORING_RULES.viginti.name,
+         count: 1,
+         chips: SCORING_RULES.viginti.chips,
+         multiplier: SCORING_RULES.viginti.mult
+     });
+  } else if (isWin) {
+     criteria.push({
+         id: 'win',
+         name: SCORING_RULES.win.name,
+         count: 1,
+         chips: SCORING_RULES.win.chips,
+         multiplier: SCORING_RULES.win.mult
+     });
   }
-  if (sequence) return true;
 
-  // Check Wheel (A-2-3) for 3 cards
-  if (cards.length === 3 && hasAce && values.includes(2) && values.includes(3)) return true;
-  
-  return false;
-}
+  // 2. Two Cards
+  if (cards.length === 2) {
+      criteria.push({
+         id: 'two_cards',
+         name: SCORING_RULES.two_cards.name,
+         count: 1,
+         chips: SCORING_RULES.two_cards.chips,
+         multiplier: SCORING_RULES.two_cards.mult
+      });
+  }
 
-function getHandType(cards: Card[]): PokerHandType {
-  const isF = isFlush(cards);
-  const isS = isStraight(cards);
-  
-  if (cards.length === 3 && isF && isS) {
-    // Mini Royal? Q-K-A suited
-    const values = cards.map(c => POKER_ORDER[c.rank]);
-    if (values.includes(12) && values.includes(13) && values.includes(14)) {
-      return 'mini_royal_flush';
-    }
-    return 'straight_flush';
-  }
-  
-  if (cards.length === 3) {
-    const ranks = cards.map(c => c.rank);
-    if (ranks[0] === ranks[1] && ranks[1] === ranks[2]) return 'three_of_a_kind';
-  }
-  
-  if (isS) return 'straight';
-  if (isF) return 'flush';
-  
-  // Pair
-  const ranks = cards.map(c => c.rank);
-  const uniqueRanks = new Set(ranks);
-  if (uniqueRanks.size < cards.length) return 'one_pair';
-  
-  return 'high_card';
-}
+  // 3. Rank Match (Pairs, etc >= 2)
+  const rankCounts: Record<string, number> = {};
+  cards.forEach(c => rankCounts[c.rank] = (rankCounts[c.rank] || 0) + 1);
+  let rankMatchCount = 0;
+  let rankMatchChips = 0;
+  let rankMatchMult = 0;
 
-function getScoringCards(cards: Card[], type: PokerHandType): Card[] {
-  // Return the subset that makes the hand.
-  // Prioritize "part of the hand".
-  // For straight/flush/full hands -> All cards.
-  if (['mini_royal_flush', 'straight_flush', 'three_of_a_kind', 'straight', 'flush'].includes(type)) {
-    return cards;
+  for (const rank in rankCounts) {
+      const count = rankCounts[rank];
+      if (count >= 2) {
+          rankMatchCount++;
+          // Base rule * (count - 1)? Or just flat per match group?
+          // Simplest: Flat per group.
+          rankMatchChips += SCORING_RULES.rank_match.chips;
+          rankMatchMult += SCORING_RULES.rank_match.mult;
+      }
   }
-  
-  // Only pair?
-  if (type === 'one_pair') {
-    // Find the pair
-    const counts: Record<string, Card[]> = {};
-    for (const c of cards) {
-      if (!counts[c.rank]) counts[c.rank] = [];
-      counts[c.rank].push(c);
-    }
-    for (const rank in counts) {
-      if (counts[rank].length >= 2) return counts[rank].slice(0, 2);
-    }
-  }
-  
-  // High card -> highest card
-  const sorted = [...cards].sort((a, b) => POKER_ORDER[b.rank] - POKER_ORDER[a.rank]);
-  return [sorted[0]];
-}
 
-function evaluateSubset(subset: Card[]): HandScore {
-  const type = getHandType(subset);
-  // Special case: "High Card" implies single card value used?
-  // "High Card is just 1x the face value of the highest card"
-  // If we pass 3 cards [2, 5, 9] (no flush/str), it's High Card.
-  // Does valid scoring subset become just [9]? Yes.
+  if (rankMatchCount > 0) {
+      criteria.push({
+          id: 'rank_match',
+          name: SCORING_RULES.rank_match.name,
+          count: rankMatchCount,
+          chips: rankMatchChips,
+          multiplier: rankMatchMult
+      });
+  }
+
+  // 4. Suit Match (>= 2 same suit? Or >=3? Defaulting to >= 2 for flexibility as per "Two Cards" logic usually implying pairs, but suit might need 3? Prompt example: "Two Suite Match (3 long hearts, 2 long diamonds)" -> implies length 2 counts.)
+  const suitCounts: Record<string, number> = {};
+  cards.forEach(c => suitCounts[c.suit] = (suitCounts[c.suit] || 0) + 1);
+  let suitMatchCount = 0;
+  let suitMatchChips = 0;
+  let suitMatchMult = 0;
+
+  for (const suit in suitCounts) {
+      const count = suitCounts[suit];
+      if (count >= 2) {
+          suitMatchCount++;
+          suitMatchChips += SCORING_RULES.suit_match.chips;
+          suitMatchMult += SCORING_RULES.suit_match.mult;
+      }
+  }
+
+  if (suitMatchCount > 0) {
+      criteria.push({
+          id: 'suit_match',
+          name: SCORING_RULES.suit_match.name,
+          count: suitMatchCount,
+          chips: suitMatchChips,
+          multiplier: suitMatchMult
+      });
+  }
+
+  // 5. Sequence (>= 3 consecutive? Prompt says "4 long, 1-2-3-4" is a sequence.)
+  // Usually poker straights are 5, or 3 in mini.
+  // Prompt implies checking for runs. 
+  // Sort cards by poker value.
+  const uniqueValues = Array.from(new Set(cards.map(c => POKER_ORDER[c.rank]))).sort((a, b) => a - b);
+  // Also consider Ace as low (1) if needed? POKER_ORDER has Ace=14.
+  // Let's add low ace support: If 14 exists, add 1.
+  if (uniqueValues.includes(14)) uniqueValues.unshift(1);
+
+  let seqCount = 0;
+  let seqChips = 0;
+  let seqMult = 0;
+
+  // Find runs of length >= 3
+  let currentRunLength = 1;
+
+  // We need to be careful. 1,2,3,4 is ONE sequence of length 4. Not two sequences.
+  // So we just iterate and reset.
+  for (let i = 0; i < uniqueValues.length - 1; i++) {
+      if (uniqueValues[i + 1] === uniqueValues[i] + 1) {
+          currentRunLength++;
+      } else {
+          if (currentRunLength >= 2) {
+              seqCount++;
+              seqChips += SCORING_RULES.sequence.chips;
+              seqMult += SCORING_RULES.sequence.mult;
+          }
+          currentRunLength = 1;
+      }
+  }
+  // Check last run
+  if (currentRunLength >= 2) {
+      seqCount++;
+      seqChips += SCORING_RULES.sequence.chips;
+      seqMult += SCORING_RULES.sequence.mult;
+  }
+
+  if (seqCount > 0) {
+      criteria.push({
+          id: 'sequence',
+          name: SCORING_RULES.sequence.name,
+          count: seqCount,
+          chips: seqChips,
+          multiplier: seqMult
+      });
+  }
+
+  // Totals
+  const totalChips = criteria.reduce((sum, c) => sum + c.chips, 0);
+  const totalMultiplier = criteria.reduce((sum, c) => sum + c.multiplier, 0);
+  // Final score formula: (Sum of Cards + TotalChips) * TotalMultiplier?
+  // Prompt: "(sum of cards involed + 10) x 2" -> This was for a specific hand type example.
+  // Prompt also says: "The area that normally shows the blackjack hand score will be used to show the running total... As this appears, they will see the blackjack hand score increase by this amount."
+  // This implies we take Base Blackjack Score, add All Chips, then multiply by All Mults.
+  // Wait, "sum of cards involved". In Blackjack, all cards are involved.
+  // So Base Cards Score (Blackjack Value) + Bonus Chips.
+  const baseScore = blackjackScore + totalChips;
+  // Multiplier defaults to 1 if no mults? 
+  // If user says "x2" is added, then the base is 1?
+  // Or is it additive multipliers? "Total xChips".
+  // Note: "Each hand type... new column for added chips... existing multiplier".
+  // So Flush: +10, x2.
+  // If I have Flush and Pair (+5, x1.5).
+  // Total Mult = 2 + 1.5 = 3.5?
+  // Or product? "Add it to the running total xChips". "Added together".
+  // So it is additive.
+  // What is the starting multiplier? Should be 1 (identity) or 0 (and we multiply by final)?
+  // Usually in Balatro-likes, it's (Base + Chips) * (Mult).
+  // If I have NO scoring hands, score is just Blackjack Value * 1?
+  // Yes. So start mult at 1?
+  // BUT the prompt says: "First it will only show the +Chips... then it will show the xChips... update the blackjack score to be multiplied by the total xChips".
+  // If I have 0 scoring hands, I show nothing. Total xChips = 0?
+  // If total xChips is 0, score becomes 0?
+  // No, basic multiplier is 1.
+  // So `finalMult = Math.max(1, totalMultiplier)`.
+  // Wait, if I have a Flush (x2), is the total mult 2 or 3 (1+2)?
+  // "Flush is currently x3... enhance to +10, x2".
+  // This implies the rule replaces the old value.
+  // So if I have Flush (x2) and Pair (x1.5), and I "Add them", I get 3.5.
+  // So the implicit base is 0, but valid hands add to it.
+  // If `totalMultiplier` is 0, we use 1.
   
-  const scoringCards = getScoringCards(subset, type);
-  const basePoints = getFaceSum(scoringCards);
-  const multiplier = MULTIPLIERS[type];
-  
+  const finalMult = totalMultiplier === 0 ? 1 : totalMultiplier;
+  const finalScore = Math.floor(baseScore * finalMult);
+
   return {
-    pokerHand: type,
-    multiplier,
-    basePoints,
-    totalScore: basePoints * multiplier,
-    scoringCards
+    criteria,
+    totalChips,
+    totalMultiplier: finalMult,
+    finalScore,
+    scoringCards: cards // All cards involved
   };
-}
-
-export function evaluatePokerHand(cards: Card[]): HandScore {
-  if (cards.length === 0) return { pokerHand: 'high_card', multiplier: 1, basePoints: 0, totalScore: 0, scoringCards: [] };
-  
-  // Get all subsets of size up to 3 (min 1)
-  // Actually, usually we take the Best 3 Cards.
-  // A hand of 4 cards -> 4 subsets of 3.
-  
-  let bestScore: HandScore | null = null;
-  
-  // If count <= 3, just eval the set
-  // BUT: Even with 2 cards [5, 5], it's a Pair.
-  // With [5, 6], it's High Card.
-  // So we should check the whole hand if <=3?
-  // Wait, Three Card Poker rules usually require 3 cards for Straight/Flush.
-  // Can a 2-card Straight exist? Probably not.
-  // Can a 2-card Flush exist? Probably not.
-  // I will enforce logical sizes.
-  // Straight/Flush/3-Kind require 3 cards.
-  // Pair requires 2.
-  // High Card requires 1.
-  
-  // Strategy: Try all combinations of size 1, 2, 3.
-  const combinations: Card[][] = [];
-  
-  // Helper for combos
-  const f = (start: number, pool: Card[]) => {
-    if (pool.length >= 1 && pool.length <= 3) combinations.push([...pool]);
-    if (pool.length === 3) return;
-    
-    for (let i = start; i < cards.length; i++) {
-        f(i + 1, [...pool, cards[i]]);
-    }
-  };
-  f(0, []);
-
-  for (const combo of combinations) {
-    const res = evaluateSubset(combo);
-    // Sanity checks for definitions:
-    // Straight must be 3 cards? Prompt says "3 card poker hand".
-    // I'll assume Straight/Flush need 3.
-    if ((res.pokerHand === 'straight' || res.pokerHand === 'flush' || res.pokerHand === 'straight_flush' || res.pokerHand === 'three_of_a_kind' || res.pokerHand === 'mini_royal_flush') && combo.length < 3) {
-      continue; 
-    }
-    if (res.pokerHand === 'one_pair' && combo.length < 2) continue;
-
-    if (!bestScore || res.totalScore > bestScore.totalScore) {
-      bestScore = res;
-    }
-  }
-
-  if (!bestScore) {
-    // Fallback to evaluating the whole hand as a high card if something goes wrong
-    return evaluateSubset([cards[0]]);
-  }
-
-  return bestScore;
 }

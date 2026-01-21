@@ -1,31 +1,11 @@
 import React from 'react';
 import styles from './HandRankingsView.module.css';
-import { MULTIPLIERS } from '../logic/scoring';
-import type { PokerHandType } from '../types';
+import { SCORING_RULES } from '../logic/scoring';
 
 interface HandRankingsViewProps {
   onClose: () => void;
 }
 
-const HAND_LABELS: Record<PokerHandType, string> = {
-    'mini_royal_flush': 'Mini Royal Flush',
-    'straight_flush': 'Straight Flush',
-    'three_of_a_kind': 'Three of a Kind',
-    'straight': 'Straight',
-    'flush': 'Flush',
-    'one_pair': 'One Pair',
-    'high_card': 'High Card'
-};
-
-const ORDERED_HANDS: PokerHandType[] = [
-    'mini_royal_flush',
-    'straight_flush',
-    'three_of_a_kind',
-    'straight',
-    'flush',
-    'one_pair',
-    'high_card'
-];
 
 export const HandRankingsView: React.FC<HandRankingsViewProps> = ({ onClose }) => {
     return (
@@ -33,10 +13,16 @@ export const HandRankingsView: React.FC<HandRankingsViewProps> = ({ onClose }) =
             <div className={styles.modal} onClick={e => e.stopPropagation()}>
                 <h2>Poker Hand Rankings</h2>
                 
-                {ORDERED_HANDS.map(type => (
-                    <div key={type} className={styles.row}>
-                        <span className={styles.handName}>{HAND_LABELS[type]}</span>
-                        <span className={styles.multiplier}>{MULTIPLIERS[type]}x</span>
+                <div className={styles.headerRow}>
+                    <span className={styles.handNameHeader}>Hand Type</span>
+                    <span className={styles.chipsHeader}>Chips</span>
+                    <span className={styles.multHeader}>Mult</span>
+                </div>
+                {Object.values(SCORING_RULES).map(rule => (
+                    <div key={rule.id} className={styles.row}>
+                        <span className={styles.handName}>{rule.name}</span>
+                        <span className={styles.chips}>{rule.chips !== 0 ? `+${rule.chips}` : ''}</span>
+                        <span className={styles.multiplier}>{rule.mult !== 0 ? `x${rule.mult}` : ''}</span>
                     </div>
                 ))}
                 

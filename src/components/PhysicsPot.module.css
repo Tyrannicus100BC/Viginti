@@ -5,7 +5,7 @@
     width: 100vw;
     height: 100vh;
     pointer-events: none; /* Let clicks pass through to game */
-    z-index: 900; /* High z-index but below modals/alerts if any */
+    z-index: 10; /* Lowered from 900 to be behind hands */
     overflow: hidden;
 }
 
@@ -15,15 +15,13 @@ canvas {
 
 .potTotal {
     position: absolute;
-    top: 45%;
-    left: 50%;
     transform: translate(-50%, -50%);
     display: flex;
     flex-direction: column;
     align-items: center;
     color: #ffd700;
     pointer-events: none;
-    z-index: 902;
+    z-index: 12; /* Lowered from 902 */
     transition: transform 0.1s ease;
 }
 

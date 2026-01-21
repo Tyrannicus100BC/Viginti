@@ -50,7 +50,6 @@
 }
 
 .headerCentered {
-    top: 50%; /* Pure half-way for stability */
     transform: translateY(-50%);
     width: 400px;
     height: 200px; /* Explicit height for overlay mode */
@@ -147,6 +146,8 @@
   align-items: center;
   width: 100%;
   max-width: 1000px;
+  position: relative;
+  z-index: 20; /* Above PhysicsPot (10) */
 }
 
 .dealerZone {
@@ -251,8 +252,8 @@
 }
 
 .button {
-  padding: 16px 32px;
-  font-size: 1rem;
+  padding: 24px 48px;
+  font-size: 1.5rem;
   text-transform: uppercase;
   letter-spacing: 1px;
   border: none;
@@ -278,6 +279,19 @@
   background: #34495e;
   color: #7f8c8d;
   cursor: not-allowed;
+}
+
+.startRunButton {
+    transform-origin: center center;
+    width: 85%;
+    padding-left: 0;
+    padding-right: 0;
+}
+
+.titleContainer {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
 }
 
 .secondaryBtn {

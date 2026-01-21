@@ -54,67 +54,144 @@ export const TitlePhysics: React.FC = () => {
 
     // Dynamic Collision Objects for UI
     let staticBodies: Matter.Body[] = [];
-    const updateStaticBodies = () => {
+    
+    const clearStaticBodies = () => {
         if (!engineRef.current) return;
-        
         // Remove old static bodies
         staticBodies.forEach(b => Matter.World.remove(engineRef.current!.world, b));
         staticBodies = [];
+    };
 
-        // Add Collision for Title Text
-        const titleEl = document.querySelector(`.${styles.titleText}`);
-        if (titleEl) {
-            const rect = titleEl.getBoundingClientRect();
-            // Use a circle but offset it slightly down to create a steeper dome
-            // Or better: use a "house" shape (triangle on rectangle) to perfectly shed items.
-            // Vertices for a "pointy" top to shed chips
+    const updateStaticBodies = (buttonRotation = 0, letterScales: number[] = []) => {
+        if (!engineRef.current) return;
+        
+        // Clear existing
+        clearStaticBodies();
+
+        // Add Collision for Title Letters
+        const letterEls = document.querySelectorAll(`.${styles.letter}`);
+        letterEls.forEach((el, i) => {
+            const rect = el.getBoundingClientRect();
             const cx = rect.left + rect.width / 2;
             const cy = rect.top + rect.height / 2;
-            const w = rect.width;
-            const h = rect.height;
             
-            // Octagon-like shape but very pointy on top
-            const titleBody = Matter.Bodies.fromVertices(cx, cy, [
-                [
-                    { x: -w/2, y: h/2 },    // Bottom Left
-                    { x: w/2, y: h/2 },     // Bottom Right
-                    { x: w/2, y: 0 },       // Middle Right
-                    { x: 0, y: -h * 0.8 },  // Pointy Top Center
-                    { x: -w/2, y: 0 },      // Middle Left
-                ]
-            ], { isStatic: true, render: { visible: false } });
+            // Get the current visual scale of this letter
+            const visualScale = letterScales[i] || 1.0;
             
-            if (titleBody) staticBodies.push(titleBody);
-        }
+            // Base radius (unscaled)
+            const baseRadius = Math.min(rect.width, rect.height) / (2 * visualScale);
+            
+            // Collision growth is 9x the visual growth (3x the previous 3x)
+            const collisionScale = 1 + 9 * (visualScale - 1);
+            const radius = baseRadius * collisionScale;
+            
+            // Circle collision for each letter
+            const letterBody = Matter.Bodies.circle(cx, cy, radius, { 
+                isStatic: true, 
+                restitution: 1.0, 
+                friction: 0.01, // 10% of default to allow sliding
+                frictionStatic: 0,
+                render: { visible: false } 
+            });
+            
+            staticBodies.push(letterBody);
+        });
 
         // Add Collision for Start Button
-        const buttonEl = document.querySelector(`button[class*="button"]`);
+        const buttonEl = document.querySelector(`button[class*="startRunButton"]`);
         if (buttonEl) {
-            const rect = buttonEl.getBoundingClientRect();
+            const el = buttonEl as HTMLElement;
+            const w = el.offsetWidth;
+            const h = el.offsetHeight;
+            
+            // To get the correct center even when rotated, we use the bounding rect center
+            // but the intrinsic w/h for the body dimensions.
+            const rect = el.getBoundingClientRect();
             const cx = rect.left + rect.width / 2;
             const cy = rect.top + rect.height / 2;
-            const w = rect.width;
-            const h = rect.height;
 
-            const buttonBody = Matter.Bodies.fromVertices(cx, cy, [
-                [
-                    { x: -w/2, y: h/2 },
-                    { x: w/2, y: h/2 },
-                    { x: w/2, y: 0 },
-                    { x: 0, y: -h * 0.8 }, // Pointy top
-                    { x: -w/2, y: 0 },
-                ]
-            ], { isStatic: true, render: { visible: false } });
+            const buttonBody = Matter.Bodies.rectangle(cx, cy, w, h, { 
+                isStatic: true, 
+                angle: buttonRotation,
+                friction: 0.01,
+                frictionStatic: 0,
+                render: { visible: false } 
+            });
             
-            if (buttonBody) staticBodies.push(buttonBody);
+            if (buttonBody) {
+                staticBodies.push(buttonBody);
+                (buttonEl as HTMLElement).style.transform = `rotate(${buttonRotation}rad)`;
+            }
         }
 
         Matter.World.add(engineRef.current.world, staticBodies);
     };
 
-    // Initial update and periodic refresh to handle layout shifts/animations
+    // Animation loop for letters and colliders
+    let animationFrameId: number;
+    const animateLetters = (time: number) => {
+        const letterEls = document.querySelectorAll(`.${styles.letter}`);
+        const buttonEl = document.querySelector(`button[class*="startRunButton"]`);
+        
+        if (letterEls.length > 0 || buttonEl) {
+            // Letter animation
+            if (letterEls.length > 0) {
+                const els = Array.from(letterEls) as HTMLElement[];
+                const rects = els.map(el => el.getBoundingClientRect());
+                
+                // Calculate total span from start of first to end of last letter
+                const startX = rects[0].left;
+                const endX = rects[rects.length - 1].right;
+                const totalWidth = endX - startX || 1; // avoid div by zero
+
+                const textHeight = rects[0].height;
+                const amplitude = textHeight * 0.15;
+                const speed = 0.003;
+                
+                // Scale animation parameters
+                const scaleAmplitude = 0.25; 
+                const scaleSpeed = 0.004; 
+                const pulseCycle = Math.PI * 4; 
+
+                const letterScales: number[] = [];
+
+                els.forEach((el, i) => {
+                    const rect = rects[i];
+                    // Calculate center of this letter relative to the total word width (0 to 1)
+                    const letterCenter = rect.left + rect.width / 2;
+                    const relativeX = (letterCenter - startX) / totalWidth;
+
+                    // Vertical Phase: proportional to position (1/4 sin across total width)
+                    const yPhase = relativeX * (Math.PI * 2 / 4);
+                    const yOffset = Math.sin(time * speed + yPhase) * amplitude;
+                    
+                    // Scale Phase: Pressure wave L-to-R proportional to position
+                    const sPhase = -(relativeX * Math.PI * 1.5);
+                    const theta = (time * scaleSpeed + sPhase) % pulseCycle;
+                    
+                    // Gated pulse
+                    const scaleSin = (theta > 0 && theta < Math.PI) ? Math.sin(theta) : 0;
+                    const scale = 1.0 + scaleAmplitude * scaleSin;
+
+                    el.style.transform = `translateY(${yOffset}px) scale(${scale})`;
+                    letterScales.push(scale);
+                });
+
+                // Button rotation animation
+                const buttonRotationAmplitude = 5.25 * (Math.PI / 180); 
+                const buttonRotationSpeed = 0.001;
+                const buttonRotation = Math.sin(time * buttonRotationSpeed) * buttonRotationAmplitude;
+
+                // Update colliders to match new positions, scale, and rotation
+                updateStaticBodies(buttonRotation, letterScales);
+            }
+        }
+        animationFrameId = requestAnimationFrame(animateLetters);
+    };
+
+    // Initial update and start animation loop
     updateStaticBodies();
-    const staticRefreshInterval = setInterval(updateStaticBodies, 2000);
+    animationFrameId = requestAnimationFrame(animateLetters);
 
     // Cleanup loop for off-screen chips
     const cleanupId = setInterval(() => {
@@ -153,7 +230,8 @@ export const TitlePhysics: React.FC = () => {
 
                 const body = Matter.Bodies.rectangle(startX + variationX, startY + variationY, width, height, {
                     restitution: 0.6,
-                    friction: 0.1,
+                    friction: 0.01,
+                    frictionStatic: 0,
                     frictionAir: isCard ? 0.015 : 0.01, // Reduced card drag to help them fly further
                     density: isCard ? 0.1 : 0.001, // 100x density for cards
                     chamfer: { radius: isCard ? 6 : 4 },
@@ -209,10 +287,22 @@ export const TitlePhysics: React.FC = () => {
 
     const handleResize = () => {
       if (canvasRef.current && renderRef.current) {
-        canvasRef.current.width = window.innerWidth;
-        canvasRef.current.height = window.innerHeight;
-        renderRef.current.options.width = window.innerWidth;
-        renderRef.current.options.height = window.innerHeight;
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+        
+        // Update canvas style to fill window
+        canvasRef.current.style.width = width + 'px';
+        canvasRef.current.style.height = height + 'px';
+        
+        // Update Matter renderer sizing and pixel ratio
+        Matter.Render.setPixelRatio(renderRef.current, window.devicePixelRatio || 1);
+        renderRef.current.options.width = width;
+        renderRef.current.options.height = height;
+        
+        // Sync engine bounds if needed (Matter.js usually does this automatically but good to be explicit)
+        renderRef.current.bounds.max.x = width;
+        renderRef.current.bounds.max.y = height;
+
         updateStaticBodies();
       }
     };
@@ -235,7 +325,7 @@ export const TitlePhysics: React.FC = () => {
       window.removeEventListener('resize', handleResize);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       clearInterval(cleanupId);
-      clearInterval(staticRefreshInterval);
+      cancelAnimationFrame(animationFrameId);
       clearTimeout(leftTimer);
       clearTimeout(rightTimer);
       Matter.Render.stop(render);

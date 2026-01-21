@@ -9,21 +9,28 @@ export interface Card {
   origin?: 'deck' | 'draw_pile';
 }
 
-export type PokerHandType =
-  | 'mini_royal_flush'
-  | 'straight_flush'
-  | 'three_of_a_kind'
-  | 'straight'
-  | 'flush'
-  | 'one_pair'
-  | 'high_card';
+export type ScoringCriterionId = 
+  | 'win'
+  | 'viginti'
+  | 'two_cards' 
+  | 'rank_match'
+  | 'suit_match'
+  | 'sequence';
+
+export interface ScoringDetail {
+  id: string; // e.g. 'win', 'pair', 'sequence'
+  name: string; // Display name
+  count: number; // specialized count (e.g. number of pairs)
+  chips: number; // Total chips from this criterion
+  multiplier: number; // Total multiplier from this criterion
+}
 
 export interface HandScore {
-  pokerHand: PokerHandType;
-  multiplier: number;
-  basePoints: number;
-  totalScore: number;
-  scoringCards: Card[];
+  criteria: ScoringDetail[];
+  totalChips: number; // Sum of base chips
+  totalMultiplier: number; // Sum of multipliers
+  finalScore: number; // (totalChips) * totalMultiplier
+  scoringCards: Card[]; // Cards involved in the primary patterns (optional usage now)
 }
 
 export interface PlayerHand {

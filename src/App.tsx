@@ -15,6 +15,7 @@ export default function App() {
   const { 
     deck,
     dealer, 
+    discardPile,
     playerHands, 
     drawnCard, 
     dealerMessage,
@@ -46,6 +47,29 @@ export default function App() {
   const [overlayComplete, setOverlayComplete] = useState(false);
   const [scoreAnimate, setScoreAnimate] = useState(false);
 
+  const drawAreaRef = React.useRef<HTMLDivElement>(null);
+  const [drawAreaCenter, setDrawAreaCenter] = useState({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+
+  React.useEffect(() => {
+    const updateCenter = () => {
+      if (drawAreaRef.current) {
+        const rect = drawAreaRef.current.getBoundingClientRect();
+        setDrawAreaCenter({
+          x: rect.left + rect.width / 2,
+          y: rect.top + rect.height / 2
+        });
+      }
+    };
+    updateCenter();
+    window.addEventListener('resize', updateCenter);
+    // Also update when phase changes as layout might shift
+    const timer = setTimeout(updateCenter, 100); 
+    return () => {
+        window.removeEventListener('resize', updateCenter);
+        clearTimeout(timer);
+    };
+  }, [phase, playerHands.length]);
+
   const [displayRound, setDisplayRound] = useState(round);
   const [displayTarget, setDisplayTarget] = useState(targetScore);
 
@@ -54,6 +78,7 @@ export default function App() {
 
   const [roundAnimate, setRoundAnimate] = useState(false);
   const [targetAnimate, setTargetAnimate] = useState(false);
+  const runInitializedRef = React.useRef(false);
 
   React.useEffect(() => {
     if (handsRemaining < prevHandsRemaining.current) {
@@ -103,6 +128,19 @@ export default function App() {
     }
   }, [phase, round, targetScore]);
 
+  // Synchronize display values immediately when starting a new run (Round 1) 
+  // to avoid showing old run values or starting from the top of the screen.
+  if (phase === 'entering_casino' && round === 1) {
+    if (!runInitializedRef.current) {
+        setOverlayComplete(false);
+        setDisplayRound(1);
+        setDisplayTarget(targetScore);
+        runInitializedRef.current = true;
+    }
+  } else {
+    runInitializedRef.current = false;
+  }
+
   const isOverlayMode = phase === 'entering_casino' && !overlayComplete;
 
   const handleDraw = () => {
@@ -120,9 +158,10 @@ export default function App() {
   const isDrawAreaVisible = phase === 'playing' && !dealer.isRevealed && !isInitialDeal; 
 
   const activeCards = [
-      ...dealer.cards,
+      ...dealer.cards.filter((_, idx) => idx !== 0 || dealer.isRevealed),
       ...playerHands.flatMap(h => h.cards),
-      ...(drawnCard ? [drawnCard] : [])
+      ...(drawnCard ? [drawnCard] : []),
+      ...discardPile
   ];
 
 
@@ -130,8 +169,14 @@ export default function App() {
       return (
           <div className={styles.container} style={{justifyContent:'center', cursor: 'pointer'}} onClick={startGame}>
               <TitlePhysics />
-              <h1 className={titleStyles.titleText}>VIGINTI</h1>
-              <button className={styles.button} style={{zIndex: 1}}>Start Run</button>
+              <div className={styles.titleContainer}>
+                  <h1 className={titleStyles.titleText}>
+                      {"VIGINTI".split('').map((char, i) => (
+                          <span key={i} className={titleStyles.letter} data-index={i}>{char}</span>
+                      ))}
+                  </h1>
+                  <button className={`${styles.button} ${styles.startRunButton}`} style={{zIndex: 1}}>Start Run</button>
+              </div>
           </div>
       );
   }
@@ -189,7 +234,10 @@ export default function App() {
 
   return (
     <div className={styles.container} onClick={handleGlobalClick}>
-      <header className={`${styles.header} ${isOverlayMode ? styles.headerCentered : ''}`}>
+      <header 
+        className={`${styles.header} ${isOverlayMode ? styles.headerCentered : ''}`}
+        style={isOverlayMode ? { top: drawAreaCenter.y - 20 } : {}}
+      >
         <div className={styles.stat}>
             <span className={styles.statLabel}>Casino</span>
             <span key={displayRound} className={`${styles.statValue} ${roundAnimate ? styles.statValueAnimate : ''}`}>{displayRound}</span>
@@ -222,6 +270,7 @@ export default function App() {
          scoreDetails={scoringDetails}
          isCollecting={isCollectingChips}
          targetId="total-score-display"
+         center={drawAreaCenter}
          onCollectionComplete={chipCollectionComplete}
          onChipArrived={(val) => {
              incrementScore(val);
@@ -252,7 +301,7 @@ export default function App() {
                     {dealerMessage}
                  </div>
               )}
-              <div className={styles.drawAreaContainer}>
+              <div className={styles.drawAreaContainer} ref={drawAreaRef}>
                   <div className={`${styles.drawnCardSpot} ${!drawnCard && canDraw ? styles.hitSpot : ''} ${!isDrawAreaVisible ? styles.hiddenSpot : ''}`}>
                       {drawnCard ? (
                           <PlayingCard 
@@ -308,11 +357,11 @@ export default function App() {
       </div>
 
       <button className={styles.deckBtn} onClick={() => setShowDeck(true)}>
-          View Deck
+          Deck
       </button>
 
       <button className={styles.handsBtn} onClick={() => setShowHandRankings(true)}>
-          Hand Ranks
+          Scores
       </button>
 
       <button className={styles.casinosBtn} onClick={() => setShowCasinoListing(true)}>
@@ -321,7 +370,7 @@ export default function App() {
 
       {(phase === 'round_over' || phase === 'entering_casino') && (
         <button className={styles.debugBtn} onClick={triggerDebugChips}>
-            Drop Chips
+            +Chips
         </button>
       )}
 

@@ -6,6 +6,7 @@ interface PhysicsPotProps {
   scoreDetails: { handId: number; score: number; sourceId: string } | null;
   isCollecting: boolean;
   targetId: string;
+  center: { x: number; y: number };
   onCollectionComplete: () => void;
   onChipArrived?: (value: number) => void;
 }
@@ -35,6 +36,7 @@ export const PhysicsPot: React.FC<PhysicsPotProps> = ({
   scoreDetails,
   isCollecting,
   targetId,
+  center,
   onCollectionComplete,
   onChipArrived
 }) => {
@@ -44,6 +46,7 @@ export const PhysicsPot: React.FC<PhysicsPotProps> = ({
   const renderRef = useRef<Matter.Render | null>(null);
   const runnerRef = useRef<Matter.Runner | null>(null);
   const bodiesRef = useRef<Matter.Body[]>([]);
+  const wallsRef = useRef<Matter.Body[]>([]);
   const [potTotal, setPotTotal] = React.useState(0);
   const [isPulsing, setIsPulsing] = React.useState(false);
   
@@ -68,27 +71,27 @@ export const PhysicsPot: React.FC<PhysicsPotProps> = ({
     });
     renderRef.current = render;
 
-    // Create walls to contain chips in the center "Pot"
-    const cx = window.innerWidth / 2;
-    const cy = window.innerHeight / 2;
+    // Create walls to contain chips relative to center
+    const cx = center.x;
+    const cy = center.y;
     const wallOpts = { isStatic: true, render: { visible: false } };
     
     // Pot boundaries (invisible box in center) - seal the bucket
-    const floorY = cy + 40; // Moved up from +120
-    const floorWidth = 450; // Wider to ensure overlap
-    const wallHeight = 800; // Much taller for funneling
+    const floorY = cy; 
+    const floorWidth = 450; 
+    const wallHeight = 800; 
     
     const floor = Matter.Bodies.rectangle(cx, floorY + 240, floorWidth, 500, wallOpts);
     const leftWall = Matter.Bodies.rectangle(cx - (floorWidth/2) - 240, floorY - (wallHeight/2), 500, wallHeight, wallOpts); 
     const rightWall = Matter.Bodies.rectangle(cx + (floorWidth/2) + 240, floorY - (wallHeight/2), 500, wallHeight, wallOpts); 
 
-    // Additional Funnel Walls just past the center hand
-    // Center hand is ~250px wide. Funnel at ~300px total width.
+    // Additional Funnel Walls
     const funnelWidth = 320; 
     const funnelLeft = Matter.Bodies.rectangle(cx - (funnelWidth/2) - 240, floorY - 500, 500, 1000, wallOpts);
     const funnelRight = Matter.Bodies.rectangle(cx + (funnelWidth/2) + 240, floorY - 500, 500, 1000, wallOpts);
     
-    Matter.World.add(engine.world, [floor, leftWall, rightWall, funnelLeft, funnelRight]);
+    wallsRef.current = [floor, leftWall, rightWall, funnelLeft, funnelRight];
+    Matter.World.add(engine.world, wallsRef.current);
 
     const runner = Matter.Runner.create();
     runnerRef.current = runner;
@@ -96,9 +99,19 @@ export const PhysicsPot: React.FC<PhysicsPotProps> = ({
     Matter.Render.run(render);
 
     const handleResize = () => {
-      if (canvasRef.current) {
-        canvasRef.current.width = window.innerWidth;
-        canvasRef.current.height = window.innerHeight;
+      if (canvasRef.current && renderRef.current) {
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+        
+        canvasRef.current.style.width = width + 'px';
+        canvasRef.current.style.height = height + 'px';
+        
+        Matter.Render.setPixelRatio(renderRef.current, window.devicePixelRatio || 1);
+        renderRef.current.options.width = width;
+        renderRef.current.options.height = height;
+        
+        renderRef.current.bounds.max.x = width;
+        renderRef.current.bounds.max.y = height;
       }
     };
     window.addEventListener('resize', handleResize);
@@ -112,6 +125,41 @@ export const PhysicsPot: React.FC<PhysicsPotProps> = ({
       }
     };
   }, []);
+
+  // Update wall positions when center changes
+  useEffect(() => {
+    if (!wallsRef.current.length) return;
+    
+    const cx = center.x;
+    const cy = center.y;
+    const floorY = cy;
+    const floorWidth = 450;
+    const wallHeight = 800;
+    const funnelWidth = 320;
+
+    const [floor, leftWall, rightWall, funnelLeft, funnelRight] = wallsRef.current;
+    
+    Matter.Body.setPosition(floor, { x: cx, y: floorY + 240 });
+    Matter.Body.setPosition(leftWall, { x: cx - (floorWidth/2) - 240, y: floorY - (wallHeight/2) });
+    Matter.Body.setPosition(rightWall, { x: cx + (floorWidth/2) + 240, y: floorY - (wallHeight/2) });
+    Matter.Body.setPosition(funnelLeft, { x: cx - (funnelWidth/2) - 240, y: floorY - 500 });
+    Matter.Body.setPosition(funnelRight, { x: cx + (funnelWidth/2) + 240, y: floorY - 500 });
+
+    if (renderRef.current && canvasRef.current) {
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+        
+        canvasRef.current.style.width = width + 'px';
+        canvasRef.current.style.height = height + 'px';
+        
+        Matter.Render.setPixelRatio(renderRef.current, window.devicePixelRatio || 1);
+        renderRef.current.options.width = width;
+        renderRef.current.options.height = height;
+        
+        renderRef.current.bounds.max.x = width;
+        renderRef.current.bounds.max.y = height;
+    }
+  }, [center]);
 
   // Spawn Chips logic
   useEffect(() => {
@@ -136,7 +184,7 @@ export const PhysicsPot: React.FC<PhysicsPotProps> = ({
             if (!engineRef.current) return;
             
             // Spawn from top center with some random spread
-            const cx = window.innerWidth / 2;
+            const cx = center.x;
             const startX = cx + (Math.random() - 0.5) * 100; // Random spread +/- 50px
             const startY = -60; // Just above screen
 
@@ -267,7 +315,10 @@ export const PhysicsPot: React.FC<PhysicsPotProps> = ({
     <div ref={containerRef} className={styles.container}>
       <canvas ref={canvasRef} />
       {potTotal > 0 && (
-          <div className={`${styles.potTotal} ${isPulsing ? styles.pulse : ''}`}>
+          <div 
+            className={`${styles.potTotal} ${isPulsing ? styles.pulse : ''}`}
+            style={{ left: center.x, top: center.y - 80 }}
+          >
             <div className={styles.potValue}>${potTotal}</div>
           </div>
       )}
