@@ -1,0 +1,233 @@
+/* Outer container for the hand - allows win info to appear above */
+.handContainer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: default;
+    position: relative;
+    /* Scaling transition for scoring focus */
+    transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.clickable {
+    cursor: pointer;
+}
+
+/* The main hand box with fixed height */
+.hand {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: rgba(0,0,0,0.2);
+    border-radius: 12px;
+    padding: 16px;
+    width: 250px;
+    min-width: 250px;
+    flex-shrink: 0;
+    height: 220px; /* Fixed height instead of min-height */
+    border: 2px solid rgba(255,255,255,0.1);
+    position: relative;
+}
+
+.clickable .hand:hover {
+    background: rgba(255,255,255,0.1);
+    border-color: rgba(255,255,255,0.3);
+}
+
+.activeTarget {
+    border-color: #ffd700;
+    box-shadow: 0 0 15px rgba(255, 215, 0, 0.2);
+    animation: pulse 1.5s infinite;
+}
+
+/* Apply scaling to the entire handContainer so win info is included */
+.handContainer.scoringFocus {
+    transform: scale(1.5);
+    z-index: 100 !important;
+}
+
+.scoringFocus .hand {
+    background: rgba(0,0,0,0.8);
+    border-color: #ffd700;
+    box-shadow: 0 0 50px rgba(0,0,0,0.8);
+}
+
+@keyframes pulse {
+    0% { box-shadow: 0 0 15px rgba(255, 215, 0, 0.2); }
+    50% { box-shadow: 0 0 25px rgba(255, 215, 0, 0.4); }
+    100% { box-shadow: 0 0 15px rgba(255, 215, 0, 0.2); }
+}
+
+/* Container for cards with overlay support */
+.cardsContainer {
+    position: relative;
+    flex: 1;
+    display: flex;
+    align-items: flex-start;
+    width: 100%;
+}
+
+/* Tint effect when overlay is shown */
+.cardsContainer.tinted .cards {
+    filter: brightness(0.3);
+}
+
+.cards {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    padding-top: 10px;
+    transition: filter 0.2s ease;
+}
+
+.cardWrapper {
+    margin-right: -60px; /* Overlap increased to tighten spacing */
+    transition: transform 0.2s;
+}
+
+.cardWrapper:last-child {
+    margin-right: 0;
+}
+
+/* Overlay text positioned on cards */
+.overlayText {
+    position: absolute;
+    top: 10px; /* Aligns with .cards padding-top */
+    left: 0;
+    right: 0;
+    height: 112px; /* Matches PlayingCard height */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    z-index: 10;
+}
+
+.overlayItem {
+    position: absolute;
+    top: 66%; /* Positions text 2/3 down the cards */
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transform: translateY(-50%);
+}
+
+.bustOverlay,
+.winOverlay,
+.lossOverlay {
+    font-size: 1.875rem; /* Reduced by 25% from 2.5rem */
+    font-weight: 900;
+    text-transform: uppercase;
+    text-shadow: 0 0 10px currentColor;
+    letter-spacing: 3px;
+    white-space: nowrap;
+}
+
+.bustOverlay {
+    color: #ff4444;
+    text-shadow: 0 0 10px #ff0000;
+}
+
+.winOverlay {
+    color: #44ff44;
+    text-shadow: 0 0 10px #00ff00;
+}
+
+.lossOverlay {
+    color: #aa4444;
+    text-shadow: 0 0 10px #aa0000;
+}
+
+.vigintiOverlay {
+    color: #ffd700;
+    text-shadow: 0 0 10px #ffaa00;
+    font-size: 2rem; /* Slightly larger? Or same? Main is 1.875rem */
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    white-space: nowrap;
+}
+
+.status {
+    text-align: center;
+    color: white;
+    width: 100%;
+    margin-top: auto; /* Push to bottom */
+}
+
+.score {
+    font-size: 1.5rem;
+    font-weight: bold;
+}
+
+.busted,
+.loss {
+    color: #ff4444;
+    text-shadow: 0 0 5px #ff0000;
+}
+
+.win {
+    color: #44ff44;
+    text-shadow: 0 0 5px #00ff00;
+}
+
+.vigintiScore {
+    color: #ffd700;
+    text-shadow: 0 0 5px #ffaa00;
+}
+
+/* Win info that appears above the hand box */
+.winInfoAbove {
+    position: absolute;
+    top: -45px; /* Position above the hand box - moved down closer to hand */
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0px; /* Reduced gap from 4px */
+    width: max-content;
+}
+
+.pokerHand {
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #ffd700;
+    font-weight: bold;
+    line-height: 1.1;
+    text-align: center;
+}
+
+.winScore {
+    color: #44ff44;
+    font-weight: bold;
+    font-size: 1.3rem;
+    text-shadow: 0 0 5px #00ff00;
+    line-height: 1.1;
+    margin-top: 0px;
+}
+
+@keyframes slam {
+    0% { opacity: 0; transform: scale(3) translateY(-20px); }
+    60% { opacity: 1; transform: scale(0.9) translateY(0); }
+    80% { transform: scale(1.1); }
+    100% { opacity: 1; transform: scale(1); }
+}
+
+.slamEnter {
+    opacity: 0;
+    animation: slam 0.28s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+@keyframes scoreAppear {
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.scoreFadeIn {
+    opacity: 0;
+    animation: scoreAppear 0.2s ease-out forwards;
+}

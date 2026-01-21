@@ -1,0 +1,55 @@
+.container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    pointer-events: none; /* Let clicks pass through to game */
+    z-index: 900; /* High z-index but below modals/alerts if any */
+    overflow: hidden;
+}
+
+canvas {
+    display: block;
+}
+
+.potTotal {
+    position: absolute;
+    top: 45%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    color: #ffd700;
+    pointer-events: none;
+    z-index: 902;
+    transition: transform 0.1s ease;
+}
+
+.potLabel {
+    display: none;
+}
+
+.potValue {
+    font-size: 5rem;
+    font-weight: 900;
+    text-shadow: 
+        -2px -2px 0 #000,  
+         2px -2px 0 #000,
+        -2px  2px 0 #000,
+         2px  2px 0 #000,
+         0 0 20px rgba(0, 0, 0, 1),
+         0 0 40px rgba(0, 0, 0, 1),
+         0 0 60px rgba(0, 0, 0, 0.8),
+         0 10px 20px rgba(0, 0, 0, 0.9);
+}
+
+.pulse {
+    transform: translate(-50%, -50%) scale(1.1);
+}
+
+@keyframes bounceIn {
+    0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+    100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+}

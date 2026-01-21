@@ -1,0 +1,68 @@
+:root {
+  --anim-deal-duration: 0.5s;
+  --anim-flip-duration: 0.6s;
+  --anim-assign-duration: 0.5s;
+  --anim-stagger-delay: 0.5s; /* Time between each card deal */
+}
+
+/* 
+ * Deal Animation:
+ * 1. Start invisible and slightly offset
+ * 2. Fade in while showing Back (rotateY 180deg)
+ * 3. Pause briefly
+ * 4. Flip to Front
+ */
+@keyframes dealAndFlip {
+  /* Phase 1: Fade In & Slide Up (Face Down) - 0% to 50% (0.25s) */
+  0% {
+    opacity: 0;
+    transform: translateY(30px) rotateY(180deg);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(0) rotateY(180deg);
+  }
+  /* Phase 2: Flip Over - 50% to 100% (0.25s) */
+  50.01% {
+    /* Ensure clear switch to flip phase */
+    transform: translateY(0) rotateY(180deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) rotateY(0deg);
+  }
+}
+
+/* Deal but stay face down */
+@keyframes dealFaceDown {
+  0% {
+    opacity: 0;
+    transform: translateY(30px) rotateY(180deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) rotateY(180deg);
+  }
+}
+
+/* Simple flip from back to front */
+@keyframes revealFlip {
+  0% {
+    transform: rotateY(180deg);
+  }
+  100% {
+    transform: rotateY(0deg);
+  }
+}
+
+/* Enter from top (Draw pile simulation) */
+@keyframes enterFromDraw {
+  0% {
+    opacity: 0;
+    transform: translateY(-200px) scale(1.1);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}

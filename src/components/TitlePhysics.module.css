@@ -1,0 +1,34 @@
+.container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.titleText {
+    font-size: 5rem;
+    font-weight: 900;
+    color: #ffd700;
+    margin-bottom: 40px;
+    z-index: 1;
+    text-transform: uppercase;
+    letter-spacing: 4px;
+    text-shadow: 
+        -2px -2px 0 #000,  
+         2px -2px 0 #000,
+        -2px  2px 0 #000,
+         2px  2px 0 #000,
+         0 0 20px rgba(0, 0, 0, 1),
+         0 0 40px rgba(0, 0, 0, 1),
+         0 0 60px rgba(0, 0, 0, 0.8),
+         0 10px 20px rgba(0, 0, 0, 0.9);
+}
