@@ -32,6 +32,8 @@ const CHIP_VALUES: ChipData[] = [
   { value: 1, color: '#ecf0f1', radius: 32 },    // White
 ];
 
+const POT_Y_OFFSET = 30;
+
 export const PhysicsPot: React.FC<PhysicsPotProps> = ({
   scoreDetails,
   isCollecting,
@@ -73,7 +75,7 @@ export const PhysicsPot: React.FC<PhysicsPotProps> = ({
 
     // Create walls to contain chips relative to center
     const cx = center.x;
-    const cy = center.y;
+    const cy = center.y - POT_Y_OFFSET;
     const wallOpts = { isStatic: true, render: { visible: false } };
     
     // Pot boundaries (invisible box in center) - seal the bucket
@@ -131,7 +133,7 @@ export const PhysicsPot: React.FC<PhysicsPotProps> = ({
     if (!wallsRef.current.length) return;
     
     const cx = center.x;
-    const cy = center.y;
+    const cy = center.y - POT_Y_OFFSET;
     const floorY = cy;
     const floorWidth = 450;
     const wallHeight = 800;
@@ -317,7 +319,7 @@ export const PhysicsPot: React.FC<PhysicsPotProps> = ({
       {potTotal > 0 && (
           <div 
             className={`${styles.potTotal} ${isPulsing ? styles.pulse : ''}`}
-            style={{ left: center.x, top: center.y - 80 }}
+            style={{ left: center.x, top: center.y - 80 - POT_Y_OFFSET }}
           >
             <div className={styles.potValue}>${potTotal}</div>
           </div>

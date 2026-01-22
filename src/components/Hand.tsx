@@ -33,6 +33,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
   const [pulseScore, setPulseScore] = useState(false);
   const [pulseMult, setPulseMult] = useState(false);
   const [isSlidingMult, setIsSlidingMult] = useState(false);
+  const [isQuickFading, setIsQuickFading] = useState(false);
 
   const animationRef = useRef<boolean>(false);
 
@@ -50,6 +51,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
       setPulseScore(false);
       setPulseMult(false);
       setIsSlidingMult(false);
+      setIsQuickFading(false);
   }, [hand.id]);
 
   // Ensure displayScore updates immediately when hand value changes (card added)
@@ -149,23 +151,30 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
              
              // Only animate if there was actually a multiplier to apply
              if (multVisible) {
-                 // Trigger slide animation
-                 setIsSlidingMult(true);
-                 
-                 // Wait for 1/2 of slide (300ms of 600ms)
-                 await wait(300);
-                 
-                 // Final update and pulse
-                 setDisplayScore(finalVal);
-                 setPulseScore(true);
-                 setTimeout(() => setPulseScore(false), 400);
-                 
-                 // Wait for remaining slide (300ms) + display time (700ms)
-                 await wait(1000);
+                 if (totalMult > 1.0) {
+                     // Trigger slide animation
+                     setIsSlidingMult(true);
+                     
+                     // Wait for 1/2 of slide (300ms of 600ms)
+                     await wait(300);
+                     
+                     // Final update and pulse
+                     setDisplayScore(finalVal);
+                     setPulseScore(true);
+                     setTimeout(() => setPulseScore(false), 400);
+                     
+                     // Wait for remaining slide (300ms) + display time (700ms)
+                     await wait(1000);
+                 } else {
+                     // 1x multiplier, quick fade out
+                     setIsQuickFading(true);
+                     await wait(250);
+                 }
              }
              
              // Always hide mult container at the end of scoring
              setIsSlidingMult(false);
+             setIsQuickFading(false);
              setShowMultContainer(false);
              
              // Sync to final exact value just in case
@@ -176,7 +185,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
 
           runAnimation();
 
-          return () => { canceled = true; setIsSlidingMult(false); setShowMultContainer(false); setActiveCriteriaIdx(null); };
+          return () => { canceled = true; setIsSlidingMult(false); setIsQuickFading(false); setShowMultContainer(false); setActiveCriteriaIdx(null); };
       }
       
       // If not winning or not revealed, ensure score matches state
@@ -305,7 +314,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
                 </div>
                 
                 {/* Mult on Right Positioned Absolutely */}
-                <div className={`${styles.multContainer} ${showMultContainer ? styles.visible : ''} ${isSlidingMult ? styles.sliding : ''}`}>
+                <div className={`${styles.multContainer} ${showMultContainer ? styles.visible : ''} ${isSlidingMult ? styles.sliding : ''} ${isQuickFading ? styles.quickFade : ''}`}>
                     <span className={`${styles.multValue} ${pulseMult ? styles.pulse : ''}`}>
                         x{displayMult.toFixed(1)}
                     </span>

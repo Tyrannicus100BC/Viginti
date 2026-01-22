@@ -372,6 +372,12 @@
     opacity: 0;
 }
 
+.multContainer.quickFade {
+    opacity: 0;
+    transform: translate(0, -50%) scale(0.8);
+    transition: opacity 0.2s ease-out, transform 0.2s ease-out;
+}
+
 .multValue {
 }
 

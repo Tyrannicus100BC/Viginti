@@ -25,19 +25,19 @@ export const SCORING_RULES: Record<ScoringCriterionId, ScoringRule> = {
   'viginti': { id: 'viginti', name: 'Viginti', chips: 0, mult: 1.5 },
 
   // Rank
-  'one_pair': { id: 'one_pair', name: 'One Pair', chips: 5, mult: 0 },
-  'two_pair': { id: 'two_pair', name: 'Two Pair', chips: 20, mult: 1 },
-  'three_of_a_kind': { id: 'three_of_a_kind', name: 'Three of a Kind', chips: 50, mult: 2 },
+  'one_pair': { id: 'one_pair', name: 'One Pair', chips: 5, mult: 0.5 },
+  'two_pair': { id: 'two_pair', name: 'Two Pair', chips: 32, mult: 1.5 },
+  'three_of_a_kind': { id: 'three_of_a_kind', name: 'Three of a Kind', chips: 65, mult: 3 },
 
   // Suite
-  'mini_flush': { id: 'mini_flush', name: 'Mini Flush', chips: 10, mult: 0 },
-  'partial_flush': { id: 'partial_flush', name: 'Partial Flush', chips: 15, mult: 0.3 },
-  'full_flush': { id: 'full_flush', name: 'Full Flush', chips: 35, mult: 1 },
+  'mini_flush': { id: 'mini_flush', name: 'Mini Flush', chips: 7, mult: 0.5 },
+  'partial_flush': { id: 'partial_flush', name: 'Partial Flush', chips: 15, mult: 1 },
+  'full_flush': { id: 'full_flush', name: 'Full Flush', chips: 45, mult: 4 },
 
   // Order
-  'sequential': { id: 'sequential', name: 'Sequential', chips: 5, mult: 0.3 },
-  'short_straight': { id: 'short_straight', name: 'Short Straight', chips: 10, mult: 0.5 },
-  'long_straight': { id: 'long_straight', name: 'Long Straight', chips: 25, mult: 1.5 }
+  'sequential': { id: 'sequential', name: 'Sequential', chips: 10, mult: 0.5 },
+  'short_straight': { id: 'short_straight', name: 'Short Straight', chips: 25, mult: 1 },
+  'long_straight': { id: 'long_straight', name: 'Long Straight', chips: 75, mult: 2 }
 };
 
 export function getBlackjackScore(cards: Card[]): number {

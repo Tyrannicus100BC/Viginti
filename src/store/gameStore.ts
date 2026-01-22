@@ -334,8 +334,11 @@ export const useGameStore = create<GameState>((set, get) => ({
         // Buffer: 200
         // Total Base: 300 + 200 + 300 + 400 + 500 + 200 = 1900ms
         // Total Per Item: 1000ms
+        const totalMult = scoreData?.totalMultiplier || 0;
+        const isQuickFade = totalMult <= 1.0;
+        
         const animationDuration = isWin 
-            ? 2200 + (criteriaCount * 1400)
+            ? (isQuickFade ? 1150 : 2200) + (criteriaCount * 1400)
             : 700; 
 
         await wait(animationDuration);
