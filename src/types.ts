@@ -10,12 +10,21 @@ export interface Card {
 }
 
 export type ScoringCriterionId = 
+  // Outcome
   | 'win'
   | 'viginti'
-  | 'two_cards' 
-  | 'rank_match'
-  | 'suit_match'
-  | 'sequence';
+  // Rank
+  | 'one_pair'
+  | 'two_pair'
+  | 'three_of_a_kind'
+  // Suite
+  | 'mini_flush'
+  | 'partial_flush'
+  | 'full_flush'
+  // Order
+  | 'sequential'
+  | 'short_straight'
+  | 'long_straight';
 
 export interface ScoringDetail {
   id: string; // e.g. 'win', 'pair', 'sequence'
@@ -23,6 +32,7 @@ export interface ScoringDetail {
   count: number; // specialized count (e.g. number of pairs)
   chips: number; // Total chips from this criterion
   multiplier: number; // Total multiplier from this criterion
+  cardIds?: string[]; // IDs of cards that contributed to this criterion
 }
 
 export interface HandScore {

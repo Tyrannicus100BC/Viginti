@@ -5,6 +5,7 @@
     align-items: center;
     cursor: default;
     position: relative;
+    z-index: 1; /* Create stacking context for children like scoringList */
     /* Scaling transition for scoring focus */
     transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
@@ -43,7 +44,7 @@
 /* Apply scaling to the entire handContainer so win info is included */
 .handContainer.scoringFocus {
     transform: scale(1.5);
-    z-index: 100 !important;
+    z-index: 1000 !important; /* Ensure it's above everything else in the board */
 }
 
 .scoringFocus .hand {
@@ -67,9 +68,16 @@
     width: 100%;
 }
 
-/* Tint effect when overlay is shown */
-.cardsContainer.tinted .cards {
+/* Tint effect when overlay is shown - applied to wrappers now */
+.cardsContainer.tinted .cardWrapper {
     filter: brightness(0.3);
+    transition: filter 0.3s ease, transform 0.3s ease;
+}
+
+/* Individual card lifting and restoring */
+.cardWrapper.highlighted {
+    transform: rotate(var(--rotate)) translateY(calc(var(--translateY) - 14px)) !important;
+    filter: brightness(1) !important;
 }
 
 .cards {
@@ -82,7 +90,7 @@
 
 .cardWrapper {
     margin-right: -60px; /* Overlap increased to tighten spacing */
-    transition: transform 0.2s;
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.3s ease;
 }
 
 .cardWrapper:last-child {
@@ -101,6 +109,11 @@
     justify-content: center;
     pointer-events: none;
     z-index: 10;
+    transition: opacity 0.3s ease;
+}
+
+.overlayText.faded {
+    opacity: 0;
 }
 
 .overlayItem {
@@ -140,10 +153,11 @@
     text-shadow: 0 0 10px #aa0000;
 }
 
+/* Updated Viginti Overlay */
 .vigintiOverlay {
     color: #ffd700;
     text-shadow: 0 0 10px #ffaa00;
-    font-size: 2rem; /* Slightly larger? Or same? Main is 1.875rem */
+    font-size: 2rem;
     font-weight: 900;
     text-transform: uppercase;
     letter-spacing: 3px;
@@ -191,9 +205,14 @@
     flex: 2;
     text-align: left;
     font-weight: bold;
-    color: #ffd700;
+    color: #64b5f6;
     display: flex;
     gap: 6px;
+}
+
+.itemName.isViginti {
+    color: #ffd700;
+    text-shadow: 0 0 5px rgba(255, 215, 0, 0.5);
 }
 
 .itemCount {
@@ -210,21 +229,38 @@
     color: #44ff44;
     font-weight: bold;
     margin-right: 8px;
+    opacity: 0;
+}
+
+.itemChips.isViginti {
+    color: #ffd700;
+}
+
+.itemChips.visible {
+    opacity: 1;
+    animation: smallSlam 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
 }
 
 .itemMult {
     flex: 1;
     text-align: right;
-    color: #ff5252;
+    color: #f1c40f;
     font-weight: bold;
-    opacity: 0; /* Hidden initially */
-    transform: scale(0.5);
-    transition: opacity 0.3s, transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    opacity: 0;
+    /* Removed default transform/transition for slam replacement */
 }
 
+/* When visible, trigger slam */
 .itemMult.visible {
     opacity: 1;
-    transform: scale(1);
+    animation: smallSlam 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+@keyframes smallSlam {
+    0% { opacity: 0; transform: scale(1.5) translateY(-10px); }
+    60% { opacity: 1; transform: scale(0.9) translateY(0); }
+    80% { transform: scale(1.05); }
+    100% { opacity: 1; transform: scale(1); }
 }
 
 /* Score Display Area */
@@ -253,7 +289,48 @@
     color: #fff;
     min-width: 30px;
     text-align: center;
-    transition: color 0.3s, transform 0.2s;
+    /* Remove transition to allow animation override */
+    transition: color 0.3s ease, text-shadow 0.3s ease;
+    z-index: 10;
+    position: relative;
+}
+
+.scoreValue.isBust {
+    color: #ff4444;
+    text-shadow: 0 0 10px #ff0000;
+}
+
+.scoreValue.isViginti {
+    color: #ffd700;
+    text-shadow: 0 0 10px #ffaa00;
+}
+
+.scoreValue.isWin {
+    color: #44ff44;
+    text-shadow: 0 0 10px #00ff00;
+}
+
+.scoreValue.isLoss {
+    color: #aa4444;
+    text-shadow: 0 0 10px #aa0000;
+}
+
+.scoreValue.pulse {
+    animation: bounceColor 0.4s ease-out;
+}
+
+/* New Animation for Values (White -> Gold -> White + Grow) */
+@keyframes bounceColor {
+    0% {
+        transform: scale(1);
+    }
+    30% {
+        transform: scale(1.5);
+        color: #ffd700;
+    }
+    100% {
+        transform: scale(1);
+    }
 }
 
 /* Multiplier positioned absolutely to the RIGHT of the score */
@@ -266,26 +343,41 @@
     
     display: flex;
     align-items: center;
-    background: #ff5252;
-    color: white;
+    background: #ff4444;
+    color: #f1c40f;
     padding: 2px 8px;
     border-radius: 12px;
     font-weight: bold;
     font-size: 1rem;
-    box-shadow: 0 0 10px rgba(255, 82, 82, 0.4);
+    box-shadow: 0 0 10px rgba(255, 68, 68, 0.4);
     opacity: 0;
     white-space: nowrap; /* Prevent wrapping */
+    z-index: 5;
     
-    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    transition: 
+        left 0.6s cubic-bezier(0.4, 0, 0.2, 1),
+        opacity 0.6s ease-in-out,
+        transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .multContainer.visible {
     opacity: 1;
-    transform: translateY(-50%) scale(1);
+    transform: translate(0, -50%) scale(1);
+}
+
+.multContainer.sliding {
+    left: 50%;
+    margin-left: 0;
+    transform: translate(-50%, -50%) scale(0.8);
+    opacity: 0;
 }
 
 .multValue {
-    margin-left: 2px;
+}
+
+.multValue.pulse {
+    animation: bounceColor 0.4s ease-out;
+    display: inline-block; /* Required for transform */
 }
 
 @keyframes slam {

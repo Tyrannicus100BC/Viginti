@@ -15,7 +15,7 @@ export const CasinoListingView: React.FC<CasinoListingViewProps> = ({ currentRou
     return (
         <div className={styles.overlay} onClick={onClose}>
             <div className={styles.modal} onClick={e => e.stopPropagation()}>
-                <h2>Casinos</h2>
+                <h2>Casino Details</h2>
                 
                 <div className={styles.scrollContainer}>
                     {casinos.map(round => (

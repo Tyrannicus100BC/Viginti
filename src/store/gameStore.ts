@@ -335,11 +335,15 @@ export const useGameStore = create<GameState>((set, get) => ({
         // Total Base: 300 + 200 + 300 + 400 + 500 + 200 = 1900ms
         // Total Per Item: 1000ms
         const animationDuration = isWin 
-            ? 1900 + (criteriaCount * 1000)
+            ? 2200 + (criteriaCount * 1400)
             : 700; 
 
         await wait(animationDuration);
         
+        // Shrink the hand back to normal size before dropping chips
+        set({ scoringHandIndex: -1 });
+        await wait(180); // Wait a little less than the shrink transition (0.28s in CSS)
+
         if (isWin && scoreData) {
             // Trigger Physics Chips to Pot
             set({ 
@@ -361,6 +365,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     }
     
     // All hands scored. Trigger collection phase.
+    // (Ensure it's -1 just in case, though we set it inside the loop now)
     set({ scoringHandIndex: -1 });
     
     // Check if there are any winnings to collect

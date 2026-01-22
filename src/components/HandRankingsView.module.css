@@ -38,6 +38,26 @@
   font-weight: bold;
   color: #ccc;
   font-size: 0.9em;
+  align-items: flex-end;
+}
+
+.tierHeaderRow {
+    margin-top: 15px;
+    border-bottom: 2px solid #ffffff; /* Different color separator for tier name row */
+    padding-bottom: 5px;
+}
+
+.tierHeaderRow:first-of-type {
+    margin-top: 0;
+}
+
+.tierNameHeader {
+    flex: 2;
+    text-align: left;
+    color: #ffffff; /* Different color for tier names */
+    font-size: 1.1em;
+    text-transform: uppercase;
+    letter-spacing: 1px;
 }
 
 .row {
@@ -56,21 +76,22 @@
 .chips, .chipsHeader {
   flex: 1;
   text-align: right;
-  color: #64b5f6;
+  color: #44ff44;
 }
 
 .multiplier, .multHeader {
   flex: 1;
   text-align: right;
-  color: #ff5252;
+  color: #f1c40f;
 }
 
-.row:last-child {
+.row:last-child, .lastInTier {
     border-bottom: none;
 }
 
 .handName {
     font-weight: 500;
+    color: #64b5f6;
 }
 
 .multiplier {

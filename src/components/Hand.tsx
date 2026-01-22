@@ -26,21 +26,38 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
   const [displayScore, setDisplayScore] = useState(hand.blackjackValue);
   const [displayMult, setDisplayMult] = useState(0);
   const [visibleItems, setVisibleItems] = useState<number[]>([]);
+  const [visibleChips, setVisibleChips] = useState<number[]>([]);
   const [visibleMults, setVisibleMults] = useState<number[]>([]);
+  const [activeCriteriaIdx, setActiveCriteriaIdx] = useState<number | null>(null);
   const [showMultContainer, setShowMultContainer] = useState(false);
   const [pulseScore, setPulseScore] = useState(false);
+  const [pulseMult, setPulseMult] = useState(false);
+  const [isSlidingMult, setIsSlidingMult] = useState(false);
 
   const animationRef = useRef<boolean>(false);
 
   // Reset state when hand ID changes or resets
+  // Reset state when hand ID changes (new hand slot content)
   useEffect(() => {
       setDisplayScore(hand.blackjackValue);
       setDisplayMult(0);
       setVisibleItems([]);
+      setVisibleChips([]);
       setVisibleMults([]);
+      setActiveCriteriaIdx(null);
       setShowMultContainer(false);
       animationRef.current = false;
-  }, [hand.id, hand.blackjackValue]);
+      setPulseScore(false);
+      setPulseMult(false);
+      setIsSlidingMult(false);
+  }, [hand.id]);
+
+  // Ensure displayScore updates immediately when hand value changes (card added)
+  useEffect(() => {
+      if (!isWin && !hand.resultRevealed) {
+          setDisplayScore(hand.blackjackValue);
+      }
+  }, [hand.blackjackValue, isWin, hand.resultRevealed]);
 
   // Scoring Animation Sequence
   useEffect(() => {
@@ -55,45 +72,68 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
 
              // Initial delay
              await wait(300);
+             
+             // Track totals locally to avoid stale state in async function
+             let runningChips = 0;
+             let runningMult = 0;
+             let multVisible = false;
 
              // PHASE 1: Show +Chips
              for (let i = 0; i < criteria.length; i++) {
                  if (canceled) return;
-                 // Reveal Item
+                 // Reveal Row Frame and Label
                  setVisibleItems(prev => [...prev, i]);
+                 setActiveCriteriaIdx(i);
                  
-                 // Small pause before adding value?
-                 await wait(100);
+                 // Wait "a beat" before chips slam in
+                 await wait(400);
                  
-                 // Add chips to running score
+                 // Reveal Chips
+                 setVisibleChips(prev => [...prev, i]);
+                 
+                 // Add chips to running score AFTER chips slam in
                  if (criteria[i].chips > 0) {
-                     setDisplayScore(prev => prev + criteria[i].chips);
-                     setPulseScore(true);
-                     setTimeout(() => setPulseScore(false), 200);
+                     runningChips += criteria[i].chips;
+                     
+                     // Don't update display score or pulse for win/viginti as it's already showing the hand value
+                     const isOutcome = criteria[i].id === 'win' || criteria[i].id === 'viginti';
+                     if (!isOutcome) {
+                         setDisplayScore(runningChips);
+                         setPulseScore(true);
+                         setTimeout(() => setPulseScore(false), 400);
+                     }
                  }
                  
-                 await wait(400); // Wait for next item
+                 await wait(500); // Wait for next item
              }
+
+             // All +Chips shown, clear active highlight before mults
+             setActiveCriteriaIdx(null);
 
              // Chips done. Preparing for Mults.
              await wait(200);
              if (canceled) return;
              
              // PHASE 2: Show Multipliers
-             // Show Mult Container
-             setShowMultContainer(true);
-             await wait(300);
-
              for (let i = 0; i < criteria.length; i++) {
                  if (canceled) return;
                  
-                 // Reveal Mult in list
+                 // Show Mult in list
                  setVisibleMults(prev => [...prev, i]);
                  await wait(100);
 
-                 // Add to total mult
+                  // Add to total mult
                  if (criteria[i].multiplier > 0) {
-                     setDisplayMult(prev => prev + criteria[i].multiplier);
+                     // Show container if not already visible
+                     if (!multVisible) {
+                         multVisible = true;
+                         setShowMultContainer(true);
+                     }
+                     
+                     runningMult += criteria[i].multiplier;
+                     setDisplayMult(runningMult);
+                     setPulseMult(true);
+                     setTimeout(() => setPulseMult(false), 400);
                  }
                  
                  await wait(400);
@@ -104,20 +144,28 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
              if (canceled) return;
              
              // Process final multiplication
-             const totalMult = Math.max(1, displayMult);
-             const finalVal = Math.floor(displayScore * totalMult);
+             const totalMult = Math.max(1, runningMult);
+             const finalVal = Math.floor(runningChips * totalMult);
              
-             // Only animate if there was actually a multiplier change
-             if (totalMult > 1) {
+             // Only animate if there was actually a multiplier to apply
+             if (multVisible) {
+                 // Trigger slide animation
+                 setIsSlidingMult(true);
+                 
+                 // Wait for 1/2 of slide (300ms of 600ms)
+                 await wait(300);
+                 
+                 // Final update and pulse
                  setDisplayScore(finalVal);
                  setPulseScore(true);
-                 setTimeout(() => setPulseScore(false), 200);
+                 setTimeout(() => setPulseScore(false), 400);
                  
-                 // Wait for pulse to be seen
-                 await wait(500);
+                 // Wait for remaining slide (300ms) + display time (700ms)
+                 await wait(1000);
              }
              
              // Always hide mult container at the end of scoring
+             setIsSlidingMult(false);
              setShowMultContainer(false);
              
              // Sync to final exact value just in case
@@ -128,7 +176,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
 
           runAnimation();
 
-          return () => { canceled = true; };
+          return () => { canceled = true; setIsSlidingMult(false); setShowMultContainer(false); setActiveCriteriaIdx(null); };
       }
       
       // If not winning or not revealed, ensure score matches state
@@ -151,16 +199,16 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
                  key={`${item.id}-${idx}`} 
                  className={`${styles.scoringItem} ${visibleItems.includes(idx) ? styles.visible : ''}`}
                >
-                 <div className={styles.itemName}>
+                 <div className={`${styles.itemName} ${item.id === 'viginti' ? styles.isViginti : ''}`}>
                      {item.name}
                      {item.count > 1 && <span className={styles.itemCount}>x{item.count}</span>}
                  </div>
-                 <div className={styles.itemChips}>
-                     {item.chips !== 0 && `+${item.chips}`}
-                 </div>
-                 <div className={`${styles.itemMult} ${visibleMults.includes(idx) ? styles.visible : ''}`}>
-                     {item.multiplier !== 0 && `x${item.multiplier}`}
-                 </div>
+                  <div className={`${styles.itemChips} ${visibleChips.includes(idx) ? styles.visible : ''} ${item.id === 'viginti' ? styles.isViginti : ''}`}>
+                     {`+${item.chips}`}
+                  </div>
+                  <div className={`${styles.itemMult} ${visibleMults.includes(idx) ? styles.visible : ''}`}>
+                     {`x${item.multiplier.toFixed(1)}`}
+                  </div>
                </div>
            ))}
         </div>
@@ -179,14 +227,21 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
                  const rotate = (idx - center) * 5;
                  const translateY = Math.abs(idx - center) * 2;
 
+                 const currentCrit = activeCriteriaIdx !== null ? hand.finalScore?.criteria[activeCriteriaIdx] : null;
+                 const isHighlighted = !!(currentCrit && currentCrit.cardIds?.includes(card.id));
+                 // Exclude highlighting for basic Win/Viginti as requested
+                 const shouldHighlight = isHighlighted && currentCrit?.id !== 'win' && currentCrit?.id !== 'viginti';
+
                  return (
                    <div 
                       key={card.id} 
-                      className={styles.cardWrapper}
+                      className={`${styles.cardWrapper} ${shouldHighlight ? styles.highlighted : ''}`}
                       style={{
                           transform: `rotate(${rotate}deg) translateY(${translateY}px)`,
-                          transformOrigin: '50% 250%'
-                      }}
+                          transformOrigin: '50% 250%',
+                          '--rotate': `${rotate}deg`,
+                          '--translateY': `${translateY}px`
+                      } as any}
                    >
                      <PlayingCard 
                         card={card} 
@@ -204,7 +259,11 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
           
           {/* Overlay text on cards */}
           {showOverlay && (
-            <div className={styles.overlayText}>
+            <div className={`${styles.overlayText} ${
+                (activeCriteriaIdx !== null && 
+                 hand.finalScore?.criteria[activeCriteriaIdx].id !== 'win' && 
+                 hand.finalScore?.criteria[activeCriteriaIdx].id !== 'viginti') ? styles.faded : ''
+            }`}>
               {hand.isBust && (
                 <div className={styles.overlayItem}>
                   <div className={`${styles.bustOverlay} ${styles.slamEnter}`}>BUST</div>
@@ -218,7 +277,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
               )}
               {isWin && !isViginti && !hand.isBust && (
                 <div className={styles.overlayItem}>
-                    <div className={`${styles.winOverlay} ${styles.slamEnter}`}>WIN!</div>
+                    <div className={`${styles.winOverlay} ${styles.slamEnter}`}>WIN</div>
                 </div>
               )}
               {!isWin && hand.resultRevealed && !hand.isBust && !isViginti && (
@@ -237,19 +296,18 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
                 <div 
                     id={`hand-score-${hand.id}`}
                     className={`${styles.scoreValue} ${pulseScore ? styles.pulse : ''} ${
-                    hand.isBust ? styles.busted : 
-                    isViginti ? styles.vigintiScore :
-                    (hand.resultRevealed && isWin) ? styles.win : 
-                    (hand.resultRevealed && !isWin) ? styles.loss : ''
-                }`}>
+                        hand.isBust ? styles.isBust : 
+                        isViginti && !hand.isBust ? styles.isViginti : 
+                        isWin ? styles.isWin : 
+                        (!isWin && hand.resultRevealed && !hand.isBust && !isViginti) ? styles.isLoss : ''
+                    }`}>
                      {displayScore}
                 </div>
                 
                 {/* Mult on Right Positioned Absolutely */}
-                <div className={`${styles.multContainer} ${showMultContainer ? styles.visible : ''}`}>
-                    <span>x</span>
-                    <span className={styles.multValue}>
-                        {displayMult.toFixed(1).replace(/\.0$/, '')}
+                <div className={`${styles.multContainer} ${showMultContainer ? styles.visible : ''} ${isSlidingMult ? styles.sliding : ''}`}>
+                    <span className={`${styles.multValue} ${pulseMult ? styles.pulse : ''}`}>
+                        x{displayMult.toFixed(1)}
                     </span>
                 </div>
             </div>

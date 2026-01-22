@@ -42,7 +42,7 @@ export const DeckView: React.FC<DeckViewProps> = ({ activeCards, onClose }) => {
     return (
         <div className={styles.overlay} onClick={onClose}>
             <div className={styles.modal} onClick={e => e.stopPropagation()}>
-                <h2 className={styles.title}>Deck Overview</h2>
+                <h2 className={styles.title}>Deck Details</h2>
                 
                 <div className={styles.unifiedGrid}>
                     {SUIT_ORDER.map(suit => (

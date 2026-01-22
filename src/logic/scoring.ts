@@ -20,12 +20,24 @@ interface ScoringRule {
 }
 
 export const SCORING_RULES: Record<ScoringCriterionId, ScoringRule> = {
-  'win': { id: 'win', name: 'Win', chips: 0, mult: 0 },
-  'viginti': { id: 'viginti', name: 'Viginti', chips: 5, mult: 0.25 },
-  'two_cards': { id: 'two_cards', name: 'Two Cards', chips: 5, mult: 0.5 },
-  'rank_match': { id: 'rank_match', name: 'Rank Match', chips: 2, mult: 1 },
-  'suit_match': { id: 'suit_match', name: 'Suit Match', chips: 3, mult: 1 },
-  'sequence': { id: 'sequence', name: 'Sequence', chips: 4, mult: 1 }
+  // Outcome
+  'win': { id: 'win', name: 'Win', chips: 0, mult: 1.0 },
+  'viginti': { id: 'viginti', name: 'Viginti', chips: 0, mult: 1.5 },
+
+  // Rank
+  'one_pair': { id: 'one_pair', name: 'One Pair', chips: 5, mult: 0 },
+  'two_pair': { id: 'two_pair', name: 'Two Pair', chips: 20, mult: 1 },
+  'three_of_a_kind': { id: 'three_of_a_kind', name: 'Three of a Kind', chips: 50, mult: 2 },
+
+  // Suite
+  'mini_flush': { id: 'mini_flush', name: 'Mini Flush', chips: 10, mult: 0 },
+  'partial_flush': { id: 'partial_flush', name: 'Partial Flush', chips: 15, mult: 0.3 },
+  'full_flush': { id: 'full_flush', name: 'Full Flush', chips: 35, mult: 1 },
+
+  // Order
+  'sequential': { id: 'sequential', name: 'Sequential', chips: 5, mult: 0.3 },
+  'short_straight': { id: 'short_straight', name: 'Short Straight', chips: 10, mult: 0.5 },
+  'long_straight': { id: 'long_straight', name: 'Long Straight', chips: 25, mult: 1.5 }
 };
 
 export function getBlackjackScore(cards: Card[]): number {
@@ -50,175 +62,150 @@ export function evaluateHandScore(cards: Card[], isWin: boolean): HandScore {
   const blackjackScore = getBlackjackScore(cards);
   const criteria: ScoringDetail[] = [];
 
-  // 1. Win / Viginti
+  // Helper to add criteria
+  const addCriteria = (id: ScoringCriterionId, count: number = 1, chipsOverride?: number, cardIds?: string[]) => {
+    const rule = SCORING_RULES[id];
+    criteria.push({
+      id: rule.id,
+      name: rule.name,
+      count,
+      chips: chipsOverride !== undefined ? chipsOverride : rule.chips,
+      multiplier: rule.mult,
+      cardIds
+    });
+  };
+
+  // --- 1. OUTCOME TIER (Mutually Exclusive) ---
   const isViginti = blackjackScore === 21;
+  const allCardIds = cards.map(c => c.id);
   
   if (isViginti) {
-     criteria.push({
-         id: 'viginti',
-         name: SCORING_RULES.viginti.name,
-         count: 1,
-         chips: SCORING_RULES.viginti.chips,
-         multiplier: SCORING_RULES.viginti.mult
-     });
+     addCriteria('viginti', 1, blackjackScore, allCardIds);
   } else if (isWin) {
-     criteria.push({
-         id: 'win',
-         name: SCORING_RULES.win.name,
-         count: 1,
-         chips: SCORING_RULES.win.chips,
-         multiplier: SCORING_RULES.win.mult
-     });
+     addCriteria('win', 1, blackjackScore, allCardIds);
   }
 
-  // 2. Two Cards
-  if (cards.length === 2) {
-      criteria.push({
-         id: 'two_cards',
-         name: SCORING_RULES.two_cards.name,
-         count: 1,
-         chips: SCORING_RULES.two_cards.chips,
-         multiplier: SCORING_RULES.two_cards.mult
-      });
-  }
-
-  // 3. Rank Match (Pairs, etc >= 2)
+  // --- 2. RANK TIER (Mutually Exclusive) ---
+  // Count ranks
   const rankCounts: Record<string, number> = {};
   cards.forEach(c => rankCounts[c.rank] = (rankCounts[c.rank] || 0) + 1);
-  let rankMatchCount = 0;
-  let rankMatchChips = 0;
-  let rankMatchMult = 0;
-
-  for (const rank in rankCounts) {
-      const count = rankCounts[rank];
-      if (count >= 2) {
-          rankMatchCount++;
-          // Base rule * (count - 1)? Or just flat per match group?
-          // Simplest: Flat per group.
-          rankMatchChips += SCORING_RULES.rank_match.chips;
-          rankMatchMult += SCORING_RULES.rank_match.mult;
+  
+  let pairs = 0;
+  let threes = 0;
+  
+  const rankCardIds: string[] = [];
+  
+  for (const r in rankCounts) {
+      if (rankCounts[r] >= 3) {
+          threes++;
+          cards.filter(c => c.rank === r).forEach(c => rankCardIds.push(c.id));
+      } else if (rankCounts[r] === 2) {
+          pairs++;
+          cards.filter(c => c.rank === r).forEach(c => rankCardIds.push(c.id));
       }
   }
 
-  if (rankMatchCount > 0) {
-      criteria.push({
-          id: 'rank_match',
-          name: SCORING_RULES.rank_match.name,
-          count: rankMatchCount,
-          chips: rankMatchChips,
-          multiplier: rankMatchMult
-      });
+  // Determine highest rank tier
+  if (threes > 0) {
+      addCriteria('three_of_a_kind', 1, undefined, rankCardIds);
+  } else if (pairs >= 2) {
+      addCriteria('two_pair', 1, undefined, rankCardIds); 
+  } else if (pairs === 1) {
+      addCriteria('one_pair', 1, undefined, rankCardIds);
   }
 
-  // 4. Suit Match (>= 2 same suit? Or >=3? Defaulting to >= 2 for flexibility as per "Two Cards" logic usually implying pairs, but suit might need 3? Prompt example: "Two Suite Match (3 long hearts, 2 long diamonds)" -> implies length 2 counts.)
+  // --- 3. SUITE TIER (Mutually Exclusive) ---
   const suitCounts: Record<string, number> = {};
   cards.forEach(c => suitCounts[c.suit] = (suitCounts[c.suit] || 0) + 1);
-  let suitMatchCount = 0;
-  let suitMatchChips = 0;
-  let suitMatchMult = 0;
-
-  for (const suit in suitCounts) {
-      const count = suitCounts[suit];
-      if (count >= 2) {
-          suitMatchCount++;
-          suitMatchChips += SCORING_RULES.suit_match.chips;
-          suitMatchMult += SCORING_RULES.suit_match.mult;
+  
+  let maxSuitCount = 0;
+  let dominantSuit = '';
+  for (const s in suitCounts) {
+      if (suitCounts[s] > maxSuitCount) {
+          maxSuitCount = suitCounts[s];
+          dominantSuit = s;
       }
   }
 
-  if (suitMatchCount > 0) {
-      criteria.push({
-          id: 'suit_match',
-          name: SCORING_RULES.suit_match.name,
-          count: suitMatchCount,
-          chips: suitMatchChips,
-          multiplier: suitMatchMult
-      });
+  const flushCardIds = cards.filter(c => c.suit === dominantSuit).map(c => c.id);
+
+  if (maxSuitCount >= 4) {
+      addCriteria('full_flush', 1, undefined, flushCardIds);
+  } else if (maxSuitCount === 3) {
+      addCriteria('partial_flush', 1, undefined, flushCardIds);
+  } else if (maxSuitCount === 2) {
+      addCriteria('mini_flush', 1, undefined, flushCardIds);
   }
 
-  // 5. Sequence (>= 3 consecutive? Prompt says "4 long, 1-2-3-4" is a sequence.)
-  // Usually poker straights are 5, or 3 in mini.
-  // Prompt implies checking for runs. 
-  // Sort cards by poker value.
-  const uniqueValues = Array.from(new Set(cards.map(c => POKER_ORDER[c.rank]))).sort((a, b) => a - b);
-  // Also consider Ace as low (1) if needed? POKER_ORDER has Ace=14.
-  // Let's add low ace support: If 14 exists, add 1.
-  if (uniqueValues.includes(14)) uniqueValues.unshift(1);
+  // --- 4. ORDER TIER (Mutually Exclusive) ---
+  // We need to find the longest run of cards.
+  // Original logic was using values, let's track cards too.
+  const cardsByOrder = [...cards].sort((a, b) => POKER_ORDER[a.rank] - POKER_ORDER[b.rank]);
+  
+  // Straight logic with card tracking
+  const getLongestRun = (cardList: Card[]) => {
+    if (cardList.length === 0) return { length: 0, ids: [] };
+    
+    // Sort unique values
+    const sorted = [...cardList].sort((a, b) => POKER_ORDER[a.rank] - POKER_ORDER[b.rank]);
+    
+    // Handle Ace for straights (A, 2, 3...)
+    const aces = sorted.filter(c => c.rank === 'A');
+    let extendedList = [...sorted];
+    if (aces.length > 0) {
+        // Special case: Ace can be 1. We create "virtual" cards for logic but track real IDs.
+        const lowAces = aces.map(a => ({ ...a, _vRank: 1 }));
+        extendedList = [...lowAces, ...sorted];
+    } else {
+        extendedList = sorted.map(c => ({ ...c, _vRank: POKER_ORDER[c.rank] }));
+    }
+    // Re-sort with virtual ranks
+    extendedList.sort((a, b) => ( (a as any)._vRank || POKER_ORDER[a.rank]) - ((b as any)._vRank || POKER_ORDER[b.rank]));
 
-  let seqCount = 0;
-  let seqChips = 0;
-  let seqMult = 0;
+    let maxRunLength = 1;
+    let currentRun: Card[] = [extendedList[0]];
+    let bestRun: Card[] = [extendedList[0]];
 
-  // Find runs of length >= 3
-  let currentRunLength = 1;
+    for (let i = 0; i < extendedList.length - 1; i++) {
+        const currVR = (extendedList[i] as any)._vRank || POKER_ORDER[extendedList[i].rank];
+        const nextVR = (extendedList[i+1] as any)._vRank || POKER_ORDER[extendedList[i+1].rank];
+        
+        if (nextVR === currVR + 1) {
+            currentRun.push(extendedList[i+1]);
+        } else if (nextVR !== currVR) {
+            if (currentRun.length > maxRunLength) {
+                maxRunLength = currentRun.length;
+                bestRun = [...currentRun];
+            }
+            currentRun = [extendedList[i+1]];
+        }
+    }
+    if (currentRun.length > maxRunLength) {
+        maxRunLength = currentRun.length;
+        bestRun = [...currentRun];
+    }
+    
+    return { length: maxRunLength, ids: Array.from(new Set(bestRun.map(c => c.id))) };
+  };
 
-  // We need to be careful. 1,2,3,4 is ONE sequence of length 4. Not two sequences.
-  // So we just iterate and reset.
-  for (let i = 0; i < uniqueValues.length - 1; i++) {
-      if (uniqueValues[i + 1] === uniqueValues[i] + 1) {
-          currentRunLength++;
-      } else {
-          if (currentRunLength >= 2) {
-              seqCount++;
-              seqChips += SCORING_RULES.sequence.chips;
-              seqMult += SCORING_RULES.sequence.mult;
-          }
-          currentRunLength = 1;
-      }
+  const straightInfo = getLongestRun(cards);
+
+  if (straightInfo.length >= 4) {
+      addCriteria('long_straight', 1, undefined, straightInfo.ids);
+  } else if (straightInfo.length === 3) {
+      addCriteria('short_straight', 1, undefined, straightInfo.ids);
+  } else if (straightInfo.length === 2) {
+      addCriteria('sequential', 1, undefined, straightInfo.ids);
   }
-  // Check last run
-  if (currentRunLength >= 2) {
-      seqCount++;
-      seqChips += SCORING_RULES.sequence.chips;
-      seqMult += SCORING_RULES.sequence.mult;
-  }
 
-  if (seqCount > 0) {
-      criteria.push({
-          id: 'sequence',
-          name: SCORING_RULES.sequence.name,
-          count: seqCount,
-          chips: seqChips,
-          multiplier: seqMult
-      });
-  }
-
-  // Totals
+  // --- CALCULATION ---
   const totalChips = criteria.reduce((sum, c) => sum + c.chips, 0);
   const totalMultiplier = criteria.reduce((sum, c) => sum + c.multiplier, 0);
-  // Final score formula: (Sum of Cards + TotalChips) * TotalMultiplier?
-  // Prompt: "(sum of cards involed + 10) x 2" -> This was for a specific hand type example.
-  // Prompt also says: "The area that normally shows the blackjack hand score will be used to show the running total... As this appears, they will see the blackjack hand score increase by this amount."
-  // This implies we take Base Blackjack Score, add All Chips, then multiply by All Mults.
-  // Wait, "sum of cards involved". In Blackjack, all cards are involved.
-  // So Base Cards Score (Blackjack Value) + Bonus Chips.
-  const baseScore = blackjackScore + totalChips;
-  // Multiplier defaults to 1 if no mults? 
-  // If user says "x2" is added, then the base is 1?
-  // Or is it additive multipliers? "Total xChips".
-  // Note: "Each hand type... new column for added chips... existing multiplier".
-  // So Flush: +10, x2.
-  // If I have Flush and Pair (+5, x1.5).
-  // Total Mult = 2 + 1.5 = 3.5?
-  // Or product? "Add it to the running total xChips". "Added together".
-  // So it is additive.
-  // What is the starting multiplier? Should be 1 (identity) or 0 (and we multiply by final)?
-  // Usually in Balatro-likes, it's (Base + Chips) * (Mult).
-  // If I have NO scoring hands, score is just Blackjack Value * 1?
-  // Yes. So start mult at 1?
-  // BUT the prompt says: "First it will only show the +Chips... then it will show the xChips... update the blackjack score to be multiplied by the total xChips".
-  // If I have 0 scoring hands, I show nothing. Total xChips = 0?
-  // If total xChips is 0, score becomes 0?
-  // No, basic multiplier is 1.
-  // So `finalMult = Math.max(1, totalMultiplier)`.
-  // Wait, if I have a Flush (x2), is the total mult 2 or 3 (1+2)?
-  // "Flush is currently x3... enhance to +10, x2".
-  // This implies the rule replaces the old value.
-  // So if I have Flush (x2) and Pair (x1.5), and I "Add them", I get 3.5.
-  // So the implicit base is 0, but valid hands add to it.
-  // If `totalMultiplier` is 0, we use 1.
   
-  const finalMult = totalMultiplier === 0 ? 1 : totalMultiplier;
+  // baseScore is now just totalChips because blackjackScore is included in the outcome criterion
+  const baseScore = totalChips;
+  // Multipliers are now fully explicit (Win = x1, etc)
+  const finalMult = totalMultiplier;
   const finalScore = Math.floor(baseScore * finalMult);
 
   return {
@@ -226,6 +213,6 @@ export function evaluateHandScore(cards: Card[], isWin: boolean): HandScore {
     totalChips,
     totalMultiplier: finalMult,
     finalScore,
-    scoringCards: cards // All cards involved
+    scoringCards: cards
   };
 }
