@@ -2,16 +2,14 @@
 export function calculateTargetScore(round: number): number {
   let score: number;
   if (round === 1) {
-    score = 75;
+    score = 1000;
   } else if (round === 2) {
-    score = 250;
+    score = 1300;
   } else if (round === 3) {
-    score = 800;
+    score = 1600;
   } else {
     // Casino 4+
-    score = 800 + (round - 3) * 500;
+    score = 1600 + (round - 3) * 300;
   }
-
-  // Reduce by 1/2 and round to nearest multiple of 5
-  return Math.round((score / 2) / 5) * 5;
+  return score;
 }

@@ -9,7 +9,7 @@ export interface Card {
   origin?: 'deck' | 'draw_pile';
 }
 
-export type ScoringCriterionId = 
+export type ScoringCriterionId =
   // Outcome
   | 'win'
   | 'viginti'
@@ -18,13 +18,12 @@ export type ScoringCriterionId =
   | 'two_pair'
   | 'three_of_a_kind'
   // Suite
+  // Suite
   | 'mini_flush'
   | 'partial_flush'
-  | 'full_flush'
   // Order
   | 'sequential'
-  | 'short_straight'
-  | 'long_straight';
+  | 'short_straight';
 
 export interface ScoringDetail {
   id: string; // e.g. 'win', 'pair', 'sequence'

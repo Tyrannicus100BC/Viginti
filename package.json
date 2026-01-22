@@ -10,7 +10,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@types/canvas-confetti": "^1.9.0",
     "@types/matter-js": "^0.20.2",
+    "canvas-confetti": "^1.9.4",
     "clsx": "^2.1.1",
     "matter-js": "^0.20.0",
     "react": "^19.2.0",

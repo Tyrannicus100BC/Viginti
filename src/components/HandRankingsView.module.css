@@ -16,8 +16,9 @@
     padding: 30px;
     border-radius: 12px;
     width: 90%;
-    max-width: 500px;
-    box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+    max-width: 850px;
+    /* Increased from 500px */
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
     border: 1px solid #34495e;
     color: #ecf0f1;
 }
@@ -31,19 +32,20 @@
 }
 
 .headerRow {
-  display: flex;
-  justify-content: space-between;
-  padding: 10px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-  font-weight: bold;
-  color: #ccc;
-  font-size: 0.9em;
-  align-items: flex-end;
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    font-weight: bold;
+    color: #ccc;
+    font-size: 0.9em;
+    align-items: flex-end;
 }
 
 .tierHeaderRow {
     margin-top: 15px;
-    border-bottom: 2px solid #ffffff; /* Different color separator for tier name row */
+    border-bottom: 2px solid #ffffff;
+    /* Different color separator for tier name row */
     padding-bottom: 5px;
 }
 
@@ -52,40 +54,50 @@
 }
 
 .tierNameHeader {
-    flex: 2;
+    flex: 1.5;
+    /* Match handName */
     text-align: left;
-    color: #ffffff; /* Different color for tier names */
+    color: #ffffff;
+    /* Different color for tier names */
     font-size: 1.1em;
     text-transform: uppercase;
     letter-spacing: 1px;
 }
 
 .row {
-  display: flex;
-  justify-content: space-between;
-  padding: 8px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  font-size: 1.1rem;
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    font-size: 1.1rem;
 }
 
-.handName, .handNameHeader {
-  flex: 2;
-  text-align: left;
+.handName,
+.handNameHeader {
+    flex: 1.5;
+    text-align: left;
+    min-width: 160px;
 }
 
-.chips, .chipsHeader {
-  flex: 1;
-  text-align: right;
-  color: #44ff44;
+.chips,
+.chipsHeader {
+    flex: 3;
+    /* Give much more space to the dynamic text */
+    text-align: right;
+    color: #44ff44;
+    white-space: nowrap;
+    /* Prevent wrapping if possible, now we have space */
 }
 
-.multiplier, .multHeader {
-  flex: 1;
-  text-align: right;
-  color: #f1c40f;
+.multiplier,
+.multHeader {
+    flex: 0.8;
+    text-align: right;
+    color: #f1c40f;
 }
 
-.row:last-child, .lastInTier {
+.row:last-child,
+.lastInTier {
     border-bottom: none;
 }
 

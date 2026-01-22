@@ -21,23 +21,21 @@ interface ScoringRule {
 
 export const SCORING_RULES: Record<ScoringCriterionId, ScoringRule> = {
   // Outcome
-  'win': { id: 'win', name: 'Win', chips: 0, mult: 1.0 },
-  'viginti': { id: 'viginti', name: 'Viginti', chips: 0, mult: 1.5 },
+  'win': { id: 'win', name: 'Win', chips: 10, mult: 1.5 },
+  'viginti': { id: 'viginti', name: 'Viginti', chips: 50, mult: 0 },
 
   // Rank
-  'one_pair': { id: 'one_pair', name: 'One Pair', chips: 5, mult: 0.5 },
-  'two_pair': { id: 'two_pair', name: 'Two Pair', chips: 32, mult: 1.5 },
-  'three_of_a_kind': { id: 'three_of_a_kind', name: 'Three of a Kind', chips: 65, mult: 3 },
+  'one_pair': { id: 'one_pair', name: 'One Pair', chips: 0, mult: 0.5 },
+  'two_pair': { id: 'two_pair', name: 'Two Pair', chips: 0, mult: 1.5 },
+  'three_of_a_kind': { id: 'three_of_a_kind', name: 'Three of a Kind', chips: 0, mult: 3 },
 
   // Suite
-  'mini_flush': { id: 'mini_flush', name: 'Mini Flush', chips: 7, mult: 0.5 },
-  'partial_flush': { id: 'partial_flush', name: 'Partial Flush', chips: 15, mult: 1 },
-  'full_flush': { id: 'full_flush', name: 'Full Flush', chips: 45, mult: 4 },
+  'mini_flush': { id: 'mini_flush', name: 'Mini Flush', chips: 0, mult: 0.5 },
+  'partial_flush': { id: 'partial_flush', name: 'Partial Flush', chips: 0, mult: 1.5 },
 
   // Order
-  'sequential': { id: 'sequential', name: 'Sequential', chips: 10, mult: 0.5 },
-  'short_straight': { id: 'short_straight', name: 'Short Straight', chips: 25, mult: 1 },
-  'long_straight': { id: 'long_straight', name: 'Long Straight', chips: 75, mult: 2 }
+  'sequential': { id: 'sequential', name: 'Sequential', chips: 0, mult: 0.5 },
+  'short_straight': { id: 'short_straight', name: 'Short Straight', chips: 0, mult: 1.5 },
 };
 
 export function getBlackjackScore(cards: Card[]): number {
@@ -78,130 +76,136 @@ export function evaluateHandScore(cards: Card[], isWin: boolean): HandScore {
   // --- 1. OUTCOME TIER (Mutually Exclusive) ---
   const isViginti = blackjackScore === 21;
   const allCardIds = cards.map(c => c.id);
-  
+
   if (isViginti) {
-     addCriteria('viginti', 1, blackjackScore, allCardIds);
+    addCriteria('viginti', 1, undefined, allCardIds);
+    addCriteria('win', 1, undefined, allCardIds);
   } else if (isWin) {
-     addCriteria('win', 1, blackjackScore, allCardIds);
+    addCriteria('win', 1, undefined, allCardIds);
   }
 
   // --- 2. RANK TIER (Mutually Exclusive) ---
   // Count ranks
   const rankCounts: Record<string, number> = {};
   cards.forEach(c => rankCounts[c.rank] = (rankCounts[c.rank] || 0) + 1);
-  
+
   let pairs = 0;
   let threes = 0;
-  
+
   const rankCardIds: string[] = [];
-  
+
   for (const r in rankCounts) {
-      if (rankCounts[r] >= 3) {
-          threes++;
-          cards.filter(c => c.rank === r).forEach(c => rankCardIds.push(c.id));
-      } else if (rankCounts[r] === 2) {
-          pairs++;
-          cards.filter(c => c.rank === r).forEach(c => rankCardIds.push(c.id));
-      }
+    if (rankCounts[r] >= 3) {
+      threes++;
+      cards.filter(c => c.rank === r).forEach(c => rankCardIds.push(c.id));
+    } else if (rankCounts[r] === 2) {
+      pairs++;
+      cards.filter(c => c.rank === r).forEach(c => rankCardIds.push(c.id));
+    }
   }
 
   // Determine highest rank tier
+  // Calculate sum of involved cards
+  const rankCards = cards.filter(c => rankCardIds.includes(c.id));
+  const rankSum = rankCards.reduce((sum, c) => sum + RANK_VALUES[c.rank], 0);
+
   if (threes > 0) {
-      addCriteria('three_of_a_kind', 1, undefined, rankCardIds);
+    addCriteria('three_of_a_kind', 1, rankSum, rankCardIds);
   } else if (pairs >= 2) {
-      addCriteria('two_pair', 1, undefined, rankCardIds); 
+    addCriteria('two_pair', 1, rankSum, rankCardIds);
   } else if (pairs === 1) {
-      addCriteria('one_pair', 1, undefined, rankCardIds);
+    addCriteria('one_pair', 1, rankSum, rankCardIds);
   }
 
   // --- 3. SUITE TIER (Mutually Exclusive) ---
   const suitCounts: Record<string, number> = {};
   cards.forEach(c => suitCounts[c.suit] = (suitCounts[c.suit] || 0) + 1);
-  
+
   let maxSuitCount = 0;
   let dominantSuit = '';
   for (const s in suitCounts) {
-      if (suitCounts[s] > maxSuitCount) {
-          maxSuitCount = suitCounts[s];
-          dominantSuit = s;
-      }
+    if (suitCounts[s] > maxSuitCount) {
+      maxSuitCount = suitCounts[s];
+      dominantSuit = s;
+    }
   }
 
   const flushCardIds = cards.filter(c => c.suit === dominantSuit).map(c => c.id);
+  const flushCards = cards.filter(c => c.suit === dominantSuit);
+  const flushSum = flushCards.reduce((sum, c) => sum + RANK_VALUES[c.rank], 0);
 
-  if (maxSuitCount >= 4) {
-      addCriteria('full_flush', 1, undefined, flushCardIds);
-  } else if (maxSuitCount === 3) {
-      addCriteria('partial_flush', 1, undefined, flushCardIds);
+  if (maxSuitCount >= 3) {
+    addCriteria('partial_flush', 1, flushSum, flushCardIds);
   } else if (maxSuitCount === 2) {
-      addCriteria('mini_flush', 1, undefined, flushCardIds);
+    addCriteria('mini_flush', 1, flushSum, flushCardIds);
   }
 
   // --- 4. ORDER TIER (Mutually Exclusive) ---
   // We need to find the longest run of cards.
   // Original logic was using values, let's track cards too.
-  const cardsByOrder = [...cards].sort((a, b) => POKER_ORDER[a.rank] - POKER_ORDER[b.rank]);
-  
+
   // Straight logic with card tracking
   const getLongestRun = (cardList: Card[]) => {
     if (cardList.length === 0) return { length: 0, ids: [] };
-    
+
     // Sort unique values
     const sorted = [...cardList].sort((a, b) => POKER_ORDER[a.rank] - POKER_ORDER[b.rank]);
-    
+
     // Handle Ace for straights (A, 2, 3...)
     const aces = sorted.filter(c => c.rank === 'A');
     let extendedList = [...sorted];
     if (aces.length > 0) {
-        // Special case: Ace can be 1. We create "virtual" cards for logic but track real IDs.
-        const lowAces = aces.map(a => ({ ...a, _vRank: 1 }));
-        extendedList = [...lowAces, ...sorted];
+      // Special case: Ace can be 1. We create "virtual" cards for logic but track real IDs.
+      const lowAces = aces.map(a => ({ ...a, _vRank: 1 }));
+      extendedList = [...lowAces, ...sorted];
     } else {
-        extendedList = sorted.map(c => ({ ...c, _vRank: POKER_ORDER[c.rank] }));
+      extendedList = sorted.map(c => ({ ...c, _vRank: POKER_ORDER[c.rank] }));
     }
     // Re-sort with virtual ranks
-    extendedList.sort((a, b) => ( (a as any)._vRank || POKER_ORDER[a.rank]) - ((b as any)._vRank || POKER_ORDER[b.rank]));
+    extendedList.sort((a, b) => ((a as any)._vRank || POKER_ORDER[a.rank]) - ((b as any)._vRank || POKER_ORDER[b.rank]));
 
     let maxRunLength = 1;
     let currentRun: Card[] = [extendedList[0]];
     let bestRun: Card[] = [extendedList[0]];
 
     for (let i = 0; i < extendedList.length - 1; i++) {
-        const currVR = (extendedList[i] as any)._vRank || POKER_ORDER[extendedList[i].rank];
-        const nextVR = (extendedList[i+1] as any)._vRank || POKER_ORDER[extendedList[i+1].rank];
-        
-        if (nextVR === currVR + 1) {
-            currentRun.push(extendedList[i+1]);
-        } else if (nextVR !== currVR) {
-            if (currentRun.length > maxRunLength) {
-                maxRunLength = currentRun.length;
-                bestRun = [...currentRun];
-            }
-            currentRun = [extendedList[i+1]];
+      const currVR = (extendedList[i] as any)._vRank || POKER_ORDER[extendedList[i].rank];
+      const nextVR = (extendedList[i + 1] as any)._vRank || POKER_ORDER[extendedList[i + 1].rank];
+
+      if (nextVR === currVR + 1) {
+        currentRun.push(extendedList[i + 1]);
+      } else if (nextVR !== currVR) {
+        if (currentRun.length > maxRunLength) {
+          maxRunLength = currentRun.length;
+          bestRun = [...currentRun];
         }
+        currentRun = [extendedList[i + 1]];
+      }
     }
     if (currentRun.length > maxRunLength) {
-        maxRunLength = currentRun.length;
-        bestRun = [...currentRun];
+      maxRunLength = currentRun.length;
+      bestRun = [...currentRun];
     }
-    
+
     return { length: maxRunLength, ids: Array.from(new Set(bestRun.map(c => c.id))) };
   };
 
   const straightInfo = getLongestRun(cards);
 
-  if (straightInfo.length >= 4) {
-      addCriteria('long_straight', 1, undefined, straightInfo.ids);
-  } else if (straightInfo.length === 3) {
-      addCriteria('short_straight', 1, undefined, straightInfo.ids);
+  // Calculate sum of cards in straight
+  const straightCards = cards.filter(c => straightInfo.ids.includes(c.id));
+  const straightSum = straightCards.reduce((sum, c) => sum + RANK_VALUES[c.rank], 0);
+
+  if (straightInfo.length >= 3) {
+    addCriteria('short_straight', 1, straightSum, straightInfo.ids);
   } else if (straightInfo.length === 2) {
-      addCriteria('sequential', 1, undefined, straightInfo.ids);
+    addCriteria('sequential', 1, straightSum, straightInfo.ids);
   }
 
   // --- CALCULATION ---
   const totalChips = criteria.reduce((sum, c) => sum + c.chips, 0);
   const totalMultiplier = criteria.reduce((sum, c) => sum + c.multiplier, 0);
-  
+
   // baseScore is now just totalChips because blackjackScore is included in the outcome criterion
   const baseScore = totalChips;
   // Multipliers are now fully explicit (Win = x1, etc)

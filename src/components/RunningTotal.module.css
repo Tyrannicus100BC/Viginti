@@ -1,0 +1,183 @@
+.container {
+    position: absolute;
+    top: 180px;
+    /* Moved down slightly */
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.9);
+    border: 2px solid #555;
+    border-radius: 16px;
+    padding: 20px 40px;
+    display: flex;
+    gap: 30px;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+    font-family: 'Courier New', monospace;
+    animation: fadeIn 0.3s ease-out;
+    min-width: 300px;
+    transition: all 0.3s ease-out;
+}
+
+.item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.label {
+    font-size: 1rem;
+    color: #bbb;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 5px;
+}
+
+.value {
+    font-size: 2.5rem;
+    font-weight: bold;
+    transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.chips {
+    color: #4299e1;
+}
+
+.mult {
+    color: #e53e3e;
+}
+
+.x {
+    color: #777;
+    font-size: 2rem;
+    font-weight: bold;
+    margin-top: 20px;
+    /* Align with values */
+}
+
+/* Final Score Mode Styles */
+.equals {
+    font-size: 2.5rem;
+    color: #fff;
+    margin: 0 10px;
+    opacity: 0;
+    transform: translateX(-20px);
+    animation: slideIn 0.3s forwards;
+    margin-top: 15px;
+}
+
+.finalScore {
+    font-size: 3.5rem;
+    color: #fff;
+    font-weight: 800;
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+    opacity: 0;
+    transform: scale(0.5);
+}
+
+.boom {
+    animation: scoreBoom 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+.explosion {
+    color: #ffaa00;
+    text-shadow: 0 0 20px rgba(255, 170, 0, 0.8);
+    font-size: 4.5rem;
+    animation: scoreBoom 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards, pulse 0.5s infinite alternate;
+}
+
+.mega {
+    color: #ff0000;
+    text-shadow: 0 0 30px rgba(255, 0, 0, 0.9);
+    font-size: 5.5rem;
+    animation: scoreBoom 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards, shake 0.2s infinite;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+}
+
+@keyframes slideIn {
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes scoreBoom {
+    from {
+        transform: scale(0.5);
+        opacity: 0;
+    }
+
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+@keyframes pulse {
+    from {
+        text-shadow: 0 0 20px rgba(255, 170, 0, 0.8);
+    }
+
+    to {
+        text-shadow: 0 0 40px rgba(255, 200, 50, 1);
+        transform: scale(1.05);
+    }
+}
+
+@keyframes shake {
+    0% {
+        transform: translate(1px, 1px) rotate(0deg);
+    }
+
+    10% {
+        transform: translate(-1px, -2px) rotate(-1deg);
+    }
+
+    20% {
+        transform: translate(-3px, 0px) rotate(1deg);
+    }
+
+    30% {
+        transform: translate(3px, 2px) rotate(0deg);
+    }
+
+    40% {
+        transform: translate(1px, -1px) rotate(1deg);
+    }
+
+    50% {
+        transform: translate(-1px, 2px) rotate(-1deg);
+    }
+
+    60% {
+        transform: translate(-3px, 1px) rotate(0deg);
+    }
+
+    70% {
+        transform: translate(3px, 1px) rotate(-1deg);
+    }
+
+    80% {
+        transform: translate(-1px, -1px) rotate(1deg);
+    }
+
+    90% {
+        transform: translate(1px, 2px) rotate(0deg);
+    }
+
+    100% {
+        transform: translate(1px, -2px) rotate(-1deg);
+    }
+}

@@ -1,8 +1,74 @@
-#root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+.shake-screen {
+  animation: shakeHard 0.5s cubic-bezier(.36, .07, .19, .97) both;
+}
+
+.red-tint {
+  position: relative;
+}
+
+.red-tint::after {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(circle, transparent 50%, rgba(255, 0, 0, 0.3) 100%);
+  pointer-events: none;
+  z-index: 9999;
+  animation: flashRed 0.5s ease-out;
+}
+
+@keyframes shakeHard {
+  0% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+
+  10% {
+    transform: translate(-5px, -5px) rotate(-1deg);
+  }
+
+  20% {
+    transform: translate(5px, 5px) rotate(1deg);
+  }
+
+  30% {
+    transform: translate(-5px, 5px) rotate(-1deg);
+  }
+
+  40% {
+    transform: translate(5px, -5px) rotate(1deg);
+  }
+
+  50% {
+    transform: translate(-5px, 0) rotate(-1deg);
+  }
+
+  60% {
+    transform: translate(5px, 0) rotate(1deg);
+  }
+
+  70% {
+    transform: translate(-5px, 0) rotate(-1deg);
+  }
+
+  80% {
+    transform: translate(5px, 0) rotate(1deg);
+  }
+
+  90% {
+    transform: translate(0, 0);
+  }
+}
+
+@keyframes flashRed {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
 }
 
 .logo {
@@ -11,9 +77,11 @@
   will-change: filter;
   transition: filter 300ms;
 }
+
 .logo:hover {
   filter: drop-shadow(0 0 2em #646cffaa);
 }
+
 .logo.react:hover {
   filter: drop-shadow(0 0 2em #61dafbaa);
 }
@@ -22,6 +90,7 @@
   from {
     transform: rotate(0deg);
   }
+
   to {
     transform: rotate(360deg);
   }
