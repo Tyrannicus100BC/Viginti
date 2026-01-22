@@ -9,21 +9,18 @@ export interface Card {
   origin?: 'deck' | 'draw_pile';
 }
 
+export interface ScoringMatch {
+  cardIds: string[];
+  chips: number;
+  multiplier: number;
+}
+
 export type ScoringCriterionId =
-  // Outcome
   | 'win'
   | 'viginti'
-  // Rank
-  | 'one_pair'
-  | 'two_pair'
-  | 'three_of_a_kind'
-  // Suite
-  // Suite
-  | 'mini_flush'
-  | 'partial_flush'
-  // Order
-  | 'sequential'
-  | 'short_straight';
+  | 'pair'
+  | 'flush'
+  | 'straight';
 
 export interface ScoringDetail {
   id: string; // e.g. 'win', 'pair', 'sequence'
@@ -32,6 +29,7 @@ export interface ScoringDetail {
   chips: number; // Total chips from this criterion
   multiplier: number; // Total multiplier from this criterion
   cardIds?: string[]; // IDs of cards that contributed to this criterion
+  matches?: ScoringMatch[];
 }
 
 export interface HandScore {
