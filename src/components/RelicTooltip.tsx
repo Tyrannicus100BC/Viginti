@@ -17,15 +17,13 @@ export const RelicTooltip: React.FC<RelicTooltipProps> = ({ relic, style, classN
                 className={styles.iconContainer}
                 style={{
                     // If hiding icon, make it invisible but keep layout space
-                    // We remove border/background so the underlying inventory icon shows through cleanly if needed,
-                    // or just opacity 0 to be safe.
                     opacity: hideIcon ? 0 : 1,
                     visibility: hideIcon ? 'hidden' : 'visible'
                 }}
             >
-                {relic.icon ? (
+                {relic.icon && !hideIcon ? (
                     <TransparentImage src={relic.icon} alt={relic.name} className={styles.icon} threshold={250} />
-                ) : (
+                ) : relic.icon ? null : (
                     <div className={styles.placeholderIcon}>
                         {relic.name.substring(0, 2).toUpperCase()}
                     </div>

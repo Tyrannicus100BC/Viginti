@@ -32,8 +32,8 @@ export const RelicStore: React.FC<RelicStoreProps> = ({ onClose }) => {
                 style={{
                     background: '#1c2833',
                     borderRadius: 16,
-                    width: 600,
-                    maxWidth: '90%',
+                    width: 940,
+                    maxWidth: '95%',
                     maxHeight: '85vh',
                     display: 'flex',
                     flexDirection: 'column',
@@ -55,7 +55,12 @@ export const RelicStore: React.FC<RelicStoreProps> = ({ onClose }) => {
                     flex: 1,
                     borderRadius: '0 0 16px 16px'
                 }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
+                    <div style={{ 
+                        display: 'grid', 
+                        gridTemplateColumns: 'repeat(2, 1fr)', 
+                        gap: 20,
+                        justifyItems: 'center'
+                    }}>
                         {allRelics.map(relic => {
                             const isOwned = inventory.includes(relic.id);
                             return (
@@ -76,11 +81,11 @@ export const RelicStore: React.FC<RelicStoreProps> = ({ onClose }) => {
                                     <RelicTooltip 
                                         relic={relic} 
                                         style={{
-                                            width: '100%',
                                             background: 'rgba(255, 255, 255, 0.03)',
                                             border: isOwned ? '2px solid #27ae60' : '2px solid #444',
                                             boxShadow: isOwned ? 'none' : '0 4px 20px rgba(0,0,0,0.4)',
-                                            pointerEvents: 'none'
+                                            pointerEvents: 'none',
+                                            animation: 'none' // Disable fade-in animation in the store
                                         }}
                                     />
                                 </div>

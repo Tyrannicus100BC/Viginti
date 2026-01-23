@@ -32,11 +32,10 @@ export function withPriority<T>(priority: number, handler: T): PrioritizedHook<T
 // Values can be either the function directly (default priority 0) or a PrioritizedHook
 export interface RelicHooks {
     // Value Hooks (Sync, expected to return modified value)
-    getInitialHandsRemaining?: ValueHook<(value: number, context: GameContext) => number>;
+    getDealsPerCasino?: ValueHook<(value: number, context: GameContext) => number>;
     getDealerStopValue?: ValueHook<(value: number, context: GameContext) => number>;
     getCardValue?: ValueHook<(value: number, context: CardValueContext) => number>;
     adjustBlackjackScore?: ValueHook<(value: number, context: { handCards: Card[] }) => number>;
-    onEvaluateHandScore?: ValueHook<(score: HandScore, context: HandContext) => HandScore>;
     onEvaluateHandScore?: ValueHook<(score: HandScore, context: HandContext) => HandScore>;
     
     // Interrupt Hooks (Async, can pause flow)

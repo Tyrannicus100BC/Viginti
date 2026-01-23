@@ -9,19 +9,19 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
     'deft': {
         id: 'deft',
         name: 'Deft',
-        description: '1 extra draw per casino', // Interpreted as handsRemaining starts at 4? Or 1 extra draw action? 
+        description: 'Extra draw per casino', // Interpreted as handsRemaining starts at 4? Or 1 extra draw action? 
         // User request: "1 extra draw per casino". In GameStore, we have `handsRemaining: 3`. 
         // So this means starting with 4 hands? Or drawing an extra card?
         // "Number of Draws a player gets per casino" -> The variable is `handsRemaining`.
         hooks: {
-            getInitialHandsRemaining: (val: number) => val + 1
+            getDealsPerCasino: (val: number) => val + 1
         },
         icon: '/relics/deft.png'
     },
     'royalty': {
         id: 'royalty',
         name: 'Royalty',
-        description: 'Hand Scores with two face cards get +10 chips',
+        description: 'Hands with two face cards earn +10 chips',
         hooks: {
             onEvaluateHandScore: (score: HandScore, context: HandContext) => {
                 const faceCards = context.handCards.filter(isFaceCard);
@@ -91,7 +91,7 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
     'flusher': {
         id: 'flusher',
         name: 'Flusher',
-        description: 'Flushes are worth x1',
+        description: 'Flushes earn an extra x1',
         hooks: {
             onEvaluateHandScore: (score: HandScore) => {
                 const flush = score.criteria.find(c => c.id === 'flush');
@@ -109,7 +109,7 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
     'one_armed': {
         id: 'one_armed',
         name: 'One Armed',
-        description: 'Winning a single hand is worth x2',
+        description: 'Winning a single hand earns an extra x2',
         hooks: {
             onRoundCompletion: async (context: RoundCompletionContext) => {
                 if (context.wins === 1) {
@@ -126,7 +126,7 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
     'high_roller': {
         id: 'high_roller',
         name: 'High Roller',
-        description: 'Winning all three hands is worth +10',
+        description: 'Winning all three hands earns an extra +10',
         hooks: {
              onRoundCompletion: async (context: RoundCompletionContext) => {
                  if (context.wins === 3) {

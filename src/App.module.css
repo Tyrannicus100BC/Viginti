@@ -13,6 +13,7 @@
 .header {
     display: flex;
     justify-content: space-between;
+    align-items: center;
     width: 800px;
     max-width: calc(100% - 40px);
     padding: 16px 32px;
@@ -53,9 +54,9 @@
 .headerCentered {
     transform: translateY(-50%);
     width: 650px;
-    height: 200px;
+    height: 150px;
     /* Explicit height for overlay mode */
-    padding: 40px 60px;
+    padding: 30px 60px;
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
     justify-content: center;
 }
@@ -64,6 +65,7 @@
     display: flex;
     flex-direction: column;
     align-items: center;
+    justify-content: center;
     transition:
         width 0.8s cubic-bezier(0.22, 1, 0.36, 1),
         margin 0.8s cubic-bezier(0.22, 1, 0.36, 1),
@@ -116,6 +118,7 @@
     font-weight: 700;
     color: #ffd700;
     transition: all 0.5s ease;
+    line-height: 1;
 }
 
 .headerCentered .statValue {
@@ -177,7 +180,7 @@
     flex-direction: column;
     align-items: center;
     position: relative;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
 }
 
 .drawAreaContainer {
@@ -230,8 +233,8 @@
 }
 
 .infoTextContainer {
-    margin-top: 15px;
-    min-height: 40px;
+    margin-top: 11px;
+    min-height: 30px;
     /* Fixed height to prevent jumping */
     display: flex;
     align-items: center;
@@ -245,7 +248,7 @@
     justify-content: center;
     width: 100%;
     position: relative;
-    margin-top: 40px;
+    margin-top: 30px;
 }
 
 .playerHandsContainer {
@@ -329,7 +332,7 @@
     /* Very dark, almost black-red */
     color: #c0392b;
     border: 1px solid #3c1010;
-    margin-top: 30px;
+    margin-top: 23px;
     padding: 20px;
     font-size: 1.2rem;
     letter-spacing: 4px;
@@ -363,7 +366,7 @@
     /* Very dark, almost black-yellow */
     color: #f1c40f;
     border: 1px solid #4b3b00;
-    margin-top: 30px;
+    margin-top: 23px;
     padding: 20px;
     font-size: 1.2rem;
     letter-spacing: 4px;
@@ -631,7 +634,7 @@
 .doubleDownActive:hover {
     box-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
     background: rgba(255, 215, 0, 0.05);
-    transform: translateX(50%) scale(1.05);
+    transform: translateX(50%) scale(1.2);
 }
 
 .doubleDownText {
@@ -644,11 +647,19 @@
 }
 
 .doubleDownSelected {
-    background: rgba(255, 215, 0, 0.2);
-    box-shadow: 0 0 30px rgba(255, 215, 0, 0.4);
-    transform: translateX(50%) scale(1.1);
+    background: rgba(255, 215, 0, 0.2) !important;
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.3) !important;
+    transform: translateX(50%) scale(1.322);
     border-color: #ffd700;
     color: #ffd700;
+}
+
+.doubleDownSelected:hover {
+    transform: translateX(50%) scale(1.2);
+}
+
+.doubleDownSelected.doubleDownHoverSuppressed:hover {
+    transform: translateX(50%) scale(1.322);
 }
 
 .totalWinningsLabel {

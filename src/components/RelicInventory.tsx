@@ -23,7 +23,8 @@ export const RelicInventory: React.FC = () => {
             justifyContent: 'center',
             gap: 12,
             zIndex: 2000,
-            pointerEvents: 'none'
+            pointerEvents: 'none',
+            isolation: 'isolate' // Force a new stacking context root
         }}>
             {inventory.map((id, index) => {
                 const config = RELIC_REGISTRY[id];
@@ -40,7 +41,7 @@ export const RelicInventory: React.FC = () => {
                             const rect = e.currentTarget.getBoundingClientRect();
                             setTooltipPos({ 
                                 top: rect.top + rect.height / 2, 
-                                left: rect.left - 12
+                                left: rect.left - 20 - 12 
                             });
                         }}
                         onMouseLeave={() => setHoveredId(null)}
@@ -49,18 +50,20 @@ export const RelicInventory: React.FC = () => {
                             height: 80,
                             borderRadius: '50%',
                             background: isActive ? '#f1c40f' : '#2c3e50',
-                            border: isActive ? '4px solid #f39c12' : '2px solid #34495e',
-                            boxShadow: isActive ? '0 0 20px #f39c12' : '0 4px 6px rgba(0,0,0,0.3)',
+                            border: isActive ? '4px solid #f39c12' : '4px solid rgba(255, 215, 0, 0.6)',
+                            boxShadow: isActive ? '0 0 20px #f39c12' : '0 4px 15px rgba(0, 0, 0, 0.4), inset 0 0 10px rgba(0,0,0,0.5)',
                             transform: isActive ? 'scale(1.2)' : 'scale(1)',
-                            transition: 'all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+                            // Specify transitions explicitly, avoiding 'all'
+                            transition: 'transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), border 0.2s ease',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
                             position: 'relative',
                             cursor: 'help',
-                            // Give hovered item an extreme Z-index to ensure it is above the tooltip
-                            zIndex: isHovered ? 9999 : (isActive ? 100 : 90),
-                            pointerEvents: 'auto'
+                            // Normalize Z-index: Hovered (100) > Tooltip (50) > Items (1)
+                            zIndex: isHovered ? 100 : (isActive ? 10 : 1),
+                            pointerEvents: 'auto',
+                            willChange: 'z-index'
                         }}
                     >
                         <div style={{
@@ -82,7 +85,6 @@ export const RelicInventory: React.FC = () => {
                                         height: '85%', 
                                         objectFit: 'contain',
                                         filter: isActive ? 'brightness(1.2) drop-shadow(0 0 5px rgba(255,255,255,0.5))' : 'none',
-                                        // Ensure the image itself doesn't have any transition that causes dimming
                                         transition: 'none'
                                     }} 
                                  />
@@ -107,12 +109,12 @@ export const RelicInventory: React.FC = () => {
                     relic={RELIC_REGISTRY[hoveredId]}
                     hideIcon={true}
                     style={{
-                        position: 'fixed',
+                        position: 'absolute',
                         top: tooltipPos.top,
                         left: tooltipPos.left,
                         transform: 'translateY(-50%)',
                         pointerEvents: 'none',
-                        zIndex: 5000 // Lower than hovered relic (9999) but higher than base (90)
+                        zIndex: 50 // Between items (1) and hovered-top (100)
                     }}
                 />
             )}

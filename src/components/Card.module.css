@@ -125,7 +125,8 @@
 
 /* Force front face to be hidden during the face-down part of the animation */
 .animDealAndFlip .front,
-.animDealFaceDown .front {
+.animDealFaceDown .front,
+.animDoubleDownAndFlip .front {
     animation: hideFront var(--anim-deal-duration) steps(1, end) both;
     animation-delay: inherit;
 }
@@ -158,6 +159,29 @@
     transform: translateY(0) rotateY(0deg) translateZ(0);
   }
 }
+
+@keyframes doubleDownAndFlip {
+    /* Screen UP is Local X- (because parent is rotate(90deg)) */
+    /* rotateY(180deg) flips the X axis. */
+    /* So if Local X+ was Screen Y+ (Down), after flip Local X+ is Screen Y- (Up). */
+    /* To start at Screen DOWN, we need to move toward Screen Y+. */
+    /* If Local X+ is now UP, we need Local X-. */
+    0% {
+      opacity: 0;
+      transform: translateX(-30px) rotateY(180deg) translateZ(0); 
+    }
+    50% {
+      opacity: 1;
+      transform: translateX(0) rotateY(180deg) translateZ(0);
+    }
+    50.01% {
+      transform: translateX(0) rotateY(180deg) translateZ(0);
+    }
+    100% {
+      opacity: 1;
+      transform: translateX(0) rotateY(0deg) translateZ(0);
+    }
+  }
 
 @keyframes dealFaceDown {
   0% {
@@ -214,6 +238,11 @@
 
 .animEnterDraw {
     animation: flyInFromDraw var(--anim-assign-duration) ease-out both;
+    transition: none !important;
+}
+
+.animDoubleDownAndFlip {
+    animation: doubleDownAndFlip var(--anim-deal-duration) ease-out both;
     transition: none !important;
 }
 

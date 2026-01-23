@@ -33,8 +33,10 @@ export const PlayingCard: React.FC<CardProps> = ({
     // Determine initial animation class synchronously to prevent flicker/paint before animation
     if (origin === 'deck') {
       return card.isFaceUp ? styles.animDealAndFlip : styles.animDealFaceDown;
-    } else if (origin === 'draw_pile' || origin === 'double_down') {
+    } else if (origin === 'draw_pile') {
       return styles.animEnterDraw;
+    } else if (origin === 'double_down') {
+      return styles.animDoubleDownAndFlip;
     }
     return '';
   });

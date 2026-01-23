@@ -17,6 +17,7 @@ interface GameState {
     totalScore: number;
     targetScore: number;
     comps: number;
+    dealsTaken: number;
     handsRemaining: number;
     scoringHandIndex: number;
     isCollectingChips: boolean;
@@ -61,6 +62,7 @@ interface GameState {
 }
 
 const INITIAL_HAND_COUNT = 3;
+const BASE_DEALS_PER_CASINO = 3;
 
 export const useGameStore = create<GameState>((set, get) => ({
     deck: [],
@@ -76,7 +78,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     totalScore: 0,
     targetScore: calculateTargetScore(1),
     comps: 5,
-    handsRemaining: 3,
+    dealsTaken: 0,
+    handsRemaining: BASE_DEALS_PER_CASINO,
     scoringHandIndex: -1,
     isCollectingChips: false,
     runningSummary: null,
@@ -165,7 +168,8 @@ export const useGameStore = create<GameState>((set, get) => ({
             totalScore: 0,
             targetScore: calculateTargetScore(1),
             comps: 5,
-            handsRemaining: 3,
+            dealsTaken: 0,
+            handsRemaining: RelicManager.executeValueHook('getDealsPerCasino', BASE_DEALS_PER_CASINO, { inventory: [] }),
             round: 1,
             discardPile: [],
             isInitialDeal: true,
@@ -175,7 +179,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     },
 
     dealFirstHand: () => {
-        const { deck, round, targetScore, handsRemaining, totalScore } = get();
+        const { deck, round, targetScore, totalScore } = get();
 
         // Use the existing deck (already shuffled in startGame or nextRound)
         // or create a new one if empty (fallback)
@@ -223,7 +227,8 @@ export const useGameStore = create<GameState>((set, get) => ({
             // Ensure stats are preserved/set (should be set by startGame/nextRound already)
             round,
             targetScore,
-            handsRemaining: handsRemaining - 1,
+            dealsTaken: 1,
+            handsRemaining: RelicManager.executeValueHook('getDealsPerCasino', BASE_DEALS_PER_CASINO, { inventory: get().inventory }) - 1,
             totalScore,
             runningSummary: null,
             roundSummary: null
@@ -605,7 +610,6 @@ export const useGameStore = create<GameState>((set, get) => ({
             // Advance to next casino
             const newRound = round + 1;
             const newTotalScore = totalScore - targetScore; // Carry over surplus score
-            const newHandsRemaining = 3; // Reset hands for new casino
 
             // Comps increase logic
             const currentHandsRemaining = currentState.handsRemaining;
@@ -633,7 +637,8 @@ export const useGameStore = create<GameState>((set, get) => ({
                 round: newRound,
                 targetScore: newTargetScore,
                 totalScore: newTotalScore,
-                handsRemaining: RelicManager.executeValueHook('getInitialHandsRemaining', newHandsRemaining, { inventory: get().inventory }),
+                dealsTaken: 0,
+                handsRemaining: RelicManager.executeValueHook('getDealsPerCasino', BASE_DEALS_PER_CASINO, { inventory: get().inventory }),
                 comps: newComps,
                 discardPile: [],
                 dealerMessage: null,
@@ -644,7 +649,9 @@ export const useGameStore = create<GameState>((set, get) => ({
         }
 
         // Decrement deals when dealing a new hand (and not advancing casino)
-        const newHandsRemaining = currentState.handsRemaining - 1;
+        const newDealsTaken = currentState.dealsTaken + 1;
+        const dealsPerCasino = RelicManager.executeValueHook('getDealsPerCasino', BASE_DEALS_PER_CASINO, { inventory: get().inventory });
+        const newHandsRemaining = dealsPerCasino - newDealsTaken;
 
         const additionalDiscard = [
             ...dealer.cards,
@@ -694,6 +701,7 @@ export const useGameStore = create<GameState>((set, get) => ({
             },
             drawnCard: null,
             phase: 'playing',
+            dealsTaken: newDealsTaken,
             handsRemaining: newHandsRemaining,
             discardPile: newDiscardPile,
             isInitialDeal: true,
@@ -753,14 +761,24 @@ export const useGameStore = create<GameState>((set, get) => ({
     },
 
     addRelic: (relicId) => {
-        set(state => ({
-            inventory: [...state.inventory, relicId]
-        }));
+        set(state => {
+            const newInventory = [...state.inventory, relicId];
+            const dealsPerCasino = RelicManager.executeValueHook('getDealsPerCasino', BASE_DEALS_PER_CASINO, { inventory: newInventory });
+            return {
+                inventory: newInventory,
+                handsRemaining: dealsPerCasino - state.dealsTaken
+            };
+        });
     },
 
     removeRelic: (relicId) => {
-         set(state => ({
-            inventory: state.inventory.filter(id => id !== relicId)
-        }));
+         set(state => {
+            const newInventory = state.inventory.filter(id => id !== relicId);
+            const dealsPerCasino = RelicManager.executeValueHook('getDealsPerCasino', BASE_DEALS_PER_CASINO, { inventory: newInventory });
+            return {
+                inventory: newInventory,
+                handsRemaining: dealsPerCasino - state.dealsTaken
+            };
+        });
     }
 }));

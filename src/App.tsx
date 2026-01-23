@@ -79,6 +79,7 @@ export default function App() {
     const [showRelicStore, setShowRelicStore] = useState(false);
     const [overlayComplete, setOverlayComplete] = useState(false);
     const [scoreAnimate, setScoreAnimate] = useState(false);
+    const [doubleDownHoverSuppressed, setDoubleDownHoverSuppressed] = useState(false);
 
     const drawAreaRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -153,7 +154,7 @@ export default function App() {
     }, [totalScore]);
 
     React.useEffect(() => {
-        if (handsRemaining < prevHandsRemaining.current) {
+        if (handsRemaining !== prevHandsRemaining.current) {
             setHandsAnimate(true);
             const timer = setTimeout(() => setHandsAnimate(false), 500);
             prevHandsRemaining.current = handsRemaining;
@@ -450,7 +451,7 @@ export default function App() {
 
                         <div className={styles.infoTextContainer}>
                             {drawnCard ? (
-                                <div className={styles.instructions}>Select a hand for this card</div>
+                                <div className={styles.instructions}>Select hand for this card</div>
                             ) : interactionMode === 'double_down_select' ? (
                                 <div className={styles.instructions} style={{ color: '#ffd700' }}>Select hand to Double Down</div>
                             ) : (
@@ -476,11 +477,21 @@ export default function App() {
                         {/* Double Down Button - Positioned relative to hands container */}
                         {isDrawAreaVisible && (
                             <div
-                                className={`${styles.doubleDownSpot} ${canDoubleDown ? styles.doubleDownActive : ''} ${interactionMode === 'double_down_select' ? styles.doubleDownSelected : ''}`}
+                                className={`${styles.doubleDownSpot} ${canDoubleDown ? styles.doubleDownActive : ''} ${interactionMode === 'double_down_select' ? styles.doubleDownSelected : ''} ${doubleDownHoverSuppressed ? styles.doubleDownHoverSuppressed : ''}`}
                                 onClick={(e) => {
                                     e.stopPropagation();
-                                    if (interactionMode === 'double_down_select') cancelDoubleDown();
-                                    else if (canDoubleDown) startDoubleDown();
+                                    if (interactionMode === 'double_down_select') {
+                                        cancelDoubleDown();
+                                        setDoubleDownHoverSuppressed(false);
+                                    } else if (canDoubleDown) {
+                                        startDoubleDown();
+                                        setDoubleDownHoverSuppressed(true);
+                                    }
+                                }}
+                                onMouseLeave={() => {
+                                    if (interactionMode === 'double_down_select') {
+                                        setDoubleDownHoverSuppressed(false);
+                                    }
                                 }}
                             >
                                 <span className={styles.doubleDownText}>DOUBLE<br />DOWN</span>
