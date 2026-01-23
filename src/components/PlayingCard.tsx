@@ -8,7 +8,7 @@ interface CardProps {
   onClick?: () => void;
   className?: string; // For additional styles if needed
   isDrawn?: boolean;
-  origin?: 'deck' | 'draw_pile' | 'none';
+  origin?: 'deck' | 'draw_pile' | 'double_down' | 'none';
   delay?: number; // seconds
   style?: React.CSSProperties;
 }
@@ -20,10 +20,10 @@ const SUIT_ICONS: Record<string, string> = {
   spades: '♠'
 };
 
-export const PlayingCard: React.FC<CardProps> = ({ 
-  card, 
-  onClick, 
-  className = '', 
+export const PlayingCard: React.FC<CardProps> = ({
+  card,
+  onClick,
+  className = '',
   isDrawn,
   origin = 'none',
   delay = 0,
@@ -32,15 +32,15 @@ export const PlayingCard: React.FC<CardProps> = ({
   const [animClass, setAnimClass] = useState(() => {
     // Determine initial animation class synchronously to prevent flicker/paint before animation
     if (origin === 'deck') {
-        return card.isFaceUp ? styles.animDealAndFlip : styles.animDealFaceDown;
-    } else if (origin === 'draw_pile') {
-        return styles.animEnterDraw;
+      return card.isFaceUp ? styles.animDealAndFlip : styles.animDealFaceDown;
+    } else if (origin === 'draw_pile' || origin === 'double_down') {
+      return styles.animEnterDraw;
     }
     return '';
   });
 
   const handleAnimationEnd = () => {
-      setAnimClass(''); // Clear animation class to allow standard transitions to take over
+    setAnimClass(''); // Clear animation class to allow standard transitions to take over
   };
 
   const isRed = card.suit === 'hearts' || card.suit === 'diamonds';
@@ -51,18 +51,18 @@ export const PlayingCard: React.FC<CardProps> = ({
   // The 'dealAndFlip' keyframe ends at 0deg (face up).
   // The 'dealFaceDown' keyframe ends at 180deg.
   // The static state `!card.isFaceUp` applies `transform: rotateY(180deg)`.
-  
+
   // Logic: 
   // If `animClass` is active, it controls transform.
   // If `animClass` is empty, `isFlipped` class controls transform.
-  
+
   return (
-    <div 
+    <div
       className={`${styles.scene} ${className} ${isDrawn ? styles.drawn : ''}`}
       onClick={onClick}
       style={{ ...style, animationDelay: `${delay}s` }} // Apply delay to container if needed, or pass directly to card
     >
-      <div 
+      <div
         className={`
             ${styles.card} 
             ${!card.isFaceUp ? styles.isFlipped : ''} 
@@ -82,10 +82,10 @@ export const PlayingCard: React.FC<CardProps> = ({
             <div className={styles.smallSuit}>{SUIT_ICONS[card.suit]}</div>
           </div>
         </div>
-        
+
         {/* Back */}
         <div className={`${styles.face} ${styles.back}`}>
-            <div className={styles.pattern}></div>
+          <div className={styles.pattern}></div>
         </div>
       </div>
     </div>

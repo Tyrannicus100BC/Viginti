@@ -1,0 +1,48 @@
+.doubleDownSpot {
+    width: 100px;
+    height: 100px;
+    /* Circle */
+    border: 2px dashed #444;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #444;
+    font-weight: bold;
+    font-size: 0.8rem;
+    transition: all 0.2s ease;
+    background: rgba(255, 255, 255, 0.02);
+    cursor: pointer;
+    margin-left: 20px;
+    /* Spacing from Hit button */
+}
+
+.doubleDownActive {
+    border-color: #ffd700;
+    box-shadow: 0 0 15px rgba(255, 215, 0, 0.1);
+    color: #ffd700;
+}
+
+.doubleDownActive:hover {
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
+    background: rgba(255, 215, 0, 0.05);
+    transform: scale(1.05);
+}
+
+.doubleDownText {
+    font-size: 1.2rem;
+    color: inherit;
+    /* Inherit from parent (gray or yellow) */
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    text-align: center;
+    line-height: 1.1;
+}
+
+.doubleDownSelected {
+    background: rgba(255, 215, 0, 0.2);
+    box-shadow: 0 0 30px rgba(255, 215, 0, 0.4);
+    transform: scale(1.1);
+    border-color: #ffd700;
+    color: #ffd700;
+}

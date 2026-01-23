@@ -53,7 +53,13 @@ export default function App() {
         completeRoundEarly,
         roundSummary,
         showFinalScore,
-        continueFromFinalScore
+        continueFromFinalScore,
+
+        // Double Down Actions
+        startDoubleDown,
+        cancelDoubleDown,
+        confirmDoubleDown,
+        interactionMode
     } = useGameStore();
 
     const [showDeck, setShowDeck] = useState(false);
@@ -173,13 +179,16 @@ export default function App() {
     };
 
     const handleHandClick = (index: number) => {
-        if (drawnCard) {
+        if (interactionMode === 'double_down_select') {
+            confirmDoubleDown(index);
+        } else if (drawnCard) {
             assignCard(index);
         }
     };
 
-    const canDraw = phase === 'playing' && !drawnCard && !dealer.isRevealed && !isInitialDeal;
-    const canHold = phase === 'playing' && !drawnCard && !dealer.isRevealed && !isInitialDeal;
+    const canDraw = phase === 'playing' && !drawnCard && !dealer.isRevealed && !isInitialDeal && interactionMode === 'default';
+    const canDoubleDown = phase === 'playing' && !drawnCard && !dealer.isRevealed && !isInitialDeal; // Can start flow
+    const canHold = phase === 'playing' && !drawnCard && !dealer.isRevealed && !isInitialDeal && interactionMode === 'default';
     const isDrawAreaVisible = phase === 'playing' && !dealer.isRevealed && !isInitialDeal;
 
     const activeCards = [
@@ -342,21 +351,44 @@ export default function App() {
                         </div>
                     )}
                     <div className={styles.drawAreaContainer} ref={drawAreaRef}>
-                        <div className={`${styles.drawnCardSpot} ${!drawnCard && canDraw ? styles.hitSpot : ''} ${!isDrawAreaVisible ? styles.hiddenSpot : ''}`}>
-                            {drawnCard ? (
-                                <PlayingCard
-                                    card={drawnCard}
-                                    isDrawn
-                                    origin={drawnCard.origin}
-                                />
-                            ) : (
-                                canDraw ? <span className={styles.hitText}>HIT</span> : null
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <div
+                                className={`${styles.drawnCardSpot} ${!drawnCard && canDraw ? styles.hitSpot : ''} ${!isDrawAreaVisible ? styles.hiddenSpot : ''}`}
+                                onClick={() => {
+                                    if (canDraw) handleDraw();
+                                }}
+                            >
+                                {drawnCard ? (
+                                    <PlayingCard
+                                        card={drawnCard}
+                                        isDrawn
+                                        origin={drawnCard.origin}
+                                    />
+                                ) : (
+                                    canDraw ? <span className={styles.hitText}>HIT</span> : null
+                                )}
+                            </div>
+
+                            {/* Double Down Button */}
+                            {isDrawAreaVisible && (
+                                <div
+                                    className={`${styles.doubleDownSpot} ${canDoubleDown ? styles.doubleDownActive : ''} ${interactionMode === 'double_down_select' ? styles.doubleDownSelected : ''}`}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (interactionMode === 'double_down_select') cancelDoubleDown();
+                                        else if (canDoubleDown) startDoubleDown();
+                                    }}
+                                >
+                                    <span className={styles.doubleDownText}>DOUBLE</span>
+                                </div>
                             )}
                         </div>
 
                         <div className={styles.infoTextContainer}>
                             {drawnCard ? (
                                 <div className={styles.instructions}>Select a hand for this card</div>
+                            ) : interactionMode === 'double_down_select' ? (
+                                <div className={styles.instructions} style={{ color: '#ffd700' }}>Select hand to Double Down</div>
                             ) : (
                                 canDraw && <div className={styles.clickAnywhere}>Click Anywhere</div>
                             )}
@@ -369,7 +401,7 @@ export default function App() {
                         <Hand
                             key={`${hand.id}-${handsRemaining}`}
                             hand={hand}
-                            canSelect={!!drawnCard && !hand.isBust && hand.blackjackValue !== 21}
+                            canSelect={(!!drawnCard || interactionMode === 'double_down_select') && !hand.isBust && !hand.isHeld && hand.blackjackValue !== 21}
                             onSelect={() => handleHandClick(idx)}
                             baseDelay={idx * 0.5}
                             isScoringFocus={idx === scoringHandIndex}

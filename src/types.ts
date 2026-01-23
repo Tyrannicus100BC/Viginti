@@ -6,7 +6,7 @@ export interface Card {
   suit: Suit;
   rank: Rank;
   isFaceUp?: boolean;
-  origin?: 'deck' | 'draw_pile';
+  origin?: 'deck' | 'draw_pile' | 'double_down';
 }
 
 export interface ScoringMatch {
@@ -48,6 +48,7 @@ export interface PlayerHand {
   finalScore?: HandScore | null;
   blackjackValue: number;
   resultRevealed?: boolean;
+  isDoubled?: boolean;
 }
 
 export interface DealerHand {

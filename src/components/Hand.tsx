@@ -34,7 +34,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
   const [pulseMult, setPulseMult] = useState(false);
   const [isSlidingMult, setIsSlidingMult] = useState(false);
   const [isQuickFading, setIsQuickFading] = useState(false);
-  
+
   // New State for sequential updates
   const [rowValues, setRowValues] = useState<Record<number, { chips: number, mult: number, count: number }>>({});
   const [activeHighlightIds, setActiveHighlightIds] = useState<string[] | null>(null);
@@ -90,7 +90,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
         for (let i = 0; i < criteria.length; i++) {
           if (canceled) return;
           const crit = criteria[i];
-          
+
           // Reveal Row Frame and Label
           setVisibleItems(prev => [...prev, i]);
           setActiveCriteriaIdx(i);
@@ -109,82 +109,82 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
             // SEQUENTIAL MATCH ANIMATION
             let currentRowChips = 0;
             let currentRowMult = 0;
-            
+
             for (let m = 0; m < crit.matches.length; m++) {
-                if (canceled) return;
-                const match = crit.matches[m];
-                
-                // 1. Highlight specific cards
-                setActiveHighlightIds(match.cardIds);
-                
-                // 2. Update Row Values
-                currentRowChips += match.chips;
-                currentRowMult += match.multiplier;
-                
-                setRowValues(prev => ({
-                    ...prev,
-                    [i]: { 
-                        chips: currentRowChips, 
-                        mult: currentRowMult, 
-                        count: m + 1
-                    }
-                }));
-                
-                // Reveal Chips/Mult text if first match
-                if (m === 0) {
-                     setVisibleChips(prev => [...prev, i]);
-                     setVisibleMults(prev => [...prev, i]);
-                }
-                
-                // 3. Add to Main Score
-                if (match.chips > 0) {
-                    runningChips += match.chips;
-                    
-                    // Don't update display score for Win/Viginti (already shown) - though they won't have matches usually
-                    const isOutcome = crit.id === 'win' || crit.id === 'viginti';
-                    if (!isOutcome) {
-                        setDisplayScore(runningChips);
-                        setPulseScore(true);
-                        setTimeout(() => setPulseScore(false), 300);
-                    }
-                }
-                
-                // 4. Wait for user to see
-                await wait(600);
-            }
-          } else {
-             // STANDARD ANIMATION (Win, Viginti, or legacy)
-             // Highlight all involved cards
-             setActiveHighlightIds(crit.cardIds || []);
-             
-             // Update Row Values to full immediately
-             setRowValues(prev => ({
-                    ...prev,
-                    [i]: { 
-                        chips: crit.chips, 
-                        mult: crit.multiplier, 
-                        count: crit.count
-                    }
-             }));
+              if (canceled) return;
+              const match = crit.matches[m];
 
-             // Reveal Chips
-             setVisibleChips(prev => [...prev, i]);
-             setVisibleMults(prev => [...prev, i]);
+              // 1. Highlight specific cards
+              setActiveHighlightIds(match.cardIds);
 
-             // Add chips to running score
-              if (crit.chips > 0) {
-                runningChips += crit.chips;
+              // 2. Update Row Values
+              currentRowChips += match.chips;
+              currentRowMult += match.multiplier;
+
+              setRowValues(prev => ({
+                ...prev,
+                [i]: {
+                  chips: currentRowChips,
+                  mult: currentRowMult,
+                  count: m + 1
+                }
+              }));
+
+              // Reveal Chips/Mult text if first match
+              if (m === 0) {
+                setVisibleChips(prev => [...prev, i]);
+                setVisibleMults(prev => [...prev, i]);
+              }
+
+              // 3. Add to Main Score
+              if (match.chips > 0) {
+                runningChips += match.chips;
+
+                // Don't update display score for Win/Viginti (already shown) - though they won't have matches usually
                 const isOutcome = crit.id === 'win' || crit.id === 'viginti';
                 if (!isOutcome) {
                   setDisplayScore(runningChips);
                   setPulseScore(true);
-                  setTimeout(() => setPulseScore(false), 400);
+                  setTimeout(() => setPulseScore(false), 300);
                 }
               }
-              
-              await wait(500);
+
+              // 4. Wait for user to see
+              await wait(600);
+            }
+          } else {
+            // STANDARD ANIMATION (Win, Viginti, or legacy)
+            // Highlight all involved cards
+            setActiveHighlightIds(crit.cardIds || []);
+
+            // Update Row Values to full immediately
+            setRowValues(prev => ({
+              ...prev,
+              [i]: {
+                chips: crit.chips,
+                mult: crit.multiplier,
+                count: crit.count
+              }
+            }));
+
+            // Reveal Chips
+            setVisibleChips(prev => [...prev, i]);
+            setVisibleMults(prev => [...prev, i]);
+
+            // Add chips to running score
+            if (crit.chips > 0) {
+              runningChips += crit.chips;
+              const isOutcome = crit.id === 'win' || crit.id === 'viginti';
+              if (!isOutcome) {
+                setDisplayScore(runningChips);
+                setPulseScore(true);
+                setTimeout(() => setPulseScore(false), 400);
+              }
+            }
+
+            await wait(500);
           }
-          
+
           await wait(200); // Transition beat
         }
 
@@ -214,7 +214,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
             setDisplayMult(runningMult);
             setPulseMult(true);
             setTimeout(() => setPulseMult(false), 400);
-            
+
             await wait(400);
           }
         }
@@ -267,15 +267,51 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
         <div className={`${styles.cardsContainer} ${showOverlay ? styles.tinted : ''}`}>
           <div className={styles.cards}>
             {hand.cards.map((card, idx) => {
-              const startTx = (1 - hand.id) * 270;
-              const startTy = -200;
+              const startTxBase = (1 - hand.id) * 270;
+
+
               const total = hand.cards.length;
               const center = (total - 1) / 2;
               const rotate = (idx - center) * 5;
               const translateY = Math.abs(idx - center) * 2;
 
+              const isDoubleCard = hand.isDoubled && idx === total - 1;
+
+              // Placement Logic
+              // If Doubled, we want the wrapper to sit exactly where the "previous" card would be (or current slot)
+              // We do NOT modify wrapper rotation/Y for the 90deg turn. We do that internally via inner div.
+
+              let wrapperRotate = rotate;
+              let wrapperTranslateY = translateY;
+
+              if (isDoubleCard && idx > 0) {
+                // Match previous card slot to overlap
+                // Use visual position of card below (idx-1) (which corresponds to center calculated on total, offset by -1)
+                // But 'center' changes as total changes.
+                // If we use 'center' based on 'total', then idx-1 is the card below in the NEW fan.
+                wrapperRotate = ((idx - 1) - center) * 5;
+                wrapperTranslateY = Math.abs((idx - 1) - center) * 2;
+              }
+
+              // Animation Coordinates (Screen Space)
+              const screenDx = isDoubleCard ? (startTxBase + 120) : startTxBase;
+              const screenDy = isDoubleCard ? -400 : -200;
+
+              // Local Animation Coordinates (Correcting for Inner Rotation)
+              // If Doubled, inner div is rotated 90deg clockwise.
+              // Local X = Screen Y
+              // Local Y = -Screen X
+              const animTx = isDoubleCard ? screenDy : screenDx;
+              // Note: screenDx is pos (right). -ScreenX = Left (Local Y Up?).
+              // Wait, rotate 90 deg clockwise: X becomes Y, Y becomes -X.
+              // Start -> End vector.
+              // Screen Vector: (Dx, Dy).
+              // Local Vector: (Dy, -Dx).
+              const animTy = isDoubleCard ? -screenDx : screenDy;
+              const xOffset = 0;
+
               const currentCrit = activeCriteriaIdx !== null ? hand.finalScore?.criteria[activeCriteriaIdx] : null;
-              
+
               // New Highlight Logic: Use activeHighlightIds if present, otherwise fall back to criteria
               let isHighlighted = false;
               if (activeHighlightIds) {
@@ -291,21 +327,43 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
                   key={card.id}
                   className={`${styles.cardWrapper} ${shouldHighlight ? styles.highlighted : ''}`}
                   style={{
-                    transform: `rotate(${rotate}deg) translateY(${translateY}px)`,
+                    transform: `translateX(${xOffset}px) rotate(${wrapperRotate}deg) translateY(${wrapperTranslateY}px)`,
                     transformOrigin: '50% 250%',
-                    '--rotate': `${rotate}deg`,
-                    '--translateY': `${translateY}px`
+                    '--rotate': `${wrapperRotate}deg`,
+                    '--translateY': `${wrapperTranslateY}px`,
+                    zIndex: isDoubleCard ? 100 : idx
                   } as any}
                 >
-                  <PlayingCard
-                    card={card}
-                    origin={card.origin}
-                    delay={card.origin === 'deck' ? baseDelay + (stagger ? idx * 0.5 : 0) : 0}
-                    style={{
-                      '--start-tx': `${startTx}px`,
-                      '--start-ty': `${startTy}px`
-                    } as React.CSSProperties}
-                  />
+                  {isDoubleCard ? (
+                    <div style={{
+                      transform: 'rotate(90deg)',
+                      width: '100%',
+                      height: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}>
+                      <PlayingCard
+                        card={card}
+                        origin={card.origin}
+                        delay={card.origin === 'deck' ? baseDelay + (stagger ? idx * 0.5 : 0) : 0}
+                        style={{
+                          '--start-tx': `${animTx}px`,
+                          '--start-ty': `${animTy}px`
+                        } as React.CSSProperties}
+                      />
+                    </div>
+                  ) : (
+                    <PlayingCard
+                      card={card}
+                      origin={card.origin}
+                      delay={card.origin === 'deck' ? baseDelay + (stagger ? idx * 0.5 : 0) : 0}
+                      style={{
+                        '--start-tx': `${screenDx}px`,
+                        '--start-ty': `${screenDy}px`
+                      } as React.CSSProperties}
+                    />
+                  )}
                 </div>
               );
             })}
@@ -314,8 +372,8 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
           {/* Overlay text on cards */}
           {showOverlay && (
             <div className={`${styles.overlayText} ${(activeCriteriaIdx !== null &&
-                hand.finalScore?.criteria[activeCriteriaIdx].id !== 'win' &&
-                hand.finalScore?.criteria[activeCriteriaIdx].id !== 'viginti') ? styles.faded : ''
+              hand.finalScore?.criteria[activeCriteriaIdx].id !== 'win' &&
+              hand.finalScore?.criteria[activeCriteriaIdx].id !== 'viginti') ? styles.faded : ''
               }`}>
               {hand.isBust && (
                 <div className={styles.overlayItem}>
@@ -349,9 +407,9 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
               <div
                 id={`hand-score-${hand.id}`}
                 className={`${styles.scoreValue} ${pulseScore ? styles.pulse : ''} ${hand.isBust ? styles.isBust :
-                    isViginti && !hand.isBust ? styles.isViginti :
-                      isWin ? styles.isWin :
-                        (!isWin && hand.resultRevealed && !hand.isBust && !isViginti) ? styles.isLoss : ''
+                  isViginti && !hand.isBust ? styles.isViginti :
+                    isWin ? styles.isWin :
+                      (!isWin && hand.resultRevealed && !hand.isBust && !isViginti) ? styles.isLoss : ''
                   }`}>
                 {displayScore}
               </div>

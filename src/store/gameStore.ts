@@ -11,6 +11,7 @@ interface GameState {
     drawnCard: Card | null;
     phase: 'init' | 'entering_casino' | 'playing' | 'scoring' | 'round_over' | 'game_over';
     round: number;
+    interactionMode: 'default' | 'double_down_select';
     totalScore: number;
     targetScore: number;
     comps: number;
@@ -35,6 +36,9 @@ interface GameState {
     startGame: () => void;
     dealFirstHand: () => void;
     drawCard: () => void;
+    startDoubleDown: () => void;
+    cancelDoubleDown: () => void;
+    confirmDoubleDown: (handIndex: number) => void;
     assignCard: (handIndex: number) => void;
     holdReturns: () => Promise<void>; // Async for pacing
     nextRound: (forceContinue?: boolean) => void;
@@ -57,7 +61,9 @@ export const useGameStore = create<GameState>((set, get) => ({
     drawnCard: null,
     dealerMessage: null,
     dealerMessageExiting: false,
+
     phase: 'init',
+    interactionMode: 'default',
     round: 1,
     totalScore: 0,
     targetScore: calculateTargetScore(1),
@@ -132,7 +138,8 @@ export const useGameStore = create<GameState>((set, get) => ({
             handsRemaining: 3,
             round: 1,
             discardPile: [],
-            isInitialDeal: true
+            isInitialDeal: true,
+            interactionMode: 'default'
         });
     },
 
@@ -192,6 +199,9 @@ export const useGameStore = create<GameState>((set, get) => ({
         const { deck, drawnCard, phase } = get();
         if (phase !== 'playing' || drawnCard) return;
 
+        // Cancel double down if active
+        set({ interactionMode: 'default' });
+
         const newDeck = [...deck];
         const card = newDeck.pop();
         if (!card) return;
@@ -201,13 +211,60 @@ export const useGameStore = create<GameState>((set, get) => ({
         set({ deck: newDeck, drawnCard: card });
     },
 
+    startDoubleDown: () => {
+        const { phase, drawnCard } = get();
+        if (phase !== 'playing' || drawnCard) return;
+        set({ interactionMode: 'double_down_select' });
+    },
+
+    cancelDoubleDown: () => {
+        set({ interactionMode: 'default' });
+    },
+
+    confirmDoubleDown: (handIndex) => {
+        const { playerHands, deck, interactionMode } = get();
+        if (interactionMode !== 'double_down_select') return;
+
+        const newDeck = [...deck];
+        const card = newDeck.pop();
+        if (!card) return; // Should handle empty deck?
+
+        card.isFaceUp = true;
+        card.origin = 'double_down';
+        // Logic to mark card as doubled? Hand identifies it via isDoubled flag.
+
+        const newHands = playerHands.map((h, idx) => {
+            if (idx !== handIndex) return h;
+            // Prevent if bust or held? UI should handle validation, but safety check:
+            if (h.isBust || h.isHeld) return h;
+
+            const newCards = [...h.cards, card];
+            const val = getBlackjackScore(newCards);
+
+            return {
+                ...h,
+                cards: newCards,
+                blackjackValue: val,
+                isBust: val > 21,
+                isHeld: true, // Auto stand
+                isDoubled: true
+            };
+        });
+
+        set({
+            playerHands: newHands,
+            deck: newDeck,
+            interactionMode: 'default'
+        });
+    },
+
     assignCard: (handIndex) => {
         const { playerHands, drawnCard } = get();
         if (!drawnCard) return;
 
         const newHands = playerHands.map((h, idx) => {
             if (idx !== handIndex) return h;
-            if (h.isBust) return h;
+            if (h.isBust || h.isHeld) return h;
 
             // Create a new hand object with the new card
             const cardToAdd = { ...drawnCard, origin: 'draw_pile' as const };
@@ -302,6 +359,24 @@ export const useGameStore = create<GameState>((set, get) => ({
 
             if (win) {
                 const score = evaluateHandScore(h.cards, win);
+                if (h.isDoubled) {
+                    // Double Chip and Mult Values
+                    score.totalChips *= 2;
+                    score.totalMultiplier *= 2;
+                    score.finalScore = Math.floor(score.totalChips * score.totalMultiplier);
+
+                    // Add visual criteria
+                    score.criteria.push({
+                        id: 'double_down',
+                        name: 'Double Down',
+                        count: 1,
+                        chips: 0, // Already applied to total
+                        multiplier: 0, // Already applied to total
+                        // We set these to 0 because we manually scaled the totals, 
+                        // but maybe we want to show "+Chips x2" visually?
+                        // For now, let's trust the total update.
+                    });
+                }
                 return { ...h, finalScore: score, resultRevealed: false };
             } else {
                 return { ...h, finalScore: null, resultRevealed: false };
