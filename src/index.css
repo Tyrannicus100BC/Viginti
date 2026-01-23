@@ -75,3 +75,37 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
+
+.close-x-btn {
+  position: absolute !important;
+  top: -15px;
+  right: -15px;
+  width: 36px;
+  height: 36px;
+  background: #e74c3c;
+  color: white;
+  border: 2px solid white !important;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: bold;
+  line-height: 1;
+  transition: all 0.2s ease;
+  z-index: 1000 !important;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+  padding: 0;
+  margin: 0 !important;
+}
+
+.close-x-btn:hover {
+  background: #ff5e4d;
+  transform: scale(1.15);
+  box-shadow: 0 6px 15px rgba(0,0,0,0.6);
+}
+
+.close-x-btn:active {
+  transform: scale(0.95);
+}

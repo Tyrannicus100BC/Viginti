@@ -1,8 +1,10 @@
 import { create } from 'zustand';
-import type { Card, DealerHand, PlayerHand } from '../types';
+import type { Card, DealerHand, PlayerHand, Suit, Rank } from '../types';
 import { createStandardDeck, shuffleDeck } from '../logic/deck';
 import { getBlackjackScore, evaluateHandScore } from '../logic/scoring';
 import { calculateTargetScore } from '../logic/casinoConfig';
+import { RelicManager } from '../logic/relics/manager';
+// import type { RoundSummary } from '../logic/relics/types';
 
 interface GameState {
     deck: Card[];
@@ -22,6 +24,8 @@ interface GameState {
     runningSummary: { chips: number; mult: number } | null;
     roundSummary: { totalChips: number; totalMult: number; finalScore: number } | null;
     discardPile: Card[];
+    inventory: string[];
+    activeRelicId: string | null;
 
     isInitialDeal: boolean;
     isShaking: boolean; // For >300 score celebration
@@ -49,7 +53,11 @@ interface GameState {
     triggerDebugChips: () => void;
     triggerScoringRow: (chips: number, mult: number) => void;
     debugWin: () => Promise<void>;
-    debugDiscard: () => void;
+    debugUndo: () => void;
+    drawSpecificCard: (suit: Suit, rank: Rank) => void;
+    addRelic: (relicId: string) => void;
+    removeRelic: (relicId: string) => void;
+    updateRunningSummary: (chips: number, mult: number) => void;
 }
 
 const INITIAL_HAND_COUNT = 3;
@@ -74,6 +82,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     runningSummary: null,
     roundSummary: null,
     discardPile: [],
+    inventory: [],
+    activeRelicId: null,
     isInitialDeal: true,
     isShaking: false,
     animationSpeed: 1,
@@ -110,6 +120,15 @@ export const useGameStore = create<GameState>((set, get) => ({
         };
     })(),
 
+    updateRunningSummary: (chips, mult) => {
+        set(state => ({
+            runningSummary: state.runningSummary ? {
+                chips: state.runningSummary.chips + chips,
+                mult: state.runningSummary.mult + mult
+            } : { chips, mult }
+        }));
+    },
+    
     triggerScoringRow: (chips, mult) => {
         set(state => {
             const currentChips = state.runningSummary?.chips || 0;
@@ -150,7 +169,8 @@ export const useGameStore = create<GameState>((set, get) => ({
             round: 1,
             discardPile: [],
             isInitialDeal: true,
-            interactionMode: 'default'
+            interactionMode: 'default',
+            inventory: [] // Reset runs clear inventory usually
         });
     },
 
@@ -181,7 +201,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         initialPlayerCard.isFaceUp = true;
         initialPlayerCard.origin = 'deck';
         playerHands[1].cards.push(initialPlayerCard);
-        playerHands[1].blackjackValue = getBlackjackScore(playerHands[1].cards);
+        playerHands[1].blackjackValue = getBlackjackScore(playerHands[1].cards, get().inventory);
 
         const dealerCards = [deckRef.pop()!, deckRef.pop()!];
         dealerCards[0].isFaceUp = false;
@@ -195,7 +215,7 @@ export const useGameStore = create<GameState>((set, get) => ({
             dealer: {
                 cards: dealerCards,
                 isRevealed: false,
-                blackjackValue: getBlackjackScore([dealerCards[1]])
+                blackjackValue: getBlackjackScore([dealerCards[1]], get().inventory)
             },
             drawnCard: null,
             phase: 'playing',
@@ -259,7 +279,7 @@ export const useGameStore = create<GameState>((set, get) => ({
             if (h.isBust || h.isHeld) return h;
 
             const newCards = [...h.cards, card];
-            const val = getBlackjackScore(newCards);
+            const val = getBlackjackScore(newCards, get().inventory);
 
             return {
                 ...h,
@@ -291,7 +311,7 @@ export const useGameStore = create<GameState>((set, get) => ({
             const newCards = [...h.cards, cardToAdd];
 
             // Recalc Blackjack
-            const val = getBlackjackScore(newCards);
+            const val = getBlackjackScore(newCards, get().inventory);
 
             return {
                 ...h,
@@ -337,7 +357,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         
         await wait(600); // Wait for the 0.6s flip transition
         
-        const revealVal = getBlackjackScore(revealedCards);
+        const revealVal = getBlackjackScore(revealedCards, get().inventory);
         set({
             dealer: {
                 ...get().dealer,
@@ -350,7 +370,9 @@ export const useGameStore = create<GameState>((set, get) => ({
         let dVal = revealVal;
 
         // 2. Dealer Draw Loop
-        const dealerStopValue = forceDealerBust ? 22 : 17;
+        const { inventory } = get();
+        const baseStopValue = 17;
+        const dealerStopValue = forceDealerBust ? 22 : RelicManager.executeValueHook('getDealerStopValue', baseStopValue, { inventory });
         while (dVal < dealerStopValue) {
             set({ dealerMessage: "Hit!", dealerMessageExiting: false });
 
@@ -359,7 +381,7 @@ export const useGameStore = create<GameState>((set, get) => ({
             c.isFaceUp = true;
             c.origin = 'deck';
             const nextCards = [...dCards, c];
-            const nextVal = getBlackjackScore(nextCards);
+            const nextVal = getBlackjackScore(nextCards, get().inventory);
 
             // Show card being dealt (face down -> flip) but keep old score
             set({
@@ -397,14 +419,15 @@ export const useGameStore = create<GameState>((set, get) => ({
 
         const scoredHands = playerHands.map((h) => {
             let win = false;
-            if (h.isBust) win = false;
+            if (h.cards.length === 0) win = false;
+            else if (h.isBust) win = false;
             else if (h.blackjackValue === 21) win = true;
             else if (dVal > 21) win = true;
             else if (h.blackjackValue >= dVal) win = true;
             else win = false;
 
             if (win) {
-                const score = evaluateHandScore(h.cards, win, h.isDoubled);
+                const score = evaluateHandScore(h.cards, win, h.isDoubled, get().inventory);
                 return { ...h, finalScore: score, resultRevealed: false };
             } else {
                 return { ...h, finalScore: null, resultRevealed: false };
@@ -412,10 +435,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         });
 
         // Calculate Totals for Aggregation
-        const wins = scoredHands.filter(h => h.finalScore);
-        const totalRoundChips = wins.reduce((acc, h) => acc + (h.finalScore?.totalChips || 0), 0);
-        const totalRoundMult = wins.reduce((acc, h) => acc + (h.finalScore?.totalMultiplier || 0), 0);
-        const finalRoundScore = Math.floor(totalRoundChips * totalRoundMult);
+        // (Aggregation now handled dynamically in onRoundCompletion)
 
         // Reveal Dealer immediately, but keep player results hidden initially
         set({
@@ -464,6 +484,19 @@ export const useGameStore = create<GameState>((set, get) => ({
             // The wait time here should match the total time spent in Hand.tsx's animation loop
             let handDuration = 0; // initial from Hand.tsx
             for (const crit of scoreData.criteria) {
+                // Hook for Sequence Interruption (Relics)
+                await RelicManager.executeInterruptHook('onScoreRow', {
+                     inventory: get().inventory,
+                     criterionId: crit.id as any,
+                     score: scoreData,
+                     highlightRelic: async (relicId: string) => {
+                         console.log('Relic Active:', relicId);
+                         set({ activeRelicId: relicId });
+                         await wait(250);
+                         set({ activeRelicId: null });
+                     }
+                });
+
                 handDuration += 400; // label reveal
                 if (crit.matches && crit.matches.length > 0) {
                     handDuration += crit.matches.length * 600;
@@ -472,7 +505,7 @@ export const useGameStore = create<GameState>((set, get) => ({
                 }
                 handDuration += 200; // transition
             }
-            handDuration += 400; // buffer for mult sum loop 
+            handDuration += 500; // Buffer for mult sum loop 
             
             await wait(handDuration);
 
@@ -480,18 +513,36 @@ export const useGameStore = create<GameState>((set, get) => ({
             await wait(180);
         }
 
-        // 6. Round Aggregation & Transition
-        if (finalRoundScore > 0) {
-            set({
-                roundSummary: {
-                    totalChips: totalRoundChips,
-                    totalMult: totalRoundMult,
-                    finalScore: finalRoundScore
-                }
-            });
-            await get().startChipCollection();
+        // 6. Round Aggregation & Transition via Interrupt Hooks
+        // Allow relics to modify the running totals (which are the source of truth)
+        // Checks wins, losses, vigintis based on the scored hands
+        const finalWins = scoredHands.filter(h => h.finalScore && h.finalScore.totalChips >= 0); 
+        // Note: Using finalScore presence as Win indicator.
+        
+        await RelicManager.executeInterruptHook('onRoundCompletion', {
+            inventory: get().inventory,
+            wins: finalWins.length,
+            losses: scoredHands.length - finalWins.length,
+            vigintis: finalWins.filter(h => h.blackjackValue === 21).length,
+            runningSummary: get().runningSummary || { chips: 0, mult: 0 },
+             modifyRunningSummary: (c: number, m: number) => {
+                  // Additive update
+                  get().updateRunningSummary(c, m);
+             },
+            highlightRelic: async (id: string) => {
+                console.log('Highlighting Relic:', id);
+                set({ activeRelicId: id });
+                await wait(750); // Visual pause for the effect (reduced from 1500)
+                set({ activeRelicId: null });
+            }
+        });
+
+        // Continue to collection if there are any chips to collect
+        const currentSummary = get().runningSummary;
+        if (currentSummary && (currentSummary.chips > 0 || currentSummary.mult > 0)) {
+             await get().startChipCollection();
         } else {
-            get().chipCollectionComplete();
+             get().chipCollectionComplete();
         }
     },
 
@@ -582,7 +633,7 @@ export const useGameStore = create<GameState>((set, get) => ({
                 round: newRound,
                 targetScore: newTargetScore,
                 totalScore: newTotalScore,
-                handsRemaining: newHandsRemaining,
+                handsRemaining: RelicManager.executeValueHook('getInitialHandsRemaining', newHandsRemaining, { inventory: get().inventory }),
                 comps: newComps,
                 discardPile: [],
                 dealerMessage: null,
@@ -625,7 +676,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         initialPlayerCard.isFaceUp = true;
         initialPlayerCard.origin = 'deck';
         newHands[1].cards.push(initialPlayerCard);
-        newHands[1].blackjackValue = getBlackjackScore(newHands[1].cards);
+        newHands[1].blackjackValue = getBlackjackScore(newHands[1].cards, get().inventory);
 
         const dealerCards = [deckRef.pop()!, deckRef.pop()!];
         dealerCards[0].isFaceUp = false;
@@ -639,7 +690,7 @@ export const useGameStore = create<GameState>((set, get) => ({
             dealer: {
                 cards: dealerCards,
                 isRevealed: false,
-                blackjackValue: getBlackjackScore([dealerCards[1]])
+                blackjackValue: getBlackjackScore([dealerCards[1]], get().inventory)
             },
             drawnCard: null,
             phase: 'playing',
@@ -662,19 +713,54 @@ export const useGameStore = create<GameState>((set, get) => ({
         
         // If there's a drawn card, discard it first
         if (drawnCard) {
-            get().debugDiscard();
+            get().debugUndo();
         }
 
         await holdReturns(true);
     },
 
-    debugDiscard: () => {
-        const { phase, drawnCard, discardPile } = get();
+    debugUndo: () => {
+        const { phase, drawnCard, deck } = get();
         if (phase !== 'playing' || !drawnCard) return;
+
+        drawnCard.isFaceUp = false;
+        drawnCard.origin = undefined;
 
         set({
             drawnCard: null,
-            discardPile: [...discardPile, drawnCard]
+            deck: [...deck, drawnCard]
         });
+    },
+
+    drawSpecificCard: (suit, rank) => {
+        const { deck, phase, drawnCard } = get();
+        if (phase !== 'playing' || drawnCard) return;
+
+        const cardIndex = deck.findIndex(c => c.suit === suit && c.rank === rank);
+        if (cardIndex === -1) return;
+
+        const newDeck = [...deck];
+        const [card] = newDeck.splice(cardIndex, 1);
+        
+        card.isFaceUp = true;
+        card.origin = 'deck';
+        
+        set({
+            deck: newDeck,
+            drawnCard: card,
+            interactionMode: 'default'
+        });
+    },
+
+    addRelic: (relicId) => {
+        set(state => ({
+            inventory: [...state.inventory, relicId]
+        }));
+    },
+
+    removeRelic: (relicId) => {
+         set(state => ({
+            inventory: state.inventory.filter(id => id !== relicId)
+        }));
     }
 }));

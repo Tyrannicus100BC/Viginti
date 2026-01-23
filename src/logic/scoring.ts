@@ -28,7 +28,9 @@ export const SCORING_RULES: Record<ScoringCriterionId, ScoringRule> = {
   'flush': { id: 'flush', name: 'Flush', chips: 0, mult: 0.5 },
 };
 
-export function getBlackjackScore(cards: Card[]): number {
+import { RelicManager } from './relics/manager';
+
+export function getBlackjackScore(cards: Card[], inventory: string[] = []): number {
   let score = 0;
   let aces = 0;
 
@@ -43,11 +45,17 @@ export function getBlackjackScore(cards: Card[]): number {
     aces -= 1;
   }
 
+  // Relic: Adjust Blackjack Score (e.g. Joker)
+  score = RelicManager.executeValueHook('adjustBlackjackScore', score, { 
+      inventory, 
+      handCards: cards 
+  });
+
   return score;
 }
 
-export function evaluateHandScore(cards: Card[], isWin: boolean, isDoubled: boolean = false): HandScore {
-  const blackjackScore = getBlackjackScore(cards);
+export function evaluateHandScore(cards: Card[], isWin: boolean, isDoubled: boolean = false, inventory: string[] = []): HandScore {
+  const blackjackScore = getBlackjackScore(cards, inventory);
   const criteria: ScoringDetail[] = [];
 
   // Helper to add criteria
@@ -184,13 +192,20 @@ export function evaluateHandScore(cards: Card[], isWin: boolean, isDoubled: bool
 
   const baseScore = totalChips;
   const finalMult = totalMultiplier;
-  const finalScore = Math.floor(baseScore * finalMult);
-
-  return {
+  const finalScoreVal = Math.floor(baseScore * finalMult);
+  
+  const initialScore: HandScore = {
     criteria,
     totalChips,
     totalMultiplier: finalMult,
-    finalScore,
+    finalScore: finalScoreVal,
     scoringCards: cards
   };
+
+  return RelicManager.executeValueHook('onEvaluateHandScore', initialScore, {
+      inventory,
+      handCards: cards,
+      isWin,
+      isDoubled
+  });
 }

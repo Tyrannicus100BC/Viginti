@@ -24,7 +24,6 @@ export const CasinoListingView: React.FC<CasinoListingViewProps> = ({ currentRou
                             className={`${styles.row} ${round === currentRound ? styles.active : ''}`}
                         >
                             <span className={styles.casinoName}>
-                                {round === currentRound && '➤ '}
                                 Casino {round}
                             </span>
                             <span className={styles.targetScore}>
@@ -32,12 +31,8 @@ export const CasinoListingView: React.FC<CasinoListingViewProps> = ({ currentRou
                             </span>
                         </div>
                     ))}
-                    <div className={styles.row}>
-                        <span className={styles.casinoName}>...</span>
-                    </div>
                 </div>
-                
-                <button className={styles.closeBtn} onClick={onClose}>Close</button>
+                <button className="close-x-btn" onClick={onClose}>×</button>
             </div>
         </div>
     );

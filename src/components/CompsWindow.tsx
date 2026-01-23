@@ -11,11 +11,11 @@ export const CompsWindow: React.FC<CompsWindowProps> = ({ onClose }) => {
             <div className={styles.window} onClick={e => e.stopPropagation()}>
                 <div className={styles.header}>
                     <h2 className={styles.title}>Comps</h2>
-                    <button className={styles.closeButton} onClick={onClose}>×</button>
                 </div>
                 <div className={styles.content}>
                     <p>Comps functionality coming soon!</p>
                 </div>
+                <button className="close-x-btn" onClick={onClose}>×</button>
             </div>
         </div>
     );

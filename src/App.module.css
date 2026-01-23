@@ -43,11 +43,12 @@
 }
 
 .headerSpacer {
-    height: 100px;
+    height: 80px;
     width: 100%;
-    margin-bottom: 30px;
+    margin-bottom: 25px;
     flex-shrink: 0;
 }
+
 
 .headerCentered {
     transform: translateY(-50%);

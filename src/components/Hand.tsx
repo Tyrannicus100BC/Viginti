@@ -20,23 +20,18 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
   const triggerScoringRow = useGameStore(state => state.triggerScoringRow);
   // Determine if we should show overlay (bust or result revealed)
   const isViginti = hand.blackjackValue === 21;
-  const showOverlay = hand.isBust || isViginti || (hand.finalScore !== undefined && hand.resultRevealed);
+  const showOverlay = (hand.isBust || isViginti || (hand.finalScore !== undefined && hand.resultRevealed)) && hand.cards.length > 0;
 
   // Is this a winning hand that needs scoring animation?
   const isWin = !!(hand.finalScore && hand.resultRevealed);
 
   // Animation State
   const [displayScore, setDisplayScore] = useState(hand.blackjackValue);
-  const [displayMult, setDisplayMult] = useState(0);
   const [visibleItems, setVisibleItems] = useState<number[]>([]);
   const [visibleChips, setVisibleChips] = useState<number[]>([]);
   const [visibleMults, setVisibleMults] = useState<number[]>([]);
   const [activeCriteriaIdx, setActiveCriteriaIdx] = useState<number | null>(null);
-  const [showMultContainer, setShowMultContainer] = useState(false);
   const [pulseScore, setPulseScore] = useState(false);
-  const [pulseMult, setPulseMult] = useState(false);
-  const [isSlidingMult, setIsSlidingMult] = useState(false);
-  const [isQuickFading, setIsQuickFading] = useState(false);
   const [isScoreVisible, setIsScoreVisible] = useState(hand.id !== -1);
 
   // New State for sequential updates
@@ -49,19 +44,14 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
   // Reset state when hand ID changes (new hand slot content)
   useEffect(() => {
     setDisplayScore(hand.blackjackValue);
-    setDisplayMult(0);
     setVisibleItems([]);
     setVisibleChips([]);
     setVisibleMults([]);
     setActiveCriteriaIdx(null);
-    setShowMultContainer(false);
     animationRef.current = false;
     setRowValues({});
     setActiveHighlightIds(null);
     setPulseScore(false);
-    setPulseMult(false);
-    setIsSlidingMult(false);
-    setIsQuickFading(false);
     setIsScoreVisible(hand.id !== -1);
   }, [hand.id]);
 
@@ -102,8 +92,6 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
 
         // Track totals locally to avoid stale state in async function
         let runningChips = 0;
-        let runningMult = 0;
-        let multVisible = false;
 
         // PHASE 1: Show +Chips
         for (let i = 0; i < criteria.length; i++) {
@@ -214,37 +202,13 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
         setActiveCriteriaIdx(null);
         setActiveHighlightIds(null);
 
-        // Chips done. Preparing for Mults.
+        // Chips done.
         await wait(200);
-        if (canceled) return;
-
-        // PHASE 2: Show Multipliers (Aggregation)
-        // We already showed individual mults in the rows, now we create the Summed Pill
-        for (let i = 0; i < criteria.length; i++) {
-          if (canceled) return;
-          const crit = criteria[i];
-
-          // Add to total mult
-          if (crit.multiplier > 0) {
-            // Show container if not already visible
-            if (!multVisible) {
-              multVisible = true;
-              setShowMultContainer(true);
-            }
-
-            runningMult += crit.multiplier;
-            setDisplayMult(runningMult);
-            setPulseMult(true);
-            setTimeout(() => setPulseMult(false), 400);
-
-            await wait(400);
-          }
-        }
       };
 
       runAnimation();
 
-      return () => { canceled = true; setIsSlidingMult(false); setIsQuickFading(false); setShowMultContainer(false); setActiveCriteriaIdx(null); setActiveHighlightIds(null); };
+      return () => { canceled = true; setActiveCriteriaIdx(null); setActiveHighlightIds(null); };
     }
 
     // If not winning or not revealed, ensure score matches state
@@ -431,13 +395,6 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
                       (!isWin && hand.resultRevealed && !hand.isBust && !isViginti) ? styles.isLoss : ''
                   }`}>
                 {displayScore}
-              </div>
-
-              {/* Mult on Right Positioned Absolutely */}
-              <div className={`${styles.multContainer} ${showMultContainer ? styles.visible : ''} ${isSlidingMult ? styles.sliding : ''} ${isQuickFading ? styles.quickFade : ''}`}>
-                <span className={`${styles.multValue} ${pulseMult ? styles.pulse : ''}`}>
-                  x{displayMult.toFixed(1)}
-                </span>
               </div>
             </div>
           )}

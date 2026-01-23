@@ -13,6 +13,8 @@ import { CasinoListingView } from './components/CasinoListingView';
 import { EarlyCompletionPopup } from './components/EarlyCompletionPopup';
 
 import { CompsWindow } from './components/CompsWindow';
+import { RelicInventory } from './components/RelicInventory';
+import { RelicStore } from './components/RelicStore';
 import type { PlayerHand } from './types';
 
 // Constants for layout
@@ -65,13 +67,16 @@ export default function App() {
         confirmDoubleDown,
         interactionMode,
         debugWin,
-        debugDiscard
+        debugUndo,
+        drawSpecificCard
     } = useGameStore();
 
     const [showDeck, setShowDeck] = useState(false);
+    const [isSelectingDebugCard, setIsSelectingDebugCard] = useState(false);
     const [showHandRankings, setShowHandRankings] = useState(false);
     const [showCasinoListing, setShowCasinoListing] = useState(false);
     const [showCompsWindow, setShowCompsWindow] = useState(false);
+    const [showRelicStore, setShowRelicStore] = useState(false);
     const [overlayComplete, setOverlayComplete] = useState(false);
     const [scoreAnimate, setScoreAnimate] = useState(false);
 
@@ -285,7 +290,7 @@ export default function App() {
 
     // Click anywhere to hit (draw) or advance to next round
     const handleGlobalClick = (e: React.MouseEvent) => {
-        if (showDeck || showHandRankings || showCasinoListing || showCompsWindow) return;
+        if (showDeck || showHandRankings || showCasinoListing || showCompsWindow || showRelicStore) return;
 
         // Ignore clicks on buttons or interactive elements
         const target = e.target as HTMLElement;
@@ -355,7 +360,6 @@ export default function App() {
             <div className={styles.headerSpacer} />
 
             {/* Remove CasinoIntroOverlay usage */}
-
             {/* Remove CasinoIntroOverlay usage */}
 
             <PhysicsPot
@@ -369,6 +373,8 @@ export default function App() {
                 onItemArrived={() => {}}
                 labelPrefix="$"
             />
+            
+            <RelicInventory />
 
             <PhysicsPot
                 key={`mult-${round}-${handsRemaining}`}
@@ -522,6 +528,14 @@ export default function App() {
                 Casinos
             </button>
 
+            <button 
+                className={styles.casinosBtn} 
+                style={{ top: 94, background: '#e67e22' }} 
+                onClick={() => setShowRelicStore(true)}
+            >
+                Store
+            </button>
+
             {(phase === 'round_over' || phase === 'entering_casino') && (
                 <button className={styles.debugBtn} onClick={triggerDebugChips}>
                     +Chips
@@ -529,14 +543,26 @@ export default function App() {
             )}
 
             {phase === 'playing' && !drawnCard && (
-                <button className={styles.debugBtn} onClick={debugWin}>
-                    Win
-                </button>
+                <>
+                    <button className={styles.debugBtn} onClick={debugWin}>
+                        Win
+                    </button>
+                    <button 
+                        className={styles.debugBtn} 
+                        style={{ top: 94 }} // Positioned below Win (top 20 + 64 height + 10 margin)
+                        onClick={() => {
+                            setShowDeck(true);
+                            setIsSelectingDebugCard(true);
+                        }}
+                    >
+                        Draw
+                    </button>
+                </>
             )}
 
             {phase === 'playing' && drawnCard && (
-                <button className={styles.debugBtn} onClick={debugDiscard}>
-                    Discard
+                <button className={styles.debugBtn} onClick={debugUndo}>
+                    Undo
                 </button>
             )}
 
@@ -544,7 +570,14 @@ export default function App() {
                 <DeckView
                     remainingDeck={deck}
                     activeCards={activeCards}
-                    onClose={() => setShowDeck(false)}
+                    onClose={() => {
+                        setShowDeck(false);
+                        setIsSelectingDebugCard(false);
+                    }}
+                    onSelectCard={isSelectingDebugCard ? (suit, rank) => {
+                        drawSpecificCard(suit, rank);
+                        setIsSelectingDebugCard(false);
+                    } : undefined}
                 />
             )}
 
@@ -565,6 +598,10 @@ export default function App() {
                 <CompsWindow
                     onClose={() => setShowCompsWindow(false)}
                 />
+            )}
+
+            {showRelicStore && (
+                <RelicStore onClose={() => setShowRelicStore(false)} />
             )}
 
             {/* FinalScoreOverlay removed */}
