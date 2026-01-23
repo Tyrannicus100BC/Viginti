@@ -20,7 +20,8 @@ export type ScoringCriterionId =
   | 'viginti'
   | 'pair'
   | 'flush'
-  | 'straight';
+  | 'straight'
+  | 'double_down';
 
 export interface ScoringDetail {
   id: string; // e.g. 'win', 'pair', 'sequence'

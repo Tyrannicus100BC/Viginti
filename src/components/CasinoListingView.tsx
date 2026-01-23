@@ -27,7 +27,9 @@ export const CasinoListingView: React.FC<CasinoListingViewProps> = ({ currentRou
                                 {round === currentRound && '➤ '}
                                 Casino {round}
                             </span>
-                            <span className={styles.targetScore}>{calculateTargetScore(round)}</span>
+                            <span className={styles.targetScore}>
+                                {"$" + calculateTargetScore(round).toLocaleString()}
+                            </span>
                         </div>
                     ))}
                     <div className={styles.row}>

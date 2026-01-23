@@ -1,329 +1,121 @@
-import React, { useEffect, useRef } from 'react';
-import Matter from 'matter-js';
+import React, { useEffect, useState, useRef } from 'react';
 import styles from './PhysicsPot.module.css';
 
 interface PhysicsPotProps {
-  scoreDetails: { handId: number; score: number; sourceId: string } | null;
+  totalValue: number;
+  variant: 'chips' | 'multiplier';
   isCollecting: boolean;
   targetId: string;
   center: { x: number; y: number };
   onCollectionComplete: () => void;
-  onChipArrived?: (value: number) => void;
+  onItemArrived?: (value: number) => void;
+  labelPrefix?: string; // '$' or 'x'
 }
-
-interface ChipData {
-  value: number;
-  color: string;
-  radius: number;
-}
-
-// Side profile dimensions
-const CHIP_WIDTH = 48; // 300% of original 16px roughly? Original was radius 12 (dia 24). 300% dia is 72. 
-// User asked for "chips to be 300% larger" previously. 
-// Let's make them fairly large.
-const CHIP_HEIGHT = 12; 
-
-const CHIP_VALUES: ChipData[] = [
-  { value: 1000, color: '#f1c40f', radius: 32 }, // Gold
-  { value: 500, color: '#9b59b6', radius: 32 },  // Purple
-  { value: 100, color: '#111111', radius: 32 },  // Black
-  { value: 25, color: '#2ecc71', radius: 32 },   // Green
-  { value: 5, color: '#e74c3c', radius: 32 },    // Red
-  { value: 1, color: '#ecf0f1', radius: 32 },    // White
-];
-
-const POT_Y_OFFSET = 30;
 
 export const PhysicsPot: React.FC<PhysicsPotProps> = ({
-  scoreDetails,
+  totalValue,
+  variant,
   isCollecting,
   targetId,
   center,
   onCollectionComplete,
-  onChipArrived
+  onItemArrived,
+  labelPrefix = '$'
 }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const engineRef = useRef<Matter.Engine | null>(null);
-  const renderRef = useRef<Matter.Render | null>(null);
-  const runnerRef = useRef<Matter.Runner | null>(null);
-  const bodiesRef = useRef<Matter.Body[]>([]);
-  const wallsRef = useRef<Matter.Body[]>([]);
-  const [potTotal, setPotTotal] = React.useState(0);
-  const [isPulsing, setIsPulsing] = React.useState(false);
-  
-  // Initialize Engine
+const [isPulsing, setIsPulsing] = useState(false);
+  const prevValueRef = useRef(totalValue);
+
   useEffect(() => {
-    if (!containerRef.current || !canvasRef.current) return;
-    
-    const engine = Matter.Engine.create();
-    engine.gravity.y = 1.3; // Increased gravity
-    engineRef.current = engine;
-
-    const render = Matter.Render.create({
-      canvas: canvasRef.current,
-      engine: engine,
-      options: {
-        width: window.innerWidth,
-        height: window.innerHeight,
-        background: 'transparent',
-        wireframes: false,
-        pixelRatio: window.devicePixelRatio,
+    if (totalValue !== prevValueRef.current) {
+      if (totalValue > prevValueRef.current) {
+        setIsPulsing(true);
+        const timer = setTimeout(() => setIsPulsing(false), 200);
+        prevValueRef.current = totalValue;
+        return () => clearTimeout(timer);
       }
-    });
-    renderRef.current = render;
-
-    // Create walls to contain chips relative to center
-    const cx = center.x;
-    const cy = center.y - POT_Y_OFFSET;
-    const wallOpts = { isStatic: true, render: { visible: false } };
-    
-    // Pot boundaries (invisible box in center) - seal the bucket
-    const floorY = cy; 
-    const floorWidth = 450; 
-    const wallHeight = 800; 
-    
-    const floor = Matter.Bodies.rectangle(cx, floorY + 240, floorWidth, 500, wallOpts);
-    const leftWall = Matter.Bodies.rectangle(cx - (floorWidth/2) - 240, floorY - (wallHeight/2), 500, wallHeight, wallOpts); 
-    const rightWall = Matter.Bodies.rectangle(cx + (floorWidth/2) + 240, floorY - (wallHeight/2), 500, wallHeight, wallOpts); 
-
-    // Additional Funnel Walls
-    const funnelWidth = 320; 
-    const funnelLeft = Matter.Bodies.rectangle(cx - (funnelWidth/2) - 240, floorY - 500, 500, 1000, wallOpts);
-    const funnelRight = Matter.Bodies.rectangle(cx + (funnelWidth/2) + 240, floorY - 500, 500, 1000, wallOpts);
-    
-    wallsRef.current = [floor, leftWall, rightWall, funnelLeft, funnelRight];
-    Matter.World.add(engine.world, wallsRef.current);
-
-    const runner = Matter.Runner.create();
-    runnerRef.current = runner;
-    Matter.Runner.run(runner, engine);
-    Matter.Render.run(render);
-
-    const handleResize = () => {
-      if (canvasRef.current && renderRef.current) {
-        const width = window.innerWidth;
-        const height = window.innerHeight;
-        
-        canvasRef.current.style.width = width + 'px';
-        canvasRef.current.style.height = height + 'px';
-        
-        Matter.Render.setPixelRatio(renderRef.current, window.devicePixelRatio || 1);
-        renderRef.current.options.width = width;
-        renderRef.current.options.height = height;
-        
-        renderRef.current.bounds.max.x = width;
-        renderRef.current.bounds.max.y = height;
-      }
-    };
-    window.addEventListener('resize', handleResize);
-
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      Matter.Render.stop(render);
-      Matter.Runner.stop(runner);
-      if (render.canvas) {
-         // render.canvas.remove(); 
-      }
-    };
-  }, []);
-
-  // Update wall positions when center changes
-  useEffect(() => {
-    if (!wallsRef.current.length) return;
-    
-    const cx = center.x;
-    const cy = center.y - POT_Y_OFFSET;
-    const floorY = cy;
-    const floorWidth = 450;
-    const wallHeight = 800;
-    const funnelWidth = 320;
-
-    const [floor, leftWall, rightWall, funnelLeft, funnelRight] = wallsRef.current;
-    
-    Matter.Body.setPosition(floor, { x: cx, y: floorY + 240 });
-    Matter.Body.setPosition(leftWall, { x: cx - (floorWidth/2) - 240, y: floorY - (wallHeight/2) });
-    Matter.Body.setPosition(rightWall, { x: cx + (floorWidth/2) + 240, y: floorY - (wallHeight/2) });
-    Matter.Body.setPosition(funnelLeft, { x: cx - (funnelWidth/2) - 240, y: floorY - 500 });
-    Matter.Body.setPosition(funnelRight, { x: cx + (funnelWidth/2) + 240, y: floorY - 500 });
-
-    if (renderRef.current && canvasRef.current) {
-        const width = window.innerWidth;
-        const height = window.innerHeight;
-        
-        canvasRef.current.style.width = width + 'px';
-        canvasRef.current.style.height = height + 'px';
-        
-        Matter.Render.setPixelRatio(renderRef.current, window.devicePixelRatio || 1);
-        renderRef.current.options.width = width;
-        renderRef.current.options.height = height;
-        
-        renderRef.current.bounds.max.x = width;
-        renderRef.current.bounds.max.y = height;
+      prevValueRef.current = totalValue;
     }
-  }, [center]);
+  }, [totalValue]);
 
-  // Spawn Chips logic
+  // Collection logic - if the user still wants the number to fly to the HUD
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [opacity, setOpacity] = useState(1);
+  const [scale, setScale] = useState(1);
+  const collectionStartedRef = useRef(false);
+
   useEffect(() => {
-    if (!scoreDetails || !engineRef.current) return;
+    if (isCollecting && !collectionStartedRef.current) {
+      collectionStartedRef.current = true;
+      
+      const targetEl = document.getElementById(targetId);
+      if (!targetEl) {
+        onCollectionComplete();
+        return;
+      }
+      
+      const targetRect = targetEl.getBoundingClientRect();
+      const tx = targetRect.left + targetRect.width / 2;
+      const ty = targetRect.top + targetRect.height / 2;
 
-    const { score } = scoreDetails;
-    
-    // Decompose score into chips
-    let remaining = score;
-    const chipsToSpawn: ChipData[] = [];
-    
-    for (const chipType of CHIP_VALUES) {
-        while (remaining >= chipType.value) {
-            chipsToSpawn.push(chipType);
-            remaining -= chipType.value;
-        }
-    }
+      const dx = tx - center.x;
+      const dy = ty - center.y + 140; // Offset from the pot position
 
-    // Spawn physics bodies
-    chipsToSpawn.forEach((chip, i) => {
-        setTimeout(() => {
-            if (!engineRef.current) return;
-            
-            // Spawn from top center with some random spread
-            const cx = center.x;
-            const startX = cx + (Math.random() - 0.5) * 100; // Random spread +/- 50px
-            const startY = -60; // Just above screen
+      // Simple animation to HUD
+      let startTime: number | null = null;
+      const duration = 600;
 
-            // Rectangular Side Profile
-            const width = CHIP_WIDTH; 
-            const height = CHIP_HEIGHT;
+      const animate = (time: number) => {
+        if (!startTime) startTime = time;
+        const progress = Math.min((time - startTime) / duration, 1);
+        
+        // Easing (easeInQuad)
+        const ease = progress * progress;
 
-            const body = Matter.Bodies.rectangle(startX, startY, width, height, {
-                restitution: 0.5,
-                friction: 0.1,
-                chamfer: { radius: 4 }, // Rounded corners
-                render: {
-                    fillStyle: chip.color,
-                    strokeStyle: '#000',
-                    lineWidth: 2
-                }
-            });
-
-            // Attach Custom Data
-            (body as any).spawnTime = Date.now();
-            (body as any).chipValue = chip.value;
-            (body as any).hasArrived = false;
-
-            // Update Total
-            setPotTotal(prev => prev + chip.value);
-            setIsPulsing(true);
-            setTimeout(() => setIsPulsing(false), 200);
-
-            // Initial random spin or slight horizontal push
-            Matter.Body.setVelocity(body, {
-                x: (Math.random() - 0.5) * 2,
-                y: 5 + Math.random() * 5 // Initial downward velocity
-            });
-            
-            // 30% Check for angular velocity
-            if (Math.random() < 0.3) {
-                 Matter.Body.setAngularVelocity(body, (Math.random() - 0.5) * 0.2);
-            }
-
-            Matter.World.add(engineRef.current.world, body);
-            bodiesRef.current.push(body);
-        }, i * 50); // Stagger spawning
-    });
-
-  }, [scoreDetails]);
-
-  // Collection logic
-  useEffect(() => {
-    if (!isCollecting || !engineRef.current || bodiesRef.current.length === 0) return;
-
-    const targetEl = document.getElementById(targetId);
-    if (!targetEl) return;
-    
-    const targetRect = targetEl.getBoundingClientRect();
-    const tx = targetRect.left + targetRect.width / 2;
-    const ty = targetRect.top + targetRect.height / 2;
-
-    // Disable gravity for collection phase
-    engineRef.current.gravity.y = 0;
-
-    let animFrame: number;
-    const animateCollection = () => {
-        let allArrived = true;
-        const arrivalThreshold = 30;
-        bodiesRef.current.forEach(body => {
-            // Remove per-chip delay: all chips move together when isCollecting is true
-            const isReady = true; 
-
-            if (!isReady) {
-                allArrived = false;
-                return;
-            }
-
-            // Only disable collisions once it starts moving
-            if (!body.isSensor) body.isSensor = true;
-
-            const dx = tx - body.position.x;
-            const dy = ty - body.position.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-
-            if (dist > arrivalThreshold) {
-                allArrived = false;
-                // Lerp towards target
-                 const vx = (dx * 0.1); 
-                 const vy = (dy * 0.1);
-                 
-                Matter.Body.setVelocity(body, { x: vx, y: vy });
-            } else {
-                // Hide body once arrived if not already hidden
-                if (body.render.opacity !== 0) {
-                     body.render.opacity = 0;
-                     // Decrement removed as per user request (show total won this round)
-                     if (!(body as any).hasArrived) {
-                        (body as any).hasArrived = true;
-                        if (onChipArrived) {
-                            onChipArrived((body as any).chipValue);
-                        }
-                     }
-                }
-            }
+        setOffset({
+          x: dx * ease,
+          y: dy * ease
         });
+        setOpacity(1 - progress);
+        setScale(1 - progress * 0.8);
 
-        if (allArrived) {
-            cancelAnimationFrame(animFrame);
-            // Cleanup bodies
-            setTimeout(() => {
-                if (engineRef.current) {
-                    bodiesRef.current.forEach(b => Matter.World.remove(engineRef.current!.world, b));
-                    bodiesRef.current = [];
-                    // Restore gravity for next time
-                    engineRef.current.gravity.y = 1.3;
-                }
-                setPotTotal(0); // Ensure clear
-                onCollectionComplete();
-            }, 100);
+        if (progress < 1) {
+          requestAnimationFrame(animate);
         } else {
-            animFrame = requestAnimationFrame(animateCollection);
+          if (onItemArrived) {
+            onItemArrived(totalValue);
+          }
+          onCollectionComplete();
         }
-    };
+      };
 
-    animFrame = requestAnimationFrame(animateCollection);
+      requestAnimationFrame(animate);
+    }
+  }, [isCollecting, targetId, center, onCollectionComplete, onItemArrived, totalValue]);
 
-    return () => cancelAnimationFrame(animFrame);
-
-  }, [isCollecting, targetId, onCollectionComplete]);
+  if (totalValue === 0 && !isCollecting) return null;
 
   return (
-    <div ref={containerRef} className={styles.container}>
-      <canvas ref={canvasRef} />
-      {potTotal > 0 && (
-          <div 
-            className={`${styles.potTotal} ${isPulsing ? styles.pulse : ''}`}
-            style={{ left: center.x, top: center.y - 80 - POT_Y_OFFSET }}
-          >
-            <div className={styles.potValue}>${potTotal}</div>
-          </div>
-      )}
+    <div 
+      className={styles.container}
+      style={{
+        transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
+        opacity: opacity,
+        transition: isCollecting ? 'none' : 'transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)'
+      }}
+    >
+      <div 
+        className={`${styles.potTotal} ${isPulsing ? styles.pulse : ''}`}
+        style={{ 
+          left: center.x, 
+          top: center.y - 140, 
+          color: variant === 'chips' ? '#44ff44' : '#ffd700' 
+        }}
+      >
+        <div className={styles.potValue}>
+          {labelPrefix === '$' ? `$${totalValue.toLocaleString()}` : `x${totalValue.toFixed(1)}`}
+        </div>
+      </div>
     </div>
   );
 };
+

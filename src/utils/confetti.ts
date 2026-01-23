@@ -6,6 +6,8 @@ export interface ConfettiConfig {
     decay?: number;
     colors?: string[];
     random?: () => number;
+    originX?: number;
+    originY?: number;
 }
 
 export function fireConfetti(canvas: HTMLCanvasElement, config: ConfettiConfig = {}) {
@@ -20,9 +22,9 @@ export function fireConfetti(canvas: HTMLCanvasElement, config: ConfettiConfig =
     const startVelocity = config.startVelocity || 45;
     const decay = config.decay || 0.9;
 
-    // Center of canvas
-    const originX = canvas.width / 2;
-    const originY = canvas.height / 2;
+    // Use provided origin or default to center of canvas
+    const originX = config.originX ?? (canvas.width / 2);
+    const originY = config.originY ?? (canvas.height / 2);
 
     for (let i = 0; i < count; i++) {
         particles.push(new Particle(originX, originY, angle, spread, startVelocity, decay, colors));
@@ -59,6 +61,7 @@ class Particle {
     tilt: number;
     tiltAngleIncrement: number;
     tiltAngle: number;
+    age: number;
 
     constructor(x: number, y: number, angle: number, spread: number, velocity: number, decay: number, colors: string[]) {
         this.x = x;
@@ -66,11 +69,13 @@ class Particle {
         this.life = 1.0;
         this.decay = decay;
         this.color = colors[Math.floor(Math.random() * colors.length)];
-        this.size = Math.random() * 10 + 5;
+        this.size = Math.random() * 8 + 4;
+        this.age = 0;
 
         // Calculate velocity based on angle and spread
         const particleAngle = angle + (Math.random() - 0.5) * spread;
-        const particleVelocity = velocity * (0.5 + Math.random());
+        // Randomized velocity to be 40% - 75% of current velocity
+        const particleVelocity = velocity * (0.4 + Math.random() * 0.35);
 
         this.vx = Math.cos(particleAngle) * particleVelocity;
         this.vy = -Math.sin(particleAngle) * particleVelocity; // Negative Y is up
@@ -83,21 +88,32 @@ class Particle {
     update() {
         this.x += this.vx;
         this.y += this.vy;
-        this.vy += 0.5; // Gravity
-        this.vx *= 0.95; // Air resistance
+        
+        // Gravity and air resistance
+        this.vy += 1.2; // 1.5x gravity
+        this.vx *= 0.98; // Soft air resistance
+        this.vy *= 0.99; // Less resistance on Y for better falls
+        
         this.life *= this.decay;
+        this.age++;
 
         this.tiltAngle += this.tiltAngleIncrement;
-        this.tilt = Math.sin(this.tiltAngle) * 15;
+        this.tilt = Math.sin(this.tiltAngle) * 12;
     }
 
     draw(ctx: CanvasRenderingContext2D) {
+        // Alpha fading logic: 
+        // 1. Quick fade up at the start (first 8 frames)
+        // 2. Slow fade out (managed by life and decay)
+        const fadeIn = Math.min(1, this.age / 8);
+        const alpha = fadeIn * this.life;
+
         ctx.beginPath();
         ctx.lineWidth = this.size / 2;
         ctx.strokeStyle = this.color;
         ctx.moveTo(this.x + this.tilt + this.size / 3, this.y);
         ctx.lineTo(this.x + this.tilt, this.y + this.tilt + this.size / 3);
-        ctx.globalAlpha = this.life;
+        ctx.globalAlpha = alpha;
         ctx.stroke();
         ctx.globalAlpha = 1;
     }

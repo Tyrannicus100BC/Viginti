@@ -207,7 +207,7 @@
     font-weight: bold;
     color: #64b5f6;
     display: flex;
-    gap: 6px;
+    gap: 4px;
 }
 
 .itemName.isViginti {
@@ -216,11 +216,8 @@
 }
 
 .itemCount {
-    background: rgba(255, 255, 255, 0.2);
-    padding: 0 4px;
-    border-radius: 3px;
-    font-size: 0.75em;
-    color: #eee;
+    font-size: 0.9em;
+    color: inherit;
 }
 
 .itemChips {
@@ -229,14 +226,19 @@
     color: #44ff44;
     font-weight: bold;
     margin-right: 8px;
-    opacity: 0;
 }
 
 .itemChips.isViginti {
     color: #ffd700;
 }
 
-.itemChips.visible {
+.itemChips span {
+    display: inline-block;
+    opacity: 0;
+    transform-origin: center;
+}
+
+.itemChips span.visible {
     opacity: 1;
     animation: smallSlam 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
 }
@@ -246,12 +248,16 @@
     text-align: right;
     color: #f1c40f;
     font-weight: bold;
-    opacity: 0;
-    /* Removed default transform/transition for slam replacement */
 }
 
-/* When visible, trigger slam */
-.itemMult.visible {
+/* When visible on span, trigger slam */
+.itemMult span {
+    display: inline-block;
+    opacity: 0;
+    transform-origin: center;
+}
+
+.itemMult span.visible {
     opacity: 1;
     animation: smallSlam 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
 }

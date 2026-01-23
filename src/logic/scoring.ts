@@ -20,11 +20,12 @@ interface ScoringRule {
 }
 
 export const SCORING_RULES: Record<ScoringCriterionId, ScoringRule> = {
-  'win': { id: 'win', name: 'Win', chips: 10, mult: 1.5 },
+  'win': { id: 'win', name: 'Win', chips: 10, mult: 1 },
   'viginti': { id: 'viginti', name: 'Viginti', chips: 50, mult: 0 },
-  'pair': { id: 'pair', name: 'Pair', chips: 10, mult: 0.5 },
-  'straight': { id: 'straight', name: 'Straight', chips: 10, mult: 0.5 },
-  'flush': { id: 'flush', name: 'Flush', chips: 10, mult: 0.5 },
+  'double_down': { id: 'double_down', name: 'Double Down', chips: 0, mult: 2 },
+  'pair': { id: 'pair', name: 'Pair', chips: 0, mult: 0.5 },
+  'straight': { id: 'straight', name: 'Straight', chips: 0, mult: 0.5 },
+  'flush': { id: 'flush', name: 'Flush', chips: 0, mult: 0.5 },
 };
 
 export function getBlackjackScore(cards: Card[]): number {
@@ -45,59 +46,59 @@ export function getBlackjackScore(cards: Card[]): number {
   return score;
 }
 
-export function evaluateHandScore(cards: Card[], isWin: boolean): HandScore {
+export function evaluateHandScore(cards: Card[], isWin: boolean, isDoubled: boolean = false): HandScore {
   const blackjackScore = getBlackjackScore(cards);
   const criteria: ScoringDetail[] = [];
 
   // Helper to add criteria
-  const addCriteria = (id: ScoringCriterionId, matches: ScoringMatch[] = [], overrideChips?: number) => {
+  const addCriteria = (id: ScoringCriterionId, matches: ScoringMatch[] = [], overrideChips?: number, overrideCardIds?: string[]) => {
     const rule = SCORING_RULES[id];
-    const totalCount = matches.length || 1; // Default to 1 for basic types like Win
-    
-    // Calculate totals
-    // For Match-based rules (Pair, Straight, Flush), sum the matches.
-    // For Outcome rules (Win, Viginti), use the rule defaults or override.
-    
-    let totalChips = 0;
-    let totalMult = 0;
 
     if (matches.length > 0) {
-        matches.forEach(m => {
-            totalChips += m.chips;
-            totalMult += m.multiplier;
+      // Create a separate criterion for each match
+      matches.forEach(m => {
+        criteria.push({
+          id: rule.id,
+          name: rule.name,
+          count: 1,
+          chips: m.chips,
+          multiplier: m.multiplier,
+          cardIds: m.cardIds,
+          matches: [m]
         });
+      });
     } else {
-        totalChips = overrideChips !== undefined ? overrideChips : rule.chips;
-        totalMult = rule.mult;
-    }
+      // Default case (Win, Viginti, Double Down) - applies to whole hand or specific cards
+      const totalChips = overrideChips !== undefined ? overrideChips : rule.chips;
+      const totalMult = rule.mult;
+      
+      const cardIds = overrideCardIds || cards.map(c => c.id);
 
-    // Collect all involved card IDs
-    const cardIds = Array.from(new Set(matches.flatMap(m => m.cardIds)));
-    // If no matches (e.g. Win), use all cards
-    if (matches.length === 0) {
-        cards.forEach(c => cardIds.push(c.id));
+      criteria.push({
+        id: rule.id,
+        name: rule.name,
+        count: 1,
+        chips: totalChips,
+        multiplier: totalMult,
+        cardIds,
+        matches: undefined
+      });
     }
-
-    criteria.push({
-      id: rule.id,
-      name: rule.name,
-      count: totalCount,
-      chips: totalChips,
-      multiplier: totalMult,
-      cardIds,
-      matches: matches.length > 0 ? matches : undefined
-    });
   };
 
   // --- 1. OUTCOME ---
   const isViginti = blackjackScore === 21;
   
-  // Note: Win/Viginti do NOT use the pairwise logic, they apply once to the whole hand.
   if (isViginti) {
     addCriteria('viginti');
     addCriteria('win');
   } else if (isWin) {
     addCriteria('win');
+  }
+
+  if (isDoubled) {
+    const ddCard = cards.find(c => c.origin === 'double_down');
+    addCriteria('double_down', [], undefined, ddCard ? [ddCard.id] : undefined);
   }
 
   // --- 2. MATCHING ALGORITHM ---
@@ -131,9 +132,13 @@ export function evaluateHandScore(cards: Card[], isWin: boolean): HandScore {
       
       if (partner) {
         usedAsRight.add(partner.id);
+        
+        // Calculate Chips based on Card Values
+        const chips = RANK_VALUES[leftCard.rank] + RANK_VALUES[partner.rank];
+
         matches.push({
             cardIds: [leftCard.id, partner.id],
-            chips: rule.chips,
+            chips: chips,
             multiplier: rule.mult
         });
       }

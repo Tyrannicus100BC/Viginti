@@ -17,13 +17,10 @@ interface GameState {
     comps: number;
     handsRemaining: number;
     scoringHandIndex: number;
-    // Physics Scoring State
-    scoringDetails: { handId: number; score: number; sourceId: string } | null;
     isCollectingChips: boolean;
     // Aggregated Scoring State
     runningSummary: { chips: number; mult: number } | null;
     roundSummary: { totalChips: number; totalMult: number; finalScore: number } | null;
-    showFinalScore: boolean;
     discardPile: Card[];
 
     isInitialDeal: boolean;
@@ -40,16 +37,19 @@ interface GameState {
     cancelDoubleDown: () => void;
     confirmDoubleDown: (handIndex: number) => void;
     assignCard: (handIndex: number) => void;
-    holdReturns: () => Promise<void>; // Async for pacing
+    holdReturns: (forceDealerBust?: boolean) => Promise<void>; // Async for pacing
     nextRound: (forceContinue?: boolean) => void;
     completeRoundEarly: () => void;
-    continueFromFinalScore: () => void;
+    startChipCollection: () => Promise<void>;
     chipCollectionComplete: () => void;
 
     animationSpeed: number;
     setAnimationSpeed: (speed: number) => void;
     incrementScore: (amount: number) => void;
     triggerDebugChips: () => void;
+    triggerScoringRow: (chips: number, mult: number) => void;
+    debugWin: () => Promise<void>;
+    debugDiscard: () => void;
 }
 
 const INITIAL_HAND_COUNT = 3;
@@ -70,11 +70,9 @@ export const useGameStore = create<GameState>((set, get) => ({
     comps: 5,
     handsRemaining: 3,
     scoringHandIndex: -1,
-    scoringDetails: null,
     isCollectingChips: false,
     runningSummary: null,
     roundSummary: null,
-    showFinalScore: false,
     discardPile: [],
     isInitialDeal: true,
     isShaking: false,
@@ -89,28 +87,41 @@ export const useGameStore = create<GameState>((set, get) => ({
             const { targetScore } = get();
             const scoreToDrop = Math.ceil(targetScore / 3);
 
-            // Clear any existing timer to reset the 1.4s countdown
             if (debugTimer) clearTimeout(debugTimer);
 
             set({
-                isCollectingChips: false, // Ensure we aren't already collecting
-                scoringDetails: {
-                    handId: -99,
-                    score: scoreToDrop,
-                    sourceId: 'debug-button'
+                isCollectingChips: false,
+                runningSummary: {
+                    chips: scoreToDrop,
+                    mult: 2
                 }
             });
 
-            // Clear details after tiny delay so physics triggers but doesn't loop
-            setTimeout(() => set({ scoringDetails: null }), 100);
-
-            // Auto collect after 1.4s
+            // Auto collect after 1s
             debugTimer = setTimeout(() => {
-                set({ isCollectingChips: true });
+                const { runningSummary, incrementScore } = get();
+                if (runningSummary) {
+                    const finalAmount = Math.floor(runningSummary.chips * runningSummary.mult);
+                    incrementScore(finalAmount);
+                }
+                get().chipCollectionComplete();
                 debugTimer = null;
-            }, 1400);
+            }, 1000);
         };
     })(),
+
+    triggerScoringRow: (chips, mult) => {
+        set(state => {
+            const currentChips = state.runningSummary?.chips || 0;
+            const currentMult = state.runningSummary?.mult || 0;
+            return {
+                runningSummary: {
+                    chips: currentChips + chips,
+                    mult: currentMult + mult
+                }
+            };
+        });
+    },
 
     startGame: () => {
         const deck = shuffleDeck(createStandardDeck());
@@ -165,6 +176,13 @@ export const useGameStore = create<GameState>((set, get) => ({
             });
         }
 
+        // Deal one card to the center hand (index 1)
+        const initialPlayerCard = deckRef.pop()!;
+        initialPlayerCard.isFaceUp = true;
+        initialPlayerCard.origin = 'deck';
+        playerHands[1].cards.push(initialPlayerCard);
+        playerHands[1].blackjackValue = getBlackjackScore(playerHands[1].cards);
+
         const dealerCards = [deckRef.pop()!, deckRef.pop()!];
         dealerCards[0].isFaceUp = false;
         dealerCards[0].origin = 'deck';
@@ -186,7 +204,9 @@ export const useGameStore = create<GameState>((set, get) => ({
             round,
             targetScore,
             handsRemaining: handsRemaining - 1,
-            totalScore
+            totalScore,
+            runningSummary: null,
+            roundSummary: null
         });
 
         // After animations complete (Dealer cards only now)
@@ -284,7 +304,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         set({ playerHands: newHands, drawnCard: null });
     },
 
-    holdReturns: async () => {
+    holdReturns: async (forceDealerBust = false) => {
         // Reset speed to normal at start of sequence
         set({ animationSpeed: 1 });
 
@@ -303,46 +323,72 @@ export const useGameStore = create<GameState>((set, get) => ({
         const { dealer, deck } = get();
 
         // 1. Reveal Phase
-        const newDealer = { ...dealer, isRevealed: true };
-        newDealer.cards[0].isFaceUp = true;
-        newDealer.blackjackValue = getBlackjackScore(newDealer.cards);
-        set({ dealer: newDealer });
-        await wait(650);
+        const revealedCards = [...dealer.cards];
+        revealedCards[0] = { ...revealedCards[0], isFaceUp: true };
+        
+        // Update cards but keep old blackjackValue for the flip duration
+        set({ 
+            dealer: { 
+                ...dealer, 
+                isRevealed: true, 
+                cards: revealedCards 
+            } 
+        });
+        
+        await wait(600); // Wait for the 0.6s flip transition
+        
+        const revealVal = getBlackjackScore(revealedCards);
+        set({
+            dealer: {
+                ...get().dealer,
+                blackjackValue: revealVal
+            }
+        });
 
         const dDeck = [...deck];
-        let dCards = [...newDealer.cards];
-        let dVal = newDealer.blackjackValue;
+        let dCards = revealedCards;
+        let dVal = revealVal;
 
         // 2. Dealer Draw Loop
-        while (dVal < 17) {
+        const dealerStopValue = forceDealerBust ? 22 : 17;
+        while (dVal < dealerStopValue) {
             set({ dealerMessage: "Hit!", dealerMessageExiting: false });
 
             const c = dDeck.pop();
             if (!c) break;
             c.isFaceUp = true;
             c.origin = 'deck';
-            dCards = [...dCards, c];
-            dVal = getBlackjackScore(dCards);
+            const nextCards = [...dCards, c];
+            const nextVal = getBlackjackScore(nextCards);
 
+            // Show card being dealt (face down -> flip) but keep old score
             set({
                 deck: dDeck,
-                dealer: { ...dealer, isRevealed: true, cards: dCards, blackjackValue: dVal }
+                dealer: { ...get().dealer, cards: nextCards }
             });
 
-            await wait(550);
+            await wait(500); // Match --anim-deal-duration
+            
+            dCards = nextCards;
+            dVal = nextVal;
+            
+            set({
+                dealer: { ...get().dealer, blackjackValue: dVal }
+            });
+
             set({ dealerMessageExiting: true });
-            await wait(200);
+            await wait(100);
             set({ dealerMessage: null, dealerMessageExiting: false });
         }
 
-        await wait(300);
+        await wait(200);
 
         // 3. Final Result Message
         if (dVal < 21) {
             set({ dealerMessage: "Stand!", dealerMessageExiting: false });
-            await wait(1000);
+            await wait(500);
             set({ dealerMessageExiting: true });
-            await wait(200);
+            await wait(100);
             set({ dealerMessage: null, dealerMessageExiting: false });
         }
 
@@ -358,25 +404,7 @@ export const useGameStore = create<GameState>((set, get) => ({
             else win = false;
 
             if (win) {
-                const score = evaluateHandScore(h.cards, win);
-                if (h.isDoubled) {
-                    // Double Chip and Mult Values
-                    score.totalChips *= 2;
-                    score.totalMultiplier *= 2;
-                    score.finalScore = Math.floor(score.totalChips * score.totalMultiplier);
-
-                    // Add visual criteria
-                    score.criteria.push({
-                        id: 'double_down',
-                        name: 'Double Down',
-                        count: 1,
-                        chips: 0, // Already applied to total
-                        multiplier: 0, // Already applied to total
-                        // We set these to 0 because we manually scaled the totals, 
-                        // but maybe we want to show "+Chips x2" visually?
-                        // For now, let's trust the total update.
-                    });
-                }
+                const score = evaluateHandScore(h.cards, win, h.isDoubled);
                 return { ...h, finalScore: score, resultRevealed: false };
             } else {
                 return { ...h, finalScore: null, resultRevealed: false };
@@ -389,52 +417,64 @@ export const useGameStore = create<GameState>((set, get) => ({
         const totalRoundMult = wins.reduce((acc, h) => acc + (h.finalScore?.totalMultiplier || 0), 0);
         const finalRoundScore = Math.floor(totalRoundChips * totalRoundMult);
 
-        // Reveal Dealer and All Player Outcomes Immediately
-        const revealedHands = scoredHands.map(h => ({ ...h, resultRevealed: true }));
-
+        // Reveal Dealer immediately, but keep player results hidden initially
         set({
             dealer: { ...dealer, isRevealed: true, cards: dCards, blackjackValue: dVal },
             deck: dDeck,
-            playerHands: revealedHands,
+            playerHands: scoredHands,
             phase: 'scoring',
             scoringHandIndex: -1
         });
 
+        // Stagger reveal of player outcomes
+        const currentHands = [...scoredHands];
+        
+        for (let i = 0; i < currentHands.length; i++) {
+            const hand = currentHands[i];
+            const isBustOrViginti = hand.isBust || hand.blackjackValue === 21;
+            
+            // Reveal this hand's result
+            currentHands[i] = { ...hand, resultRevealed: true };
+            set({ playerHands: [...currentHands] });
+
+            // Pause only if we're showing a new label (Win/Loss)
+            if (!isBustOrViginti && i < currentHands.length - 1) {
+                await wait(400);
+            }
+        }
+
         // Allow user to digest outcomes before scoring starts
-        await wait(1500);
+        await wait(400);
 
         set({ runningSummary: { chips: 0, mult: 0 } });
 
         // 5. Animation Sequence (Reveal Chips/Mults per hand)
-        // Use revealedHands to keep consistency
-        let animatingHands = [...revealedHands];
-
-        // Track running totals locally for state updates
-        let currentTotalChips = 0;
-        let currentTotalMult = 0;
+        let animatingHands = [...currentHands];
 
         for (let i = 0; i < animatingHands.length; i++) {
-            if (animatingHands[i].isBust) continue;
+            if (animatingHands[i].isBust || !animatingHands[i].finalScore) continue;
 
             const hand = animatingHands[i];
             const scoreData = hand.finalScore;
+            if (!scoreData) continue;
 
             // Highlight Hand to indicate scoring focus
             set({ scoringHandIndex: i });
 
-            // Increment Running Totals if it's a win
-            if (scoreData) {
-                currentTotalChips += scoreData.totalChips;
-                currentTotalMult += scoreData.totalMultiplier;
-
-                // Update state for UI to show growing score
-                set({ runningSummary: { chips: currentTotalChips, mult: currentTotalMult } });
+            // The wait time here should match the total time spent in Hand.tsx's animation loop
+            let handDuration = 0; // initial from Hand.tsx
+            for (const crit of scoreData.criteria) {
+                handDuration += 400; // label reveal
+                if (crit.matches && crit.matches.length > 0) {
+                    handDuration += crit.matches.length * 600;
+                } else {
+                    handDuration += 500;
+                }
+                handDuration += 200; // transition
             }
-
-            const criteriaCount = scoreData?.criteria?.length || 0;
-            const animationDuration = 500 + (criteriaCount * 1200);
-
-            await wait(animationDuration);
+            handDuration += 400; // buffer for mult sum loop 
+            
+            await wait(handDuration);
 
             set({ scoringHandIndex: -1 });
             await wait(180);
@@ -447,38 +487,27 @@ export const useGameStore = create<GameState>((set, get) => ({
                     totalChips: totalRoundChips,
                     totalMult: totalRoundMult,
                     finalScore: finalRoundScore
-                },
-                showFinalScore: true
+                }
             });
-
-            // Note: We wait for user interaction or auto-timeout in the UI/App.tsx 
-            // to trigger continueFromFinalScore
+            await get().startChipCollection();
         } else {
             get().chipCollectionComplete();
         }
     },
 
-    continueFromFinalScore: async () => {
-        const { roundSummary } = get();
-        set({ showFinalScore: false, roundSummary: null });
+    startChipCollection: async () => {
+        const { runningSummary, incrementScore } = get();
 
-        // Trigger Physics Collection from center
-        const score = roundSummary?.finalScore || 0;
-        set({
-            scoringDetails: {
-                handId: -99, // General aggregation source
-                score: score,
-                sourceId: 'total-score-display'
-            }
-        });
+        // Wait for the center animation to "pop in" before updating the HUD (popIn is 0.5s)
+        await new Promise(resolve => setTimeout(resolve, 600));
 
-        // Wait for spawning
-        await new Promise(resolve => setTimeout(resolve, 200));
-        set({ scoringDetails: null });
-
-        // Wait for physics to settle then Collect
-        await new Promise(resolve => setTimeout(resolve, 1400));
-        set({ isCollectingChips: true });
+        if (runningSummary) {
+            const finalAmount = Math.floor(runningSummary.chips * runningSummary.mult);
+            incrementScore(finalAmount);
+        }
+        // Wait long enough for the player to see the final sums before allowing next round
+        await new Promise(resolve => setTimeout(resolve, 800));
+        get().chipCollectionComplete();
     },
 
     chipCollectionComplete: () => {
@@ -497,10 +526,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         set({
             phase: nextPhase,
             isCollectingChips: false,
-            scoringHandIndex: -1,
-            scoringDetails: null,
-            roundSummary: null,
-            runningSummary: null
+            scoringHandIndex: -1
         });
     },
 
@@ -559,7 +585,9 @@ export const useGameStore = create<GameState>((set, get) => ({
                 handsRemaining: newHandsRemaining,
                 comps: newComps,
                 discardPile: [],
-                dealerMessage: null
+                dealerMessage: null,
+                runningSummary: null,
+                roundSummary: null
             });
             return;
         }
@@ -592,6 +620,13 @@ export const useGameStore = create<GameState>((set, get) => ({
             });
         }
 
+        // Deal one card to the center hand (index 1)
+        const initialPlayerCard = deckRef.pop()!;
+        initialPlayerCard.isFaceUp = true;
+        initialPlayerCard.origin = 'deck';
+        newHands[1].cards.push(initialPlayerCard);
+        newHands[1].blackjackValue = getBlackjackScore(newHands[1].cards);
+
         const dealerCards = [deckRef.pop()!, deckRef.pop()!];
         dealerCards[0].isFaceUp = false;
         dealerCards[0].origin = 'deck';
@@ -610,12 +645,36 @@ export const useGameStore = create<GameState>((set, get) => ({
             phase: 'playing',
             handsRemaining: newHandsRemaining,
             discardPile: newDiscardPile,
-            isInitialDeal: true
+            isInitialDeal: true,
+            runningSummary: null,
+            roundSummary: null
         });
 
         // After animations complete
         setTimeout(() => {
             set({ isInitialDeal: false });
         }, 1500);
+    },
+
+    debugWin: async () => {
+        const { phase, drawnCard, holdReturns } = get();
+        if (phase !== 'playing') return;
+        
+        // If there's a drawn card, discard it first
+        if (drawnCard) {
+            get().debugDiscard();
+        }
+
+        await holdReturns(true);
+    },
+
+    debugDiscard: () => {
+        const { phase, drawnCard, discardPile } = get();
+        if (phase !== 'playing' || !drawnCard) return;
+
+        set({
+            drawnCard: null,
+            discardPile: [...discardPile, drawnCard]
+        });
     }
 }));

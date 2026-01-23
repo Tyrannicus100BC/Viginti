@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import styles from './App.module.css';
 import { useGameStore } from './store/gameStore';
+import { fireConfetti } from './utils/confetti';
 import { PlayingCard } from './components/PlayingCard';
 import { Hand } from './components/Hand';
 import { DeckView } from './components/DeckView';
@@ -12,8 +13,11 @@ import { CasinoListingView } from './components/CasinoListingView';
 import { EarlyCompletionPopup } from './components/EarlyCompletionPopup';
 
 import { CompsWindow } from './components/CompsWindow';
-import { FinalScoreOverlay } from './components/FinalScoreOverlay';
 import type { PlayerHand } from './types';
+
+// Constants for layout
+const CENTER_OFFSET = 270; // Distance of pots from center
+const POT_VERTICAL_OFFSET = 120; // Move pots up from center
 
 export default function App() {
     const {
@@ -25,14 +29,14 @@ export default function App() {
         nextRound,
         scoringHandIndex,
         isInitialDeal,
-        scoringDetails,
         isCollectingChips,
+        runningSummary,
 
         totalScore,
         targetScore,
         comps,
         handsRemaining,
-        runningSummary,
+
         isShaking,
 
         dealerMessage,
@@ -52,14 +56,16 @@ export default function App() {
         triggerDebugChips,
         completeRoundEarly,
         roundSummary,
-        showFinalScore,
-        continueFromFinalScore,
+        // showFinalScore removed
+        // continueFromFinalScore removed
 
         // Double Down Actions
         startDoubleDown,
         cancelDoubleDown,
         confirmDoubleDown,
-        interactionMode
+        interactionMode,
+        debugWin,
+        debugDiscard
     } = useGameStore();
 
     const [showDeck, setShowDeck] = useState(false);
@@ -69,7 +75,8 @@ export default function App() {
     const [overlayComplete, setOverlayComplete] = useState(false);
     const [scoreAnimate, setScoreAnimate] = useState(false);
 
-    const drawAreaRef = React.useRef<HTMLDivElement>(null);
+    const drawAreaRef = useRef<HTMLDivElement>(null);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
     const [drawAreaCenter, setDrawAreaCenter] = useState({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
 
     React.useEffect(() => {
@@ -98,11 +105,47 @@ export default function App() {
 
     const [handsAnimate, setHandsAnimate] = useState(false);
     const prevHandsRemaining = React.useRef(handsRemaining);
+    const prevTotalScore = React.useRef(totalScore);
 
     const [roundAnimate, setRoundAnimate] = useState(false);
     const [targetAnimate, setTargetAnimate] = useState(false);
     const [compsAnimate, setCompsAnimate] = useState(false);
-    const runInitializedRef = React.useRef(false);
+    const runInitializedRef = useRef(false);
+    const confettiFiredRef = useRef(false);
+
+    // Watch for Total Winnings appearance to fire confetti
+    useEffect(() => {
+        if (phase === 'playing') {
+            confettiFiredRef.current = false;
+        }
+
+        if ((phase === 'round_over' || roundSummary) && runningSummary && runningSummary.chips > 0 && !confettiFiredRef.current) {
+            if (canvasRef.current) {
+                confettiFiredRef.current = true;
+                canvasRef.current.width = window.innerWidth;
+                canvasRef.current.height = window.innerHeight;
+
+                fireConfetti(canvasRef.current, {
+                    elementCount: 150,
+                    spread: 130,
+                    startVelocity: 55,
+                    decay: 0.96,
+                    originX: drawAreaCenter.x,
+                    originY: drawAreaCenter.y - 60
+                });
+            }
+        }
+    }, [isCollectingChips, phase, !!runningSummary, !!roundSummary]);
+
+    React.useEffect(() => {
+        if (totalScore > prevTotalScore.current) {
+            setScoreAnimate(true);
+            const timer = setTimeout(() => setScoreAnimate(false), 500);
+            prevTotalScore.current = totalScore;
+            return () => clearTimeout(timer);
+        }
+        prevTotalScore.current = totalScore;
+    }, [totalScore]);
 
     React.useEffect(() => {
         if (handsRemaining < prevHandsRemaining.current) {
@@ -223,7 +266,7 @@ export default function App() {
                     Failed to beat Casino {round}
                 </p>
                 <p style={{ fontSize: '1.2rem', color: '#aaa', marginBottom: 40 }}>
-                    Final Score: {totalScore} / {targetScore}
+                    Final Winnings: ${totalScore.toLocaleString()} / ${targetScore.toLocaleString()}
                 </p>
                 <button className={styles.button} onClick={startGame}>Try Again</button>
             </div>
@@ -285,48 +328,77 @@ export default function App() {
                 </div>
                 <div className={styles.stat}>
                     <span className={styles.statLabel}>Target</span>
-                    <span key={displayTarget} className={`${styles.statValue} ${targetAnimate ? styles.statValueAnimate : ''}`}>{displayTarget}</span>
+                    <span key={displayTarget} className={`${styles.statValue} ${targetAnimate ? styles.statValueAnimate : ''}`}>
+                        {"$" + displayTarget.toLocaleString()}
+                    </span>
                 </div>
                 <div className={`${styles.stat} ${isOverlayMode ? styles.statHidden : ''}`}>
-                    <span className={styles.statLabel}>Score</span>
+                    <span className={styles.statLabel}>Winnings</span>
                     <span
                         id="total-score-display"
                         key={totalScore}
                         className={`${styles.statValue} ${scoreAnimate ? styles.statValueAnimate : ''}`}
                     >
-                        {totalScore}
+                        {"$" + totalScore.toLocaleString()}
                     </span>
                 </div>
                 <div className={`${styles.stat} ${isOverlayMode ? styles.statHidden : ''}`}>
                     <span className={styles.statLabel}>Deals</span>
                     <span key={handsRemaining} className={`${styles.statValue} ${handsAnimate ? styles.statValueAnimate : ''}`}>{handsRemaining}</span>
                 </div>
-                <button
-                    className={`${styles.stat} ${!isOverlayMode ? styles.compsButton : ''}`}
-                    onClick={(e) => { e.stopPropagation(); setShowCompsWindow(true); }}
-                    style={isOverlayMode ? { background: 'transparent', border: 'none', padding: 0, outline: 'none' } : {}}
-                >
-                    <span className={styles.statLabel} style={!isOverlayMode ? { color: '#2ecc71', fontWeight: 'bold' } : {}}>Comps</span>
+                <div className={styles.stat}>
+                    <span className={styles.statLabel}>Comps</span>
                     <span key={displayComps} className={`${styles.statValue} ${compsAnimate ? styles.statValueAnimate : ''}`}>{displayComps}</span>
-                </button>
+                </div>
             </header>
 
             <div className={styles.headerSpacer} />
 
             {/* Remove CasinoIntroOverlay usage */}
 
+            {/* Remove CasinoIntroOverlay usage */}
+
             <PhysicsPot
-                scoreDetails={scoringDetails}
+                key={`chips-${round}-${handsRemaining}`}
+                totalValue={runningSummary?.chips ?? 0}
+                variant="chips"
                 isCollecting={isCollectingChips}
                 targetId="total-score-display"
-                center={drawAreaCenter}
-                onCollectionComplete={chipCollectionComplete}
-                onChipArrived={(val) => {
-                    incrementScore(val);
-                    setScoreAnimate(true);
-                    setTimeout(() => setScoreAnimate(false), 200);
-                }}
+                center={{ x: drawAreaCenter.x - CENTER_OFFSET, y: drawAreaCenter.y - POT_VERTICAL_OFFSET }}
+                onCollectionComplete={() => {}}
+                onItemArrived={() => {}}
+                labelPrefix="$"
             />
+
+            <PhysicsPot
+                key={`mult-${round}-${handsRemaining}`}
+                totalValue={runningSummary?.mult ?? 0}
+                variant="multiplier"
+                isCollecting={isCollectingChips}
+                targetId="total-score-display"
+                center={{ x: drawAreaCenter.x + CENTER_OFFSET, y: drawAreaCenter.y - POT_VERTICAL_OFFSET }}
+                onCollectionComplete={() => {}}
+                onItemArrived={() => {}}
+                labelPrefix="x"
+            />
+
+            {/* Total Winnings Label (Center) - Only visible when we have a full summary */}
+            {((phase === 'scoring' && (isCollectingChips || roundSummary)) || phase === 'round_over') && runningSummary && runningSummary.chips > 0 && (
+                 <div 
+                    className={styles.totalWinningsLabel}
+                    style={{ 
+                        left: drawAreaCenter.x, 
+                        top: drawAreaCenter.y - 80
+                    }}
+                 >
+                    <div className={styles.winningsValue}>
+                        ${Math.floor(runningSummary.chips * runningSummary.mult).toLocaleString()}
+                    </div>
+                    <div className={styles.winningsTitle}>TOTAL</div>
+                 </div>
+            )}
+
+            <canvas ref={canvasRef} className={styles.confettiCanvas} />
 
             <div className={styles.board}>
                 <div className={styles.dealerZone}>
@@ -335,7 +407,7 @@ export default function App() {
                         <Hand
                             key={`dealer-${handsRemaining}`}
                             hand={dealerHandProps}
-                            baseDelay={dealer.isRevealed ? 0 : (playerHands.length * 0.5)}
+                            baseDelay={dealer.isRevealed ? 0 : 0.6}
                             stagger={!dealer.isRevealed}
                         />
 
@@ -368,20 +440,6 @@ export default function App() {
                                     canDraw ? <span className={styles.hitText}>HIT</span> : null
                                 )}
                             </div>
-
-                            {/* Double Down Button */}
-                            {isDrawAreaVisible && (
-                                <div
-                                    className={`${styles.doubleDownSpot} ${canDoubleDown ? styles.doubleDownActive : ''} ${interactionMode === 'double_down_select' ? styles.doubleDownSelected : ''}`}
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (interactionMode === 'double_down_select') cancelDoubleDown();
-                                        else if (canDoubleDown) startDoubleDown();
-                                    }}
-                                >
-                                    <span className={styles.doubleDownText}>DOUBLE</span>
-                                </div>
-                            )}
                         </div>
 
                         <div className={styles.infoTextContainer}>
@@ -397,22 +455,38 @@ export default function App() {
                 </div>
 
                 <div className={styles.playerZone}>
-                    {playerHands.map((hand, idx) => (
-                        <Hand
-                            key={`${hand.id}-${handsRemaining}`}
-                            hand={hand}
-                            canSelect={(!!drawnCard || interactionMode === 'double_down_select') && !hand.isBust && !hand.isHeld && hand.blackjackValue !== 21}
-                            onSelect={() => handleHandClick(idx)}
-                            baseDelay={idx * 0.5}
-                            isScoringFocus={idx === scoringHandIndex}
-                        />
-                    ))}
+                    <div className={styles.playerHandsContainer}>
+                        {playerHands.map((hand, idx) => (
+                            <Hand
+                                key={`${hand.id}-${handsRemaining}`}
+                                hand={hand}
+                                canSelect={(!!drawnCard || interactionMode === 'double_down_select') && !hand.isBust && !hand.isHeld && hand.blackjackValue !== 21}
+                                onSelect={() => handleHandClick(idx)}
+                                baseDelay={idx === 1 ? 0 : 0.6}
+                                isScoringFocus={idx === scoringHandIndex}
+                            />
+                        ))}
+
+                        {/* Double Down Button - Positioned relative to hands container */}
+                        {isDrawAreaVisible && (
+                            <div
+                                className={`${styles.doubleDownSpot} ${canDoubleDown ? styles.doubleDownActive : ''} ${interactionMode === 'double_down_select' ? styles.doubleDownSelected : ''}`}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (interactionMode === 'double_down_select') cancelDoubleDown();
+                                    else if (canDoubleDown) startDoubleDown();
+                                }}
+                            >
+                                <span className={styles.doubleDownText}>DOUBLE<br />DOWN</span>
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 {phase === 'playing' && (
                     <button
                         className={styles.standButton}
-                        onClick={holdReturns}
+                        onClick={() => holdReturns(false)}
                         disabled={!canHold}
                     >
                         Stand
@@ -454,6 +528,18 @@ export default function App() {
                 </button>
             )}
 
+            {phase === 'playing' && !drawnCard && (
+                <button className={styles.debugBtn} onClick={debugWin}>
+                    Win
+                </button>
+            )}
+
+            {phase === 'playing' && drawnCard && (
+                <button className={styles.debugBtn} onClick={debugDiscard}>
+                    Discard
+                </button>
+            )}
+
             {showDeck && (
                 <DeckView
                     remainingDeck={deck}
@@ -481,14 +567,7 @@ export default function App() {
                 />
             )}
 
-            {showFinalScore && roundSummary && (
-                <FinalScoreOverlay
-                    chips={roundSummary.totalChips}
-                    mult={roundSummary.totalMult}
-                    totalScore={roundSummary.finalScore}
-                    onContinue={continueFromFinalScore}
-                />
-            )}
+            {/* FinalScoreOverlay removed */}
 
         </div>
     );

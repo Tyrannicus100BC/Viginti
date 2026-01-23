@@ -23,7 +23,7 @@ export const FinalScoreOverlay: React.FC<FinalScoreOverlayProps> = ({ chips, mul
                 elementCount: 150,
                 spread: 120,
                 startVelocity: 60,
-                decay: 0.92
+                decay: 0.96
             });
         }
 
