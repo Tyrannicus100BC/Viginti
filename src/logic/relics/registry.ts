@@ -1,5 +1,5 @@
 
-import type { RelicConfig, RoundCompletionContext, HandCompletionContext, ScoreRowContext, HandContext } from './types';
+import type { RelicConfig, RoundCompletionContext, HandCompletionContext, ScoreRowContext, HandContext, GameContext } from './types';
 import type { Card, HandScore } from '../../types';
 
 // Helper to check for face cards (J, Q, K)
@@ -22,8 +22,9 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
         name: 'Deft',
         category: 'JMarr',
         description: 'Extra draw per Casino',
+        properties: { extra_draws: 1 },
         hooks: {
-            getDealsPerCasino: (val: number) => val + 1
+            getDealsPerCasino: (val: number, context: GameContext, relicState: any) => val + relicState.extra_draws
         },
         icon: '/relics/deft.png' 
     },
@@ -31,8 +32,8 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
         id: 'royalty',
         name: 'Royalty',
         category: 'JMarr',
-        properties: { amount: 10 },
         description: 'Hands with two [Face] cards earn $${amount}',
+        properties: { amount: 10 },
         hooks: {
             onHandCompletion: async (context: HandCompletionContext, relicState: any) => {
                 const faceCards = context.handCards.filter(isFaceCard);
@@ -72,9 +73,10 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
         id: 'idiot',
         name: 'Idiot',
         category: 'JMarr',
-        description: 'Dealer hits on 16', 
+        description: 'Dealer hits on ${stop_value}', 
+        properties: { stop_value: 16 }, 
         hooks: {
-            getDealerStopValue: () => 16
+            getDealerStopValue: (val: number, context: GameContext, relicState: any) => relicState.stop_value
         },
         icon: '/relics/idiot.png'
     },
@@ -82,15 +84,16 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
         id: 'flusher',
         name: 'Flusher',
         category: 'JMarr',
-        description: '[Flushes] earn an extra x1',
+        description: '[Flushes] earn an extra x${bonus_mult}',
+        properties: { bonus_mult: 1 },
         hooks: {
-            onEvaluateHandScore: (score: HandScore) => {
+            onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => {
                 let hasFlush = false;
                 const updatedCriteria = score.criteria.map(c => {
                     if (c.id === 'flush') {
                         hasFlush = true;
-                        const newMult = c.multiplier + 1;
-                        const updatedMatches = c.matches?.map(m => ({ ...m, multiplier: m.multiplier + 1 }));
+                        const newMult = c.multiplier + relicState.bonus_mult;
+                        const updatedMatches = c.matches?.map(m => ({ ...m, multiplier: m.multiplier + relicState.bonus_mult }));
                         return { ...c, multiplier: newMult, matches: updatedMatches };
                     }
                     return c;
@@ -115,13 +118,21 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
         id: 'one_armed',
         name: 'One Armed',
         category: 'JMarr',
-        description: 'Winning a single hand earns x2',
+        description: 'Winning a single hand earns x${factor}',
+        properties: { factor: 2 },
         hooks: {
-            onRoundCompletion: async (context: RoundCompletionContext) => {
+            onRoundCompletion: async (context: RoundCompletionContext, relicState: any) => {
                 if (context.wins === 1) {
                     const currentMult = context.runningSummary.mult;
+                    // Factor 2 means double. Add currentMult * (factor-1).
+                    // If currentMult is 0, we can't double 0 effectively in additive system, 
+                    // but original logic was `currentMult > 0 ? currentMult : 1`.
+                    // This implies if mult is 0, become 1. (Add 1).
+                    // If mult is 5, become 10. (Add 5).
+                    const valToAdd = currentMult > 0 ? currentMult * (relicState.factor - 1) : 1;
+                    
                     await context.highlightRelic('one_armed', {
-                        trigger: () => context.modifyRunningSummary(0, currentMult > 0 ? currentMult : 1)
+                        trigger: () => context.modifyRunningSummary(0, valToAdd)
                     });
                 }
             }
@@ -132,8 +143,8 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
         id: 'high_roller',
         name: 'High Roller',
         category: 'JMarr',
-        properties: { amount: 10 },
         description: 'Winning all three hands earns $${amount}',
+        properties: { amount: 10 },
         hooks: {
              onRoundCompletion: async (context: RoundCompletionContext, relicState: any) => {
                  if (context.wins === 3) {
@@ -152,14 +163,15 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
         id: 'lucky_coin',
         name: 'Lucky Coin',
         category: 'Face',
-        description: 'Having a [Pair] earns an extra $50',
+        description: 'Having a [Pair] earns an extra $${bonus_chips}',
+        properties: { bonus_chips: 50 },
         hooks: {
-            onEvaluateHandScore: (score: HandScore) => {
+            onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => {
                 let changed = false;
                 const updatedCriteria = score.criteria.map(c => {
                     if (c.id === 'pair') {
                         changed = true;
-                        return { ...c, chips: c.chips + 50 };
+                        return { ...c, chips: c.chips + relicState.bonus_chips };
                     }
                     return c;
                 });
@@ -175,14 +187,15 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
         id: 'rabbit_foot',
         name: 'Rabbit Foot',
         category: 'Face',
-        description: 'Having a [Pair] earns an extra x8',
+        description: 'Having a [Pair] earns an extra x${bonus_mult}',
+        properties: { bonus_mult: 8 },
         hooks: {
-            onEvaluateHandScore: (score: HandScore) => {
+            onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => {
                 let changed = false;
                 const updatedCriteria = score.criteria.map(c => {
                     if (c.id === 'pair') {
                         changed = true;
-                        return { ...c, multiplier: c.multiplier + 8 };
+                        return { ...c, multiplier: c.multiplier + relicState.bonus_mult };
                     }
                     return c;
                 });
@@ -198,20 +211,19 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
         id: 'bent_clip',
         name: 'Bent Clip',
         category: 'Face',
-        description: 'Hands with [Three of a Kind] earn x3',
+        description: 'Hands with [Three of a Kind] earn x${bonus_mult}',
+        properties: { bonus_mult: 3 },
         hooks: {
-            onEvaluateHandScore: (score: HandScore, context: HandContext) => {
+            onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => {
                 const counts = getRankCounts(context.handCards);
                 const hasThree = Object.values(counts).some(c => c >= 3);
                 if (hasThree) {
-                    // Add via a new criteria for visibility or modify total
-                    // Since 3-of-a-kind isn't native, we append a custom criteria
                     const newCriteria = [...score.criteria, {
                         id: 'three_kind' as any,
                         name: 'Three of a Kind',
                         count: 1,
                         chips: 0,
-                        multiplier: 3,
+                        multiplier: relicState.bonus_mult,
                         cardIds: []
                     }];
                     const totalChips = newCriteria.reduce((s, c) => s + c.chips, 0);
@@ -227,14 +239,15 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
         id: 'horseshoe',
         name: 'Horseshoe',
         category: 'Straight',
-        description: 'Having a [Straight] earns an extra x12',
+        description: 'Having a [Straight] earns an extra x${bonus_mult}',
+        properties: { bonus_mult: 12 },
         hooks: {
-            onEvaluateHandScore: (score: HandScore) => {
+            onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => {
                 let changed = false;
                 const updatedCriteria = score.criteria.map(c => {
                     if (c.id === 'straight') {
                         changed = true;
-                        return { ...c, multiplier: c.multiplier + 12 };
+                        return { ...c, multiplier: c.multiplier + relicState.bonus_mult };
                     }
                     return c;
                 });
@@ -250,14 +263,15 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
         id: 'red_string',
         name: 'Red String',
         category: 'Straight',
-        description: 'Having a [Straight] earns an extra $200',
+        description: 'Having a [Straight] earns an extra $${bonus_chips}',
+        properties: { bonus_chips: 200 },
         hooks: {
-            onEvaluateHandScore: (score: HandScore) => {
+            onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => {
                 let changed = false;
                 const updatedCriteria = score.criteria.map(c => {
                     if (c.id === 'straight') {
                         changed = true;
-                        return { ...c, chips: c.chips + 200 };
+                        return { ...c, chips: c.chips + relicState.bonus_chips };
                     }
                     return c;
                 });
@@ -273,14 +287,15 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
         id: 'jade_charm',
         name: 'Jade Charm',
         category: 'Straight',
-        description: '[Straights] earn an extra x3',
+        description: '[Straights] earn an extra x${bonus_mult}',
+        properties: { bonus_mult: 3 },
         hooks: {
-            onEvaluateHandScore: (score: HandScore) => {
+            onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => {
                 let changed = false;
                 const updatedCriteria = score.criteria.map(c => {
                     if (c.id === 'straight') {
                         changed = true;
-                        return { ...c, multiplier: c.multiplier + 3 };
+                        return { ...c, multiplier: c.multiplier + relicState.bonus_mult };
                     }
                     return c;
                 });
@@ -296,14 +311,15 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
         id: 'wishbone',
         name: 'Wishbone',
         category: 'Flush',
-        description: 'Having a [Flush] earns an extra x10',
+        description: 'Having a [Flush] earns an extra x${bonus_mult}',
+        properties: { bonus_mult: 10 },
         hooks: {
-            onEvaluateHandScore: (score: HandScore) => {
+            onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => {
                 let changed = false;
                 const updatedCriteria = score.criteria.map(c => {
                     if (c.id === 'flush') {
                         changed = true;
-                        return { ...c, multiplier: c.multiplier + 10 };
+                        return { ...c, multiplier: c.multiplier + relicState.bonus_mult };
                     }
                     return c;
                 });
@@ -319,14 +335,15 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
         id: 'ladybug',
         name: 'Ladybug',
         category: 'Flush',
-        description: 'Having a [Flush] earns an extra $250',
+        description: 'Having a [Flush] earns an extra $${bonus_chips}',
+        properties: { bonus_chips: 250 },
         hooks: {
-            onEvaluateHandScore: (score: HandScore) => {
+            onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => {
                 let changed = false;
                 const updatedCriteria = score.criteria.map(c => {
                     if (c.id === 'flush') {
                         changed = true;
-                        return { ...c, chips: c.chips + 250 };
+                        return { ...c, chips: c.chips + relicState.bonus_chips };
                     }
                     return c;
                 });
@@ -342,14 +359,15 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
         id: 'dice_pair',
         name: 'Dice Pair',
         category: 'Flush',
-        description: '[Flushes] earn an extra x2',
+        description: '[Flushes] earn an extra x${bonus_mult}',
+        properties: { bonus_mult: 2 },
         hooks: {
-            onEvaluateHandScore: (score: HandScore) => {
+            onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => {
                 let changed = false;
                 const updatedCriteria = score.criteria.map(c => {
                     if (c.id === 'flush') {
                         changed = true;
-                        return { ...c, multiplier: c.multiplier + 2 };
+                        return { ...c, multiplier: c.multiplier + relicState.bonus_mult };
                     }
                     return c;
                 });
@@ -365,9 +383,10 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
         id: 'old_receipt',
         name: 'Old Receipt',
         category: 'Suite',
-        description: '[Diamonds] earn an extra x3',
+        description: '[Diamonds] earn an extra x${bonus_mult}',
+        properties: { bonus_mult: 3 },
         hooks: {
-            onEvaluateHandScore: (score: HandScore, context: HandContext) => {
+            onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => {
                 const count = context.handCards.filter(c => c.suit === 'diamonds').length;
                 if (count > 0) {
                     const newCriteria = [...score.criteria, {
@@ -375,7 +394,7 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
                         name: 'Old Receipt',
                         count: count,
                         chips: 0,
-                        multiplier: count * 3,
+                        multiplier: count * relicState.bonus_mult,
                         cardIds: []
                     }];
                     const totalChips = newCriteria.reduce((s, c) => s + c.chips, 0);
@@ -391,9 +410,10 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
         id: 'lucky_rock',
         name: 'Lucky Rock',
         category: 'Suite',
-        description: '[Hearts] earn an extra x3',
+        description: '[Hearts] earn an extra x${bonus_mult}',
+        properties: { bonus_mult: 3 },
         hooks: {
-            onEvaluateHandScore: (score: HandScore, context: HandContext) => {
+            onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => {
                 const count = context.handCards.filter(c => c.suit === 'hearts').length;
                 if (count > 0) {
                     const newCriteria = [...score.criteria, {
@@ -401,7 +421,7 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
                         name: 'Lucky Rock',
                         count: count,
                         chips: 0,
-                        multiplier: count * 3,
+                        multiplier: count * relicState.bonus_mult,
                         cardIds: []
                     }];
                     const totalChips = newCriteria.reduce((s, c) => s + c.chips, 0);
@@ -417,9 +437,10 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
         id: 'burnt_match',
         name: 'Burnt Match',
         category: 'Suite',
-        description: '[Clubs] earn an extra x3',
+        description: '[Clubs] earn an extra x${bonus_mult}',
+        properties: { bonus_mult: 3 },
         hooks: {
-            onEvaluateHandScore: (score: HandScore, context: HandContext) => {
+            onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => {
                 const count = context.handCards.filter(c => c.suit === 'clubs').length;
                 if (count > 0) {
                     const newCriteria = [...score.criteria, {
@@ -427,7 +448,7 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
                         name: 'Burnt Match',
                         count: count,
                         chips: 0,
-                        multiplier: count * 3,
+                        multiplier: count * relicState.bonus_mult,
                         cardIds: []
                     }];
                     const totalChips = newCriteria.reduce((s, c) => s + c.chips, 0);
@@ -443,9 +464,10 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
         id: 'lost_key',
         name: 'Lost Key',
         category: 'Suite',
-        description: '[Spades] earn an extra x3',
+        description: '[Spades] earn an extra x${bonus_mult}',
+        properties: { bonus_mult: 3 },
         hooks: {
-            onEvaluateHandScore: (score: HandScore, context: HandContext) => {
+            onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => {
                 const count = context.handCards.filter(c => c.suit === 'spades').length;
                 if (count > 0) {
                     const newCriteria = [...score.criteria, {
@@ -453,7 +475,7 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
                         name: 'Lost Key',
                         count: count,
                         chips: 0,
-                        multiplier: count * 3,
+                        multiplier: count * relicState.bonus_mult,
                         cardIds: []
                     }];
                     const totalChips = newCriteria.reduce((s, c) => s + c.chips, 0);
@@ -469,15 +491,16 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
         id: 'pocket_rock',
         name: 'Pocket Rock',
         category: 'Hands',
-        description: 'Hands with a single card earn an extra $100',
+        description: 'Hands with a single card earn an extra $${bonus_chips}',
+        properties: { bonus_chips: 100 },
         hooks: {
-            onEvaluateHandScore: (score: HandScore, context: HandContext) => {
+            onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => {
                 if (context.handCards.length === 1) {
                     const newCriteria = [...score.criteria, {
                         id: 'pocket_rock' as any,
                         name: 'Pocket Rock',
                         count: 1,
-                        chips: 100,
+                        chips: relicState.bonus_chips,
                         multiplier: 0,
                         cardIds: []
                     }];
@@ -494,9 +517,10 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
         id: 'feather',
         name: 'Feather',
         category: 'Hands',
-        description: 'When all hands have the same number of cards, earn an extra $200',
+        description: 'When all hands have the same number of cards, earn an extra $${bonus_chips}',
+        properties: { bonus_chips: 200 },
         hooks: {
-            onRoundCompletion: async (context: RoundCompletionContext) => {
+            onRoundCompletion: async (context: RoundCompletionContext, relicState: any) => {
                 const hands = context.playerHands || [];
                 if (hands.length === 0) return;
                 const len = hands[0].cards.length;
@@ -504,7 +528,7 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
                 
                 if (allSame) {
                     await context.highlightRelic('feather', {
-                         trigger: () => context.modifyRunningSummary(200, 0)
+                         trigger: () => context.modifyRunningSummary(relicState.bonus_chips, 0)
                     });
                 }
             }
@@ -515,15 +539,16 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
         id: 'odd_sock',
         name: 'Odd Sock',
         category: 'Hands',
-        description: 'When all hands have two cards, earn an extra $200',
+        description: 'When all hands have two cards, earn an extra $${bonus_chips}',
+        properties: { bonus_chips: 200 },
         hooks: {
-            onRoundCompletion: async (context: RoundCompletionContext) => {
+            onRoundCompletion: async (context: RoundCompletionContext, relicState: any) => {
                 const hands = context.playerHands || [];
                 const allTwo = hands.length > 0 && hands.every((h: any) => h.cards.length === 2);
                 
                 if (allTwo) {
                     await context.highlightRelic('odd_sock', {
-                         trigger: () => context.modifyRunningSummary(200, 0)
+                         trigger: () => context.modifyRunningSummary(relicState.bonus_chips, 0)
                     });
                 }
             }
@@ -534,9 +559,10 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
         id: 'star_bead',
         name: 'Star Bead',
         category: 'Specific',
-        description: 'Each [9] earns an extra x9',
+        description: 'Each [9] earns an extra x${bonus_mult}',
+        properties: { bonus_mult: 9 },
         hooks: {
-            onEvaluateHandScore: (score: HandScore, context: HandContext) => {
+            onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => {
                 const count = context.handCards.filter(c => c.rank === '9').length;
                 if (count > 0) {
                      const newCriteria = [...score.criteria, {
@@ -544,7 +570,7 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
                         name: 'Star Bead',
                         count: count,
                         chips: 0,
-                        multiplier: count * 9,
+                        multiplier: count * relicState.bonus_mult,
                         cardIds: []
                     }];
                     const totalChips = newCriteria.reduce((s, c) => s + c.chips, 0);
@@ -560,9 +586,10 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
         id: 'heart_button',
         name: 'Heart Button',
         category: 'Specific',
-        description: 'Each [10] and [4] earns an extra x6',
+        description: 'Each [10] and [4] earns an extra x${bonus_mult}',
+        properties: { bonus_mult: 6 },
         hooks: {
-            onEvaluateHandScore: (score: HandScore, context: HandContext) => {
+            onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => {
                 const count = context.handCards.filter(c => c.rank === '10' || c.rank === '4').length;
                 if (count > 0) {
                     const newCriteria = [...score.criteria, {
@@ -570,7 +597,7 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
                          name: 'Heart Button',
                          count: count,
                          chips: 0,
-                         multiplier: count * 6,
+                         multiplier: count * relicState.bonus_mult,
                          cardIds: []
                      }];
                      const totalChips = newCriteria.reduce((s, c) => s + c.chips, 0);
@@ -586,9 +613,10 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
         id: 'lucky_acorn',
         name: 'Lucky Acorn',
         category: 'Specific',
-        description: 'Each [King] earns an extra x10',
+        description: 'Each [King] earns an extra x${bonus_mult}',
+        properties: { bonus_mult: 10 },
         hooks: {
-            onEvaluateHandScore: (score: HandScore, context: HandContext) => {
+            onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => {
                 const count = context.handCards.filter(c => c.rank === 'K').length;
                 if (count > 0) {
                      const newCriteria = [...score.criteria, {
@@ -596,7 +624,7 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
                          name: 'Lucky Acorn',
                          count: count,
                          chips: 0,
-                         multiplier: count * 10,
+                         multiplier: count * relicState.bonus_mult,
                          cardIds: []
                      }];
                      const totalChips = newCriteria.reduce((s, c) => s + c.chips, 0);
@@ -612,8 +640,8 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
         id: 'faded_tag',
         name: 'Faded Tag',
         category: 'Global',
-        properties: { amount: 10 },
         description: 'Earn an extra x${amount}, but decays by x2 each round',
+        properties: { amount: 10 },
         hooks: {
              onRoundCompletion: async (context: RoundCompletionContext, relicState: any) => {
                  if (relicState.amount > 0) {
@@ -633,11 +661,12 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
         id: 'mini_shoe',
         name: 'Mini Shoe',
         category: 'Global',
-        description: 'Earn an extra $250',
+        description: 'Earn an extra $${bonus_chips}',
+        properties: { bonus_chips: 250 },
         hooks: {
-            onRoundCompletion: async (context: RoundCompletionContext) => {
+            onRoundCompletion: async (context: RoundCompletionContext, relicState: any) => {
                 await context.highlightRelic('mini_shoe', {
-                     trigger: () => context.modifyRunningSummary(250, 0)
+                     trigger: () => context.modifyRunningSummary(relicState.bonus_chips, 0)
                 });
             }
         },
@@ -647,11 +676,12 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
         id: 'robe_slippers',
         name: 'Robe and Slippers Set',
         category: 'Global',
-        description: 'Earn an extra x10',
+        description: 'Earn an extra x${bonus_mult}',
+        properties: { bonus_mult: 10 },
         hooks: {
-             onRoundCompletion: async (context: RoundCompletionContext) => {
+             onRoundCompletion: async (context: RoundCompletionContext, relicState: any) => {
                 await context.highlightRelic('robe_slippers', {
-                     trigger: () => context.modifyRunningSummary(0, 10)
+                     trigger: () => context.modifyRunningSummary(0, relicState.bonus_mult)
                 });
             }
         },
@@ -661,16 +691,17 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
         id: 'key_ring',
         name: 'Key Ring',
         category: 'Global',
-        description: 'On final draw, earn x3',
+        description: 'On final draw, earn x${bonus_mult}',
+        properties: { bonus_mult: 3 },
         hooks: {
-            onEvaluateHandScore: (score: HandScore, context: HandContext) => {
+            onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => {
                 if (context.handsRemaining === 0) {
                      const newCriteria = [...score.criteria, {
                          id: 'key_ring' as any,
                          name: 'Key Ring',
                          count: 1,
                          chips: 0,
-                         multiplier: 3,
+                         multiplier: relicState.bonus_mult,
                          cardIds: []
                      }];
                      const totalChips = newCriteria.reduce((s, c) => s + c.chips, 0);
