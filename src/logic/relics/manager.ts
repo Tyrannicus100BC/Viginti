@@ -3,8 +3,7 @@ import type {
     RelicConfig, 
     RelicHooks, 
     GameContext, 
-    PrioritizedHook,
-    ScoreRowContext
+    PrioritizedHook
 } from './types';
 import { RELIC_REGISTRY } from './registry';
 
@@ -31,10 +30,10 @@ export class RelicManager {
         let currentValue = initialValue;
 
         // Collect all applicable hooks
-        const activeHooks: { id: string; priority: number; handler: Function }[] = [];
+        const activeHooks: { instance: any; priority: number; handler: Function }[] = [];
 
-        inventory.forEach(relicId => {
-            const config = RELIC_REGISTRY[relicId];
+        inventory.forEach(instance => {
+            const config = RELIC_REGISTRY[instance.id];
             if (!config || !config.hooks[hookName]) return;
 
             const rawHook = config.hooks[hookName];
@@ -42,23 +41,22 @@ export class RelicManager {
             const normalized = normalizeHook(rawHook as any);
             
             activeHooks.push({
-                id: relicId,
+                instance: instance,
                 priority: normalized.priority,
                 handler: normalized.handler
             });
         });
 
         // Sort by Priority ASC, then by Inventory Order (FIFO)
-        // Inventory order is implicit because we pushed them in inventory order.
-        // Javascript's sort is stable, so we only need to sort by priority.
         activeHooks.sort((a, b) => a.priority - b.priority);
 
         // Execute pipeline
         for (const hook of activeHooks) {
              try {
-                currentValue = hook.handler(currentValue, context);
+                // Pass relic state as the last argument
+                currentValue = hook.handler(currentValue, context, hook.instance.state);
              } catch (e) {
-                 console.error(`Error in relic hook ${hookName} for relic ${hook.id}:`, e);
+                 console.error(`Error in relic hook ${hookName} for relic ${hook.instance.id}:`, e);
              }
         }
 
@@ -73,17 +71,17 @@ export class RelicManager {
         const { inventory } = context;
 
         // Collect all applicable hooks
-        const activeHooks: { id: string; priority: number; handler: Function }[] = [];
+        const activeHooks: { instance: any; priority: number; handler: Function }[] = [];
 
-        inventory.forEach(relicId => {
-            const config = RELIC_REGISTRY[relicId];
+        inventory.forEach(instance => {
+            const config = RELIC_REGISTRY[instance.id];
             if (!config || !config.hooks[hookName]) return;
 
              const rawHook = config.hooks[hookName];
              const normalized = normalizeHook(rawHook as any);
 
             activeHooks.push({
-                id: relicId,
+                instance: instance,
                 priority: normalized.priority,
                 handler: normalized.handler
             });
@@ -93,9 +91,9 @@ export class RelicManager {
 
         for (const hook of activeHooks) {
             try {
-                await hook.handler(context);
+                await hook.handler(context, hook.instance.state);
             } catch (e) {
-                console.error(`Error in interrupt relic hook ${hookName} for relic ${hook.id}:`, e);
+                console.error(`Error in interrupt relic hook ${hookName} for relic ${hook.instance.id}:`, e);
             }
         }
     }

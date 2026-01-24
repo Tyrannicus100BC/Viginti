@@ -12,11 +12,12 @@ interface HandProps {
   baseDelay?: number;
   stagger?: boolean;
   isScoringFocus?: boolean;
+  isEnlarged?: boolean;
 }
 
 import { useGameStore } from '../store/gameStore';
 
-export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay = 0, stagger = true, isScoringFocus = false }) => {
+export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay = 0, stagger = true, isScoringFocus = false, isEnlarged = false }) => {
   const triggerScoringRow = useGameStore(state => state.triggerScoringRow);
   // Determine if we should show overlay (bust or result revealed)
   const isViginti = hand.blackjackValue === 21;
@@ -78,7 +79,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
 
   // Scoring Animation Sequence
   useEffect(() => {
-    if (isWin && hand.finalScore && !animationRef.current && isScoringFocus) {
+    if (isWin && hand.finalScore && !animationRef.current && (isScoringFocus || isEnlarged)) {
       animationRef.current = true;
 
       let canceled = false;
@@ -91,7 +92,6 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
         await wait(0);
 
         // Track totals locally to avoid stale state in async function
-        let runningChips = 0;
 
         // PHASE 1: Show +Chips
         for (let i = 0; i < criteria.length; i++) {
@@ -213,7 +213,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
 
   return (
     <div
-      className={`${styles.handContainer} ${canSelect ? styles.clickable : ''} ${isScoringFocus ? styles.scoringFocus : ''}`}
+      className={`${styles.handContainer} ${canSelect ? styles.clickable : ''} ${(isScoringFocus || isEnlarged) ? styles.scoringFocus : ''}`}
       onClick={canSelect ? onSelect : undefined}
     >
       {/* Scoring List */}

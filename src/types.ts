@@ -49,6 +49,7 @@ export interface PlayerHand {
   finalScore?: HandScore | null;
   blackjackValue: number;
   resultRevealed?: boolean;
+  outcome?: 'win' | 'loss' | 'push' | null;
   isDoubled?: boolean;
 }
 

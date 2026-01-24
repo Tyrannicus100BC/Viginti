@@ -5,19 +5,32 @@ import type { Relic } from '../logic/relics/types';
 
 interface RelicTooltipProps {
     relic: Relic;
+    displayValues?: Record<string, any>;
     style?: React.CSSProperties;
     className?: string;
     hideIcon?: boolean;
 }
 
-export const RelicTooltip: React.FC<RelicTooltipProps> = ({ relic, style, className, hideIcon }) => {
-    const renderDescription = (text: string) => {
+export const RelicTooltip: React.FC<RelicTooltipProps> = ({ relic, displayValues, style, className, hideIcon }) => {
+    const formatDescription = (text: string, values?: Record<string, any>) => {
+        if (!values) return text;
+        return text.replace(/\$\{(\w+)\}/g, (_, key) => {
+            return values[key] !== undefined ? String(values[key]) : `\${${key}}`;
+        });
+    };
+
+    const renderDescription = (rawText: string) => {
+        const text = formatDescription(rawText, displayValues);
         // Regex to match:
-        // 1. x followed by digits (multipliers)
-        // 2. $ or + followed by digits, or digits followed by "chips" (chips values)
-        const parts = text.split(/(x\d+(?:\.\d+)?|(?:\$|\+)?\d+\s*chips?|(?:\$|\+)\d+)/gi);
+        // 1. [...] (bracketed text for highlighting)
+        // 2. x followed by digits (multipliers)
+        // 3. $ or + followed by digits, or digits followed by "chips" (chips values)
+        const parts = text.split(/(\[.*?\]|x\d+(?:\.\d+)?|(?:\$|\+)?\d+\s*chips?|(?:\$|\+)\d+)/gi);
         
         return parts.map((part, i) => {
+            if (part.startsWith('[') && part.endsWith(']')) {
+                return <span key={i} className={styles.handHighlight}>{part.slice(1, -1)}</span>;
+            }
             if (/^x\d/i.test(part)) {
                 return <span key={i} className={styles.multValue}>{part}</span>;
             }

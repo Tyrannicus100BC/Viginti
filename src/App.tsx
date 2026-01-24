@@ -52,9 +52,7 @@ export default function App() {
         assignCard,
         holdReturns,
 
-        chipCollectionComplete,
         setAnimationSpeed,
-        incrementScore,
         triggerDebugChips,
         completeRoundEarly,
         roundSummary,
@@ -68,7 +66,9 @@ export default function App() {
         interactionMode,
         debugWin,
         debugUndo,
-        drawSpecificCard
+        drawSpecificCard,
+        allWinnersEnlarged,
+        dealerVisible
     } = useGameStore();
 
     const [showDeck, setShowDeck] = useState(false);
@@ -388,12 +388,12 @@ export default function App() {
             />
 
             {/* Total Winnings Label (Center) - Only visible when we have a full summary */}
-            {((phase === 'scoring' && (isCollectingChips || roundSummary)) || phase === 'round_over') && runningSummary && runningSummary.chips > 0 && (
+            {((phase === 'scoring' && (isCollectingChips || roundSummary || allWinnersEnlarged)) || phase === 'round_over') && runningSummary && runningSummary.chips > 0 && (
                 <div 
                     className={styles.totalWinningsLabel}
                     style={{ 
                         left: drawAreaCenter.x, 
-                        top: drawAreaCenter.y - 70
+                        top: drawAreaCenter.y - POT_VERTICAL_OFFSET - 135
                     }}
                 >
                     <div className={styles.winningsWrapper}>
@@ -411,7 +411,7 @@ export default function App() {
             <canvas ref={canvasRef} className={styles.confettiCanvas} />
 
             <div className={styles.board}>
-                <div className={styles.dealerZone}>
+                <div className={`${styles.dealerZone} ${!dealerVisible ? styles.dealerZoneHidden : ''}`}>
                     <div className={styles.zoneLabel}>Dealer</div>
                     <div style={{ pointerEvents: 'none', position: 'relative' }}>
                         <Hand
@@ -474,6 +474,7 @@ export default function App() {
                                 onSelect={() => handleHandClick(idx)}
                                 baseDelay={idx === 1 ? 0 : 0.6}
                                 isScoringFocus={idx === scoringHandIndex}
+                                isEnlarged={allWinnersEnlarged && hand.outcome === 'win'}
                             />
                         ))}
 

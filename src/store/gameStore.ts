@@ -4,6 +4,7 @@ import { createStandardDeck, shuffleDeck } from '../logic/deck';
 import { getBlackjackScore, evaluateHandScore } from '../logic/scoring';
 import { calculateTargetScore } from '../logic/casinoConfig';
 import { RelicManager } from '../logic/relics/manager';
+import type { RelicInstance } from '../logic/relics/types';
 // import type { RoundSummary } from '../logic/relics/types';
 
 interface GameState {
@@ -21,11 +22,13 @@ interface GameState {
     handsRemaining: number;
     scoringHandIndex: number;
     isCollectingChips: boolean;
+    allWinnersEnlarged: boolean;
+    dealerVisible: boolean;
     // Aggregated Scoring State
     runningSummary: { chips: number; mult: number } | null;
     roundSummary: { totalChips: number; totalMult: number; finalScore: number } | null;
     discardPile: Card[];
-    inventory: string[];
+    inventory: RelicInstance[];
     activeRelicId: string | null;
 
     isInitialDeal: boolean;
@@ -89,6 +92,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     activeRelicId: null,
     isInitialDeal: true,
     isShaking: false,
+    allWinnersEnlarged: false,
+    dealerVisible: true,
     animationSpeed: 1,
     setAnimationSpeed: (speed) => set({ animationSpeed: speed }),
 
@@ -170,7 +175,9 @@ export const useGameStore = create<GameState>((set, get) => ({
             interactionMode: 'default',
             inventory: [], // Reset runs clear inventory usually
             runningSummary: null,
-            roundSummary: null
+            roundSummary: null,
+            allWinnersEnlarged: false,
+            dealerVisible: true
         });
     },
 
@@ -227,7 +234,9 @@ export const useGameStore = create<GameState>((set, get) => ({
             handsRemaining: RelicManager.executeValueHook('getDealsPerCasino', BASE_DEALS_PER_CASINO, { inventory: get().inventory }) - 1,
             totalScore,
             runningSummary: null,
-            roundSummary: null
+            roundSummary: null,
+            allWinnersEnlarged: false,
+            dealerVisible: true
         });
 
         // After animations complete (Dealer cards only now)
@@ -428,7 +437,7 @@ export const useGameStore = create<GameState>((set, get) => ({
             else win = false;
 
             if (win) {
-                const score = evaluateHandScore(h.cards, win, h.isDoubled, get().inventory);
+                const score = evaluateHandScore(h.cards, win, h.isDoubled, get().inventory, get().handsRemaining);
                 return { ...h, finalScore: score, resultRevealed: false };
             } else {
                 return { ...h, finalScore: null, resultRevealed: false };
@@ -444,7 +453,9 @@ export const useGameStore = create<GameState>((set, get) => ({
             deck: dDeck,
             playerHands: scoredHands,
             phase: 'scoring',
-            scoringHandIndex: -1
+            scoringHandIndex: -1,
+            allWinnersEnlarged: false,
+            dealerVisible: true
         });
 
         // Stagger reveal of player outcomes
@@ -455,7 +466,11 @@ export const useGameStore = create<GameState>((set, get) => ({
             const isBustOrViginti = hand.isBust || hand.blackjackValue === 21;
             
             // Reveal this hand's result
-            currentHands[i] = { ...hand, resultRevealed: true };
+            currentHands[i] = { 
+                ...hand, 
+                resultRevealed: true,
+                outcome: hand.finalScore ? 'win' : 'loss'
+            };
             set({ playerHands: [...currentHands] });
 
             // Pause only if we're showing a new label (Win/Loss)
@@ -464,6 +479,13 @@ export const useGameStore = create<GameState>((set, get) => ({
             }
         }
 
+        // STEP 1 COMPLETE: Fade out dealer
+        await wait(200);
+        set({ 
+            dealerVisible: false
+            // allWinnersEnlarged remains false so hands grow one by one via scoringHandIndex
+        });
+        
         // Allow user to digest outcomes before scoring starts
         await wait(400);
 
@@ -552,6 +574,7 @@ export const useGameStore = create<GameState>((set, get) => ({
             losses: scoredHands.length - finalWins.length,
             vigintis: finalWins.filter(h => h.blackjackValue === 21).length,
             runningSummary: get().runningSummary || { chips: 0, mult: 0 },
+            playerHands: scoredHands, // Pass resolved hands for checking lengths etc.
              modifyRunningSummary: (c: number, m: number) => {
                   // Additive update
                   get().updateRunningSummary(c, m);
@@ -568,6 +591,10 @@ export const useGameStore = create<GameState>((set, get) => ({
                 await wait(postDelay);
             }
         });
+
+        // Restore hands to normal size
+        set({ allWinnersEnlarged: false });
+        await wait(300);
 
         // Continue to collection if there are any chips to collect
         const currentSummary = get().runningSummary;
@@ -613,7 +640,9 @@ export const useGameStore = create<GameState>((set, get) => ({
         set({
             phase: nextPhase,
             isCollectingChips: false,
-            scoringHandIndex: -1
+            scoringHandIndex: -1,
+            // Don't reset dealerVisible/allWinnersEnlarged here, 
+            // the user wants them to stay until Deal/Next Casino/Game Over
         });
     },
 
@@ -679,7 +708,9 @@ export const useGameStore = create<GameState>((set, get) => ({
                 discardPile: [],
                 dealerMessage: null,
                 runningSummary: null,
-                roundSummary: null
+                roundSummary: null,
+                allWinnersEnlarged: false,
+                dealerVisible: true
             });
             return;
         }
@@ -742,7 +773,9 @@ export const useGameStore = create<GameState>((set, get) => ({
             discardPile: newDiscardPile,
             isInitialDeal: true,
             runningSummary: null,
-            roundSummary: null
+            roundSummary: null,
+            allWinnersEnlarged: false,
+            dealerVisible: true
         });
 
         // After animations complete
@@ -798,7 +831,15 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     addRelic: (relicId) => {
         set(state => {
-            const newInventory = [...state.inventory, relicId];
+            const config = RelicManager.getRelicConfig(relicId);
+            if (!config) return {};
+            
+            const instance: RelicInstance = {
+                id: relicId,
+                state: config.properties ? JSON.parse(JSON.stringify(config.properties)) : {}
+            };
+            
+            const newInventory = [...state.inventory, instance];
             const dealsPerCasino = RelicManager.executeValueHook('getDealsPerCasino', BASE_DEALS_PER_CASINO, { inventory: newInventory });
             return {
                 inventory: newInventory,
@@ -809,7 +850,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     removeRelic: (relicId) => {
          set(state => {
-            const newInventory = state.inventory.filter(id => id !== relicId);
+            const newInventory = state.inventory.filter(r => r.id !== relicId);
             const dealsPerCasino = RelicManager.executeValueHook('getDealsPerCasino', BASE_DEALS_PER_CASINO, { inventory: newInventory });
             return {
                 inventory: newInventory,

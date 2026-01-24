@@ -165,6 +165,12 @@
     display: flex;
     flex-direction: column;
     align-items: center;
+    transition: opacity 0.5s ease;
+}
+
+.dealerZoneHidden {
+    opacity: 0;
+    pointer-events: none;
 }
 
 .zoneLabel {
@@ -674,20 +680,7 @@
     pointer-events: none;
 }
 
-.totalWinningsLabel::before {
-    content: '';
-    position: absolute;
-    /* Use negative margins to extend background slightly beyond text */
-    top: -10px;
-    left: -40px;
-    right: -40px;
-    bottom: -10px;
-    background: rgba(0, 0, 0, 0.8);
-    /* Large box-shadow with spread and blur to create a wide feathered effect */
-    box-shadow: 0 0 80px 40px rgba(0, 0, 0, 0.8);
-    border-radius: 40px;
-    z-index: -1;
-}
+
 
 .winningsWrapper {
     display: flex;

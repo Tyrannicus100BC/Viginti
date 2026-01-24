@@ -7,11 +7,18 @@ export interface Relic {
     id: string;
     name: string;
     description: string;
+    category?: string;
     icon?: string;
 }
 
 export interface RelicConfig extends Relic {
     hooks: RelicHooks;
+    properties?: Record<string, any>;
+}
+
+export interface RelicInstance {
+    id: string;
+    state: Record<string, any>;
 }
 
 // Priority: Higher numbers execute LATER (wrapping the result) for Value hooks usually? 
@@ -32,16 +39,16 @@ export function withPriority<T>(priority: number, handler: T): PrioritizedHook<T
 // Values can be either the function directly (default priority 0) or a PrioritizedHook
 export interface RelicHooks {
     // Value Hooks (Sync, expected to return modified value)
-    getDealsPerCasino?: ValueHook<(value: number, context: GameContext) => number>;
-    getDealerStopValue?: ValueHook<(value: number, context: GameContext) => number>;
-    getCardValue?: ValueHook<(value: number, context: CardValueContext) => number>;
-    adjustBlackjackScore?: ValueHook<(value: number, context: { handCards: Card[] }) => number>;
-    onEvaluateHandScore?: ValueHook<(score: HandScore, context: HandContext) => HandScore>;
+    getDealsPerCasino?: ValueHook<(value: number, context: GameContext, relicState: any) => number>;
+    getDealerStopValue?: ValueHook<(value: number, context: GameContext, relicState: any) => number>;
+    getCardValue?: ValueHook<(value: number, context: CardValueContext, relicState: any) => number>;
+    adjustBlackjackScore?: ValueHook<(value: number, context: { handCards: Card[] }, relicState: any) => number>;
+    onEvaluateHandScore?: ValueHook<(score: HandScore, context: HandContext, relicState: any) => HandScore>;
     
     // Interrupt Hooks (Async, can pause flow)
-    onScoreRow?: ValueHook<(context: ScoreRowContext) => Promise<void>>;
-    onHandCompletion?: ValueHook<(context: HandCompletionContext) => Promise<void>>;
-    onRoundCompletion?: ValueHook<(context: RoundCompletionContext) => Promise<void>>;
+    onScoreRow?: ValueHook<(context: ScoreRowContext, relicState: any) => Promise<void>>;
+    onHandCompletion?: ValueHook<(context: HandCompletionContext, relicState: any) => Promise<void>>;
+    onRoundCompletion?: ValueHook<(context: RoundCompletionContext, relicState: any) => Promise<void>>;
 }
 
 export type ValueHook<T> = T | PrioritizedHook<T>;
@@ -56,7 +63,7 @@ export interface HighlightOptions {
 export type HighlightRelicFn = (relicId: string, options?: HighlightOptions) => Promise<void>;
 
 export interface GameContext {
-    inventory: string[]; // List of relic IDs
+    inventory: RelicInstance[]; // List of relic instances
 }
 
 export interface CardValueContext extends GameContext {
@@ -67,6 +74,7 @@ export interface HandContext extends GameContext {
     handCards: Card[];
     isWin: boolean;
     isDoubled: boolean;
+    handsRemaining: number;
 }
 
 export interface InterruptContext extends GameContext {
@@ -85,6 +93,7 @@ export interface RoundCompletionContext extends InterruptContext {
     vigintis: number;
     runningSummary: { chips: number; mult: number };
     modifyRunningSummary: (chipsToAdd: number, multToAdd: number) => void;
+    playerHands: any[]; // Avoid circular dependency with PlayerHand from main types
 }
 
 export interface RoundSummary {

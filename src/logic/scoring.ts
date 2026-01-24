@@ -29,8 +29,9 @@ export const SCORING_RULES: Record<ScoringCriterionId, ScoringRule> = {
 };
 
 import { RelicManager } from './relics/manager';
+import type { RelicInstance } from './relics/types';
 
-export function getBlackjackScore(cards: Card[], inventory: string[] = []): number {
+export function getBlackjackScore(cards: Card[], inventory: RelicInstance[] = []): number {
   let score = 0;
   let aces = 0;
 
@@ -54,7 +55,7 @@ export function getBlackjackScore(cards: Card[], inventory: string[] = []): numb
   return score;
 }
 
-export function evaluateHandScore(cards: Card[], isWin: boolean, isDoubled: boolean = false, inventory: string[] = []): HandScore {
+export function evaluateHandScore(cards: Card[], isWin: boolean, isDoubled: boolean = false, inventory: RelicInstance[] = [], handsRemaining: number = 0): HandScore {
   const blackjackScore = getBlackjackScore(cards, inventory);
   const criteria: ScoringDetail[] = [];
 
@@ -205,6 +206,7 @@ export function evaluateHandScore(cards: Card[], isWin: boolean, isDoubled: bool
       inventory,
       handCards: cards,
       isWin,
-      isDoubled
+      isDoubled,
+      handsRemaining
   });
 }

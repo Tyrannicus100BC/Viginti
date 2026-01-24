@@ -7,7 +7,8 @@ import { TransparentImage } from './TransparentImage';
 
 export const RelicInventory: React.FC = () => {
     const { inventory, activeRelicId } = useGameStore();
-    const [hoveredId, setHoveredId] = useState<string | null>(null);
+    // Track index because we might have duplicate relic types
+    const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
     const [tooltipPos, setTooltipPos] = useState({ top: 0, left: 0 });
 
     if (inventory.length === 0) return null;
@@ -26,25 +27,25 @@ export const RelicInventory: React.FC = () => {
             pointerEvents: 'none',
             isolation: 'isolate' // Force a new stacking context root
         }}>
-            {inventory.map((id, index) => {
-                const config = RELIC_REGISTRY[id];
+            {inventory.map((instance, index) => {
+                const config = RELIC_REGISTRY[instance.id];
                 if (!config) return null;
 
-                const isActive = activeRelicId === id;
-                const isHovered = hoveredId === id;
+                const isActive = activeRelicId === instance.id;
+                const isHovered = hoveredIndex === index;
 
                 return (
                     <div 
-                        key={`${id}-${index}`} 
+                        key={`${instance.id}-${index}`} 
                         onMouseEnter={(e) => {
-                            setHoveredId(id);
+                            setHoveredIndex(index);
                             const rect = e.currentTarget.getBoundingClientRect();
                             setTooltipPos({ 
                                 top: rect.top + rect.height / 2, 
                                 left: rect.left - 20 - 12 
                             });
                         }}
-                        onMouseLeave={() => setHoveredId(null)}
+                        onMouseLeave={() => setHoveredIndex(null)}
                         style={{
                             width: 80,
                             height: 80,
@@ -104,9 +105,10 @@ export const RelicInventory: React.FC = () => {
                 );
             })}
 
-            {hoveredId && RELIC_REGISTRY[hoveredId] && (
+            {hoveredIndex !== null && inventory[hoveredIndex] && RELIC_REGISTRY[inventory[hoveredIndex].id] && (
                 <RelicTooltip 
-                    relic={RELIC_REGISTRY[hoveredId]}
+                    relic={RELIC_REGISTRY[inventory[hoveredIndex].id]}
+                    displayValues={inventory[hoveredIndex].state}
                     hideIcon={true}
                     style={{
                         position: 'absolute',

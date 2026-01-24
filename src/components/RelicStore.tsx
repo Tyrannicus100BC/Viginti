@@ -13,6 +13,17 @@ export const RelicStore: React.FC<RelicStoreProps> = ({ onClose }) => {
 
     const allRelics = Object.values(RELIC_REGISTRY);
 
+    // Group relics by category
+    const groupedRelics = allRelics.reduce((acc, relic) => {
+        const category = relic.category || 'Uncategorized';
+        if (!acc[category]) acc[category] = [];
+        acc[category].push(relic);
+        return acc;
+    }, {} as Record<string, typeof allRelics>);
+
+    // Sort categories
+    const categories = Object.keys(groupedRelics).sort();
+
     return (
         <div 
             onClick={onClose}
@@ -55,43 +66,61 @@ export const RelicStore: React.FC<RelicStoreProps> = ({ onClose }) => {
                     flex: 1,
                     borderRadius: '0 0 16px 16px'
                 }}>
-                    <div style={{ 
-                        display: 'grid', 
-                        gridTemplateColumns: 'repeat(2, 1fr)', 
-                        gap: 20,
-                        justifyItems: 'center'
-                    }}>
-                        {allRelics.map(relic => {
-                            const isOwned = inventory.includes(relic.id);
-                            return (
-                                <div 
-                                    key={relic.id}
-                                    onClick={() => {
-                                        if (isOwned) removeRelic(relic.id);
-                                        else addRelic(relic.id);
-                                    }}
-                                    style={{
-                                        cursor: 'pointer',
-                                        transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                                        opacity: isOwned ? 0.3 : 1,
-                                        filter: isOwned ? 'grayscale(1) brightness(0.5)' : 'none',
-                                        transform: isOwned ? 'scale(0.95)' : 'scale(1)',
-                                    }}
-                                >
-                                    <RelicTooltip 
-                                        relic={relic} 
-                                        style={{
-                                            background: 'rgba(255, 255, 255, 0.03)',
-                                            border: isOwned ? '2px solid #27ae60' : '2px solid #444',
-                                            boxShadow: isOwned ? 'none' : '0 4px 20px rgba(0,0,0,0.4)',
-                                            pointerEvents: 'none',
-                                            animation: 'none' // Disable fade-in animation in the store
-                                        }}
-                                    />
-                                </div>
-                            );
-                        })}
-                    </div>
+                    {categories.map(category => (
+                        <div key={category} style={{ marginBottom: 30 }}>
+                            <div style={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                marginBottom: 15,
+                                color: '#aaa',
+                                fontSize: '0.9rem',
+                                textTransform: 'uppercase',
+                                letterSpacing: '1px'
+                            }}>
+                                <span style={{ marginRight: 15 }}>{category}</span>
+                                <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.1)' }} />
+                            </div>
+
+                            <div style={{ 
+                                display: 'grid', 
+                                gridTemplateColumns: 'repeat(2, 1fr)', 
+                                gap: 20,
+                                justifyItems: 'center'
+                            }}>
+                                {groupedRelics[category].map(relic => {
+                                    const isOwned = inventory.some(i => i.id === relic.id);
+                                    return (
+                                        <div 
+                                            key={relic.id}
+                                            onClick={() => {
+                                                if (isOwned) removeRelic(relic.id);
+                                                else addRelic(relic.id);
+                                            }}
+                                            style={{
+                                                cursor: 'pointer',
+                                                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                                                opacity: isOwned ? 0.3 : 1,
+                                                filter: isOwned ? 'grayscale(1) brightness(0.5)' : 'none',
+                                                transform: isOwned ? 'scale(0.95)' : 'scale(1)',
+                                            }}
+                                        >
+                                            <RelicTooltip 
+                                                relic={relic} 
+                                                displayValues={relic.properties}
+                                                style={{
+                                                    background: 'rgba(255, 255, 255, 0.03)',
+                                                    border: isOwned ? '2px solid #27ae60' : '2px solid #444',
+                                                    boxShadow: isOwned ? 'none' : '0 4px 20px rgba(0,0,0,0.4)',
+                                                    pointerEvents: 'none',
+                                                    animation: 'none' // Disable fade-in animation in the store
+                                                }}
+                                            />
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    ))}
                 </div>
 
                 <button className="close-x-btn" onClick={onClose}>×</button>
