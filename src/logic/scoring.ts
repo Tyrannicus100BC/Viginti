@@ -21,8 +21,8 @@ interface ScoringRule {
 
 export const SCORING_RULES: Record<ScoringCriterionId, ScoringRule> = {
   'win': { id: 'win', name: 'Win', chips: 10, mult: 1 },
-  'viginti': { id: 'viginti', name: 'Viginti', chips: 50, mult: 0 },
-  'double_down': { id: 'double_down', name: 'Double Down', chips: 0, mult: 2 },
+  'viginti': { id: 'viginti', name: 'Viginti', chips: 50, mult: 1 },
+  'double_down': { id: 'double_down', name: 'Double Down', chips: 0, mult: 1 },
   'pair': { id: 'pair', name: 'Pair', chips: 0, mult: 0.5 },
   'straight': { id: 'straight', name: 'Straight', chips: 0, mult: 0.5 },
   'flush': { id: 'flush', name: 'Flush', chips: 0, mult: 0.5 },
@@ -99,7 +99,6 @@ export function evaluateHandScore(cards: Card[], isWin: boolean, isDoubled: bool
   
   if (isViginti) {
     addCriteria('viginti');
-    addCriteria('win');
   } else if (isWin) {
     addCriteria('win');
   }

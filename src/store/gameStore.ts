@@ -94,34 +94,28 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     incrementScore: (amount) => set(state => ({ totalScore: state.totalScore + amount })),
 
-    triggerDebugChips: (() => {
-        let debugTimer: ReturnType<typeof setTimeout> | null = null;
-        return () => {
-            const { targetScore } = get();
-            const scoreToDrop = Math.ceil(targetScore / 3);
-
-            if (debugTimer) clearTimeout(debugTimer);
-
-            set({
-                isCollectingChips: false,
-                runningSummary: {
-                    chips: scoreToDrop,
-                    mult: 2
-                }
-            });
-
-            // Auto collect after 1s
-            debugTimer = setTimeout(() => {
-                const { runningSummary, incrementScore } = get();
-                if (runningSummary) {
-                    const finalAmount = Math.floor(runningSummary.chips * runningSummary.mult);
-                    incrementScore(finalAmount);
-                }
+    triggerDebugChips: () => {
+        const { targetScore, incrementScore } = get();
+        const amount = Math.ceil(targetScore / 3) * 2;
+        
+        // Count up over 500ms
+        const steps = 10;
+        const tick = 50;
+        const perStep = Math.floor(amount / steps);
+        let count = 0;
+        
+        const interval = setInterval(() => {
+            if (count < steps - 1) {
+                incrementScore(perStep);
+                count++;
+            } else {
+                const remaining = amount - (perStep * (steps - 1));
+                incrementScore(remaining);
+                clearInterval(interval);
                 get().chipCollectionComplete();
-                debugTimer = null;
-            }, 1000);
-        };
-    })(),
+            }
+        }, tick);
+    },
 
     updateRunningSummary: (chips, mult) => {
         set(state => ({
@@ -174,7 +168,9 @@ export const useGameStore = create<GameState>((set, get) => ({
             discardPile: [],
             isInitialDeal: true,
             interactionMode: 'default',
-            inventory: [] // Reset runs clear inventory usually
+            inventory: [], // Reset runs clear inventory usually
+            runningSummary: null,
+            roundSummary: null
         });
     },
 
@@ -486,33 +482,59 @@ export const useGameStore = create<GameState>((set, get) => ({
             // Highlight Hand to indicate scoring focus
             set({ scoringHandIndex: i });
 
-            // The wait time here should match the total time spent in Hand.tsx's animation loop
-            let handDuration = 0; // initial from Hand.tsx
             for (const crit of scoreData.criteria) {
                 // Hook for Sequence Interruption (Relics)
-                await RelicManager.executeInterruptHook('onScoreRow', {
+                // We run this in parallel with the row duration wait to prevent sync drift,
+                // while still ensuring both finish before moving to the next row.
+                const relicHookPromise = RelicManager.executeInterruptHook('onScoreRow', {
                      inventory: get().inventory,
                      criterionId: crit.id as any,
                      score: scoreData,
-                     highlightRelic: async (relicId: string) => {
+                     highlightRelic: async (relicId: string, options?: any) => {
+                         const { preDelay = 0, duration = 250, postDelay = 0, trigger } = options || {};
+                         await wait(preDelay);
                          console.log('Relic Active:', relicId);
                          set({ activeRelicId: relicId });
-                         await wait(250);
+                         if (trigger) await trigger();
+                         await wait(duration);
                          set({ activeRelicId: null });
+                         await wait(postDelay);
                      }
                 });
 
-                handDuration += 400; // label reveal
+                let rowDuration = 400; // label reveal
                 if (crit.matches && crit.matches.length > 0) {
-                    handDuration += crit.matches.length * 600;
+                    rowDuration += crit.matches.length * 600;
                 } else {
-                    handDuration += 500;
+                    rowDuration += 700; // 200 (chips) + 500 (mult)
                 }
-                handDuration += 200; // transition
+                rowDuration += 200; // transition beat
+                
+                await wait(rowDuration);
+                await relicHookPromise;
             }
-            handDuration += 500; // Buffer for mult sum loop 
             
-            await wait(handDuration);
+            await wait(50); // Tiny buffer for safety
+
+            // Hook for Hand Completion (Relics like Royalty)
+            // Triggered while still in scoring focus (large size)
+            await RelicManager.executeInterruptHook('onHandCompletion', {
+                inventory: get().inventory,
+                handCards: hand.cards,
+                score: scoreData,
+                modifyRunningSummary: (c: number, m: number) => {
+                    get().updateRunningSummary(c, m);
+                },
+                highlightRelic: async (id: string, options?: any) => {
+                    const { preDelay = 0, duration = 750, postDelay = 0, trigger } = options || {};
+                    await wait(preDelay);
+                    set({ activeRelicId: id });
+                    if (trigger) await trigger();
+                    await wait(duration);
+                    set({ activeRelicId: null });
+                    await wait(postDelay);
+                }
+            });
 
             set({ scoringHandIndex: -1 });
             await wait(180);
@@ -534,11 +556,16 @@ export const useGameStore = create<GameState>((set, get) => ({
                   // Additive update
                   get().updateRunningSummary(c, m);
              },
-            highlightRelic: async (id: string) => {
+            highlightRelic: async (id: string, options?: any) => {
+                // Apply the requested 200ms delays for onRoundCompletion
+                const { preDelay = 200, duration = 750, postDelay = 200, trigger } = options || {};
+                await wait(preDelay);
                 console.log('Highlighting Relic:', id);
                 set({ activeRelicId: id });
-                await wait(750); // Visual pause for the effect (reduced from 1500)
+                if (trigger) await trigger();
+                await wait(duration);
                 set({ activeRelicId: null });
+                await wait(postDelay);
             }
         });
 
@@ -554,15 +581,19 @@ export const useGameStore = create<GameState>((set, get) => ({
     startChipCollection: async () => {
         const { runningSummary, incrementScore } = get();
 
-        // Wait for the center animation to "pop in" before updating the HUD (popIn is 0.5s)
-        await new Promise(resolve => setTimeout(resolve, 600));
+        // 1. Show the total winnings label in the center immediately
+        set({ isCollectingChips: true });
+
+        // 2. Wait 1000ms (1s) before updating the HUD, as requested
+        await new Promise(resolve => setTimeout(resolve, 1000));
 
         if (runningSummary) {
             const finalAmount = Math.floor(runningSummary.chips * runningSummary.mult);
             incrementScore(finalAmount);
         }
-        // Wait long enough for the player to see the final sums before allowing next round
-        await new Promise(resolve => setTimeout(resolve, 800));
+
+        // 3. Wait long enough for the player to see the final sums before allowing next round
+        await new Promise(resolve => setTimeout(resolve, 1000));
         get().chipCollectionComplete();
     },
 
@@ -576,7 +607,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         let nextPhase: 'round_over' | 'game_over' = 'round_over';
 
         if (!hasReachedTarget && handsRemaining <= 0) {
-            nextPhase = 'game_over';
+            nextPhase = 'round_over';
         }
 
         set({
@@ -601,10 +632,15 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     nextRound: (forceContinue = false) => {
         const currentState = get();
-        const { deck, dealer, playerHands, totalScore, targetScore, round, comps } = currentState;
+        const { deck, dealer, playerHands, totalScore, targetScore, round, comps, handsRemaining } = currentState;
 
         // Check if player reached the target score
         const hasReachedTarget = totalScore >= targetScore;
+
+        if (!hasReachedTarget && handsRemaining <= 0 && !forceContinue) {
+            set({ phase: 'game_over' });
+            return;
+        }
 
         if (hasReachedTarget && !forceContinue) {
             // Advance to next casino

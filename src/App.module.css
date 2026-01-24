@@ -674,12 +674,48 @@
     pointer-events: none;
 }
 
+.totalWinningsLabel::before {
+    content: '';
+    position: absolute;
+    /* Use negative margins to extend background slightly beyond text */
+    top: -10px;
+    left: -40px;
+    right: -40px;
+    bottom: -10px;
+    background: rgba(0, 0, 0, 0.8);
+    /* Large box-shadow with spread and blur to create a wide feathered effect */
+    box-shadow: 0 0 80px 40px rgba(0, 0, 0, 0.8);
+    border-radius: 40px;
+    z-index: -1;
+}
+
+.winningsWrapper {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+}
+
+.currency {
+    color: #fff;
+    font-size: 5rem;
+    font-weight: 900;
+    line-height: 1;
+    text-shadow: 0 0 30px rgba(255, 215, 0, 0.6);
+    margin-top: 4px; /* Adjust to align with number if needed */
+}
+
+.valueAndTitle {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
 .winningsTitle {
     color: #ffd700;
     font-size: 1.2rem;
     text-transform: uppercase;
     letter-spacing: 4px;
-    margin-top: -2px;
+    margin-top: -6px; /* Slightly adjust spacing after splitting */
     text-align: center;
     font-weight: 800;
 }

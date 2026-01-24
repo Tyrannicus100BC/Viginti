@@ -1,5 +1,5 @@
 
-import type { RelicConfig, RelicHooks, RoundSummary, HandContext, RoundContext, GameContext, RoundCompletionContext } from './types';
+import type { RelicConfig, RelicHooks, RoundSummary, HandContext, RoundContext, GameContext, RoundCompletionContext, HandCompletionContext, ScoreRowContext } from './types';
 import type { Card, HandScore } from '../../types';
 
 // Helper to check for face cards (J, Q, K) - Ace is usually not a face card in BJ context unless specified
@@ -16,28 +16,20 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
         hooks: {
             getDealsPerCasino: (val: number) => val + 1
         },
-        icon: '/relics/deft.png'
+        icon: '/relics/deft.png' 
     },
     'royalty': {
         id: 'royalty',
         name: 'Royalty',
-        description: 'Hands with two face cards earn +10 chips',
+        description: 'Hands with two face cards earn $10',
         hooks: {
-            onEvaluateHandScore: (score: HandScore, context: HandContext) => {
+            onHandCompletion: async (context: HandCompletionContext) => {
                 const faceCards = context.handCards.filter(isFaceCard);
                 if (faceCards.length >= 2) {
-                    // Add a new criterion or modify base? 
-                    // Let's modify totalChips directly for simplicity in the summary
-                    // But for UI "chips falling", we might want a criterion.
-                    // For now, simple modification.
-                    return {
-                        ...score,
-                        totalChips: score.totalChips + 10,
-                        // Optionally add a trace to criteria so it shows up?
-                        // The user description implies just "+10 chips".
-                    };
+                    await context.highlightRelic('royalty', {
+                        trigger: () => context.modifyRunningSummary(10, 0)
+                    });
                 }
-                return score;
             }
         },
         icon: '/relics/royalty.png'
@@ -94,14 +86,48 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
         description: 'Flushes earn an extra x1',
         hooks: {
             onEvaluateHandScore: (score: HandScore) => {
-                const flush = score.criteria.find(c => c.id === 'flush');
-                if (flush) {
-                    return {
-                        ...score,
-                        totalMultiplier: score.totalMultiplier + 1
-                    };
+                let hasFlush = false;
+                const updatedCriteria = score.criteria.map(c => {
+                    if (c.id === 'flush') {
+                        hasFlush = true;
+                        const newMult = c.multiplier + 1; // Add 1.0 to making it 1.5 (base 0.5 + 1.0)
+                        
+                        // Also update matches if they exist, as Hand.tsx uses them for sequential scoring
+                        const updatedMatches = c.matches?.map(m => ({
+                            ...m,
+                            multiplier: m.multiplier + 1
+                        }));
+
+                        return {
+                            ...c,
+                            multiplier: newMult,
+                            matches: updatedMatches
+                        };
+                    }
+                    return c;
+                });
+
+                if (!hasFlush) return score;
+
+                // Re-calculate totals
+                const totalChips = updatedCriteria.reduce((sum, crit) => sum + crit.chips, 0);
+                const totalMultiplier = updatedCriteria.reduce((sum, crit) => sum + crit.multiplier, 0);
+
+                return {
+                    ...score,
+                    criteria: updatedCriteria,
+                    totalChips,
+                    totalMultiplier,
+                    finalScore: Math.floor(totalChips * totalMultiplier)
+                };
+            },
+            onScoreRow: async (context: ScoreRowContext) => {
+                if (context.criterionId === 'flush') {
+                    // Start highlighting after a small delay to match the multiplier appearing in Hand.tsx
+                    // Hand.tsx reveals row at 0ms, wait 400ms for label, then 200ms for chips, then shows mult.
+                    // So mult appears at roughly 600ms.
+                    await context.highlightRelic('flusher', { preDelay: 600 });
                 }
-                return score;
             }
         },
         icon: '/relics/flusher.png'
@@ -109,15 +135,15 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
     'one_armed': {
         id: 'one_armed',
         name: 'One Armed',
-        description: 'Winning a single hand earns an extra x2',
+        description: 'Winning a single hand earns x2',
         hooks: {
             onRoundCompletion: async (context: RoundCompletionContext) => {
                 if (context.wins === 1) {
                     const currentMult = context.runningSummary.mult;
                     // "Worth x2" -> Double the final score by adding the current multiplier to the pot.
-                    const highlightPromise = context.highlightRelic('one_armed');
-                    context.modifyRunningSummary(0, currentMult > 0 ? currentMult : 1);
-                    await highlightPromise;
+                    await context.highlightRelic('one_armed', {
+                        trigger: () => context.modifyRunningSummary(0, currentMult > 0 ? currentMult : 1)
+                    });
                 }
             }
         },
@@ -126,13 +152,13 @@ export const RELIC_REGISTRY: Record<string, RelicConfig> = {
     'high_roller': {
         id: 'high_roller',
         name: 'High Roller',
-        description: 'Winning all three hands earns an extra +10',
+        description: 'Winning all three hands earns $10',
         hooks: {
              onRoundCompletion: async (context: RoundCompletionContext) => {
                  if (context.wins === 3) {
-                     const highlightPromise = context.highlightRelic('high_roller');
-                     context.modifyRunningSummary(10, 0);
-                     await highlightPromise;
+                     await context.highlightRelic('high_roller', {
+                         trigger: () => context.modifyRunningSummary(10, 0)
+                     });
                  }
              }
         },

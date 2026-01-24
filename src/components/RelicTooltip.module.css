@@ -68,3 +68,13 @@
     opacity: 0.9;
     font-weight: 400;
 }
+
+.chipsValue {
+    color: #44ff44;
+    font-weight: bold;
+}
+
+.multValue {
+    color: #f1c40f;
+    font-weight: bold;
+}

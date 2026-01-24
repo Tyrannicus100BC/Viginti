@@ -197,13 +197,6 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
 
           await wait(200); // Transition beat
         }
-
-        // All +Chips shown, clear active highlight before mults
-        setActiveCriteriaIdx(null);
-        setActiveHighlightIds(null);
-
-        // Chips done.
-        await wait(200);
       };
 
       runAnimation();
@@ -238,12 +231,12 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
               </div>
               <div className={`${styles.itemChips} ${item.id === 'viginti' ? styles.isViginti : ''}`}>
                 <span className={visibleChips.includes(idx) ? styles.visible : ''}>
-                  {`+${rowValues[idx]?.chips ?? item.chips}`}
+                  {(rowValues[idx]?.chips ?? item.chips) === 0 ? '-' : `$${rowValues[idx]?.chips ?? item.chips}`}
                 </span>
               </div>
               <div className={styles.itemMult}>
                 <span className={visibleMults.includes(idx) ? styles.visible : ''}>
-                  {`x${(rowValues[idx]?.mult ?? item.multiplier).toFixed(1)}`}
+                  {(rowValues[idx]?.mult ?? item.multiplier) === 0 ? '-' : `x${(rowValues[idx]?.mult ?? item.multiplier).toFixed(1)}`}
                 </span>
               </div>
             </div>

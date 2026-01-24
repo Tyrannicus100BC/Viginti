@@ -40,10 +40,20 @@ export interface RelicHooks {
     
     // Interrupt Hooks (Async, can pause flow)
     onScoreRow?: ValueHook<(context: ScoreRowContext) => Promise<void>>;
+    onHandCompletion?: ValueHook<(context: HandCompletionContext) => Promise<void>>;
     onRoundCompletion?: ValueHook<(context: RoundCompletionContext) => Promise<void>>;
 }
 
 export type ValueHook<T> = T | PrioritizedHook<T>;
+
+export interface HighlightOptions {
+    preDelay?: number;
+    duration?: number;
+    postDelay?: number;
+    trigger?: () => Promise<void> | void;
+}
+
+export type HighlightRelicFn = (relicId: string, options?: HighlightOptions) => Promise<void>;
 
 export interface GameContext {
     inventory: string[]; // List of relic IDs
@@ -59,13 +69,22 @@ export interface HandContext extends GameContext {
     isDoubled: boolean;
 }
 
-export interface RoundCompletionContext extends GameContext {
+export interface InterruptContext extends GameContext {
+    highlightRelic: HighlightRelicFn;
+}
+
+export interface HandCompletionContext extends InterruptContext {
+    handCards: Card[];
+    score: HandScore;
+    modifyRunningSummary: (chipsToAdd: number, multToAdd: number) => void;
+}
+
+export interface RoundCompletionContext extends InterruptContext {
     wins: number;
     losses: number;
     vigintis: number;
     runningSummary: { chips: number; mult: number };
     modifyRunningSummary: (chipsToAdd: number, multToAdd: number) => void;
-    highlightRelic: (relicId: string) => Promise<void>; 
 }
 
 export interface RoundSummary {
@@ -80,9 +99,7 @@ export interface RoundContext extends GameContext {
     vigintis: number; // blackjack wins
 }
 
-export interface ScoreRowContext extends GameContext {
+export interface ScoreRowContext extends InterruptContext {
     criterionId: ScoringCriterionId;
     score: HandScore;
-    // Method to trigger UI effects
-    highlightRelic: (relicId: string) => Promise<void>; 
 }

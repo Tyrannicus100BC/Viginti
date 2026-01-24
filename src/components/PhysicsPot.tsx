@@ -5,7 +5,6 @@ interface PhysicsPotProps {
   totalValue: number;
   variant: 'chips' | 'multiplier';
   isCollecting: boolean;
-  targetId: string;
   center: { x: number; y: number };
   onCollectionComplete: () => void;
   onItemArrived?: (value: number) => void;
@@ -16,7 +15,6 @@ export const PhysicsPot: React.FC<PhysicsPotProps> = ({
   totalValue,
   variant,
   isCollecting,
-  targetId,
   center,
   onCollectionComplete,
   onItemArrived,
@@ -37,60 +35,19 @@ const [isPulsing, setIsPulsing] = useState(false);
     }
   }, [totalValue]);
 
-  // Collection logic - if the user still wants the number to fly to the HUD
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const [opacity, setOpacity] = useState(1);
-  const [scale, setScale] = useState(1);
   const collectionStartedRef = useRef(false);
 
   useEffect(() => {
     if (isCollecting && !collectionStartedRef.current) {
       collectionStartedRef.current = true;
       
-      const targetEl = document.getElementById(targetId);
-      if (!targetEl) {
-        onCollectionComplete();
-        return;
+      // Just immediately complete if we're not doing the animation
+      if (onItemArrived) {
+        onItemArrived(totalValue);
       }
-      
-      const targetRect = targetEl.getBoundingClientRect();
-      const tx = targetRect.left + targetRect.width / 2;
-      const ty = targetRect.top + targetRect.height / 2;
-
-      const dx = tx - center.x;
-      const dy = ty - center.y + 140; // Offset from the pot position
-
-      // Simple animation to HUD
-      let startTime: number | null = null;
-      const duration = 600;
-
-      const animate = (time: number) => {
-        if (!startTime) startTime = time;
-        const progress = Math.min((time - startTime) / duration, 1);
-        
-        // Easing (easeInQuad)
-        const ease = progress * progress;
-
-        setOffset({
-          x: dx * ease,
-          y: dy * ease
-        });
-        setOpacity(1 - progress);
-        setScale(1 - progress * 0.8);
-
-        if (progress < 1) {
-          requestAnimationFrame(animate);
-        } else {
-          if (onItemArrived) {
-            onItemArrived(totalValue);
-          }
-          onCollectionComplete();
-        }
-      };
-
-      requestAnimationFrame(animate);
+      onCollectionComplete();
     }
-  }, [isCollecting, targetId, center, onCollectionComplete, onItemArrived, totalValue]);
+  }, [isCollecting, totalValue, onItemArrived, onCollectionComplete]);
 
   if (totalValue === 0 && !isCollecting) return null;
 
@@ -98,8 +55,6 @@ const [isPulsing, setIsPulsing] = useState(false);
     <div 
       className={styles.container}
       style={{
-        transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
-        opacity: opacity,
         transition: isCollecting ? 'none' : 'transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)'
       }}
     >

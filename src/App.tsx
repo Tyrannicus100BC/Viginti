@@ -125,7 +125,7 @@ export default function App() {
             confettiFiredRef.current = false;
         }
 
-        if ((phase === 'round_over' || roundSummary) && runningSummary && runningSummary.chips > 0 && !confettiFiredRef.current) {
+        if ((phase === 'round_over' || roundSummary || isCollectingChips) && runningSummary && runningSummary.chips > 0 && !confettiFiredRef.current) {
             if (canvasRef.current) {
                 confettiFiredRef.current = true;
                 canvasRef.current.width = window.innerWidth;
@@ -137,7 +137,7 @@ export default function App() {
                     startVelocity: 55,
                     decay: 0.96,
                     originX: drawAreaCenter.x,
-                    originY: drawAreaCenter.y - 60
+                    originY: drawAreaCenter.y - 50
                 });
             }
         }
@@ -368,7 +368,6 @@ export default function App() {
                 totalValue={runningSummary?.chips ?? 0}
                 variant="chips"
                 isCollecting={isCollectingChips}
-                targetId="total-score-display"
                 center={{ x: drawAreaCenter.x - CENTER_OFFSET, y: drawAreaCenter.y - POT_VERTICAL_OFFSET }}
                 onCollectionComplete={() => {}}
                 onItemArrived={() => {}}
@@ -382,7 +381,6 @@ export default function App() {
                 totalValue={runningSummary?.mult ?? 0}
                 variant="multiplier"
                 isCollecting={isCollectingChips}
-                targetId="total-score-display"
                 center={{ x: drawAreaCenter.x + CENTER_OFFSET, y: drawAreaCenter.y - POT_VERTICAL_OFFSET }}
                 onCollectionComplete={() => {}}
                 onItemArrived={() => {}}
@@ -391,18 +389,23 @@ export default function App() {
 
             {/* Total Winnings Label (Center) - Only visible when we have a full summary */}
             {((phase === 'scoring' && (isCollectingChips || roundSummary)) || phase === 'round_over') && runningSummary && runningSummary.chips > 0 && (
-                 <div 
+                <div 
                     className={styles.totalWinningsLabel}
                     style={{ 
                         left: drawAreaCenter.x, 
-                        top: drawAreaCenter.y - 80
+                        top: drawAreaCenter.y - 70
                     }}
-                 >
-                    <div className={styles.winningsValue}>
-                        ${Math.floor(runningSummary.chips * runningSummary.mult).toLocaleString()}
+                >
+                    <div className={styles.winningsWrapper}>
+                        <span className={styles.currency}>$</span>
+                        <div className={styles.valueAndTitle}>
+                            <div className={styles.winningsValue}>
+                                {Math.floor(runningSummary.chips * runningSummary.mult).toLocaleString()}
+                            </div>
+                            <div className={styles.winningsTitle}>TOTAL</div>
+                        </div>
                     </div>
-                    <div className={styles.winningsTitle}>TOTAL</div>
-                 </div>
+                </div>
             )}
 
             <canvas ref={canvasRef} className={styles.confettiCanvas} />
@@ -513,8 +516,12 @@ export default function App() {
                     <button
                         className={styles.nextRoundButton}
                         onClick={phase === 'entering_casino' ? dealFirstHand : () => nextRound()}
+                        style={phase === 'round_over' && totalScore < targetScore && handsRemaining <= 0 ? { color: '#ff4444', borderColor: '#ff4444' } : {}}
                     >
-                        {phase === 'entering_casino' ? 'Deal' : (totalScore >= targetScore ? 'Next Casino' : 'Deal')}
+                        {phase === 'entering_casino' ? 'Deal' : (
+                            totalScore >= targetScore ? 'Next Casino' : 
+                            (handsRemaining <= 0 ? 'Game Over' : 'Deal')
+                        )}
                     </button>
                 )}
 
@@ -549,7 +556,7 @@ export default function App() {
 
             {(phase === 'round_over' || phase === 'entering_casino') && (
                 <button className={styles.debugBtn} onClick={triggerDebugChips}>
-                    +Chips
+                    $$$
                 </button>
             )}
 

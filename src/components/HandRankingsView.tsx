@@ -9,8 +9,8 @@ interface HandRankingsViewProps {
 
 
 const ORDERED_IDS = [
-    'win',
     'viginti',
+    'win',
     'double_down',
     'pair',
     'straight',
@@ -26,8 +26,8 @@ export const HandRankingsView: React.FC<HandRankingsViewProps> = ({ onClose }) =
                 <div className={styles.scrollContent}>
                     {/* Main Header */}
                     <div className={`${styles.headerRow} ${styles.tierHeaderRow}`}>
-                        <span className={styles.tierNameHeader}>Outcome</span>
-                        <span className={styles.chipsHeader}>Score</span>
+                        <span className={styles.tierNameHeader}>Hand Type</span>
+                        <span className={styles.chipsHeader}>Value</span>
                         <span className={styles.multHeader}>Mult</span>
                     </div>
 
@@ -37,20 +37,22 @@ export const HandRankingsView: React.FC<HandRankingsViewProps> = ({ onClose }) =
                         const isLast = index === ORDERED_IDS.length - 1;
 
                         // Dynamic text mapping
-                        let scoreText = `+${rule.chips}`;
+                        let scoreText = `$${rule.chips}`;
                         if (id === 'double_down') {
                             scoreText = '-'; // No chips
                         } else if (rule.chips === 0) {
-                            scoreText = 'Sum of Cards';
+                            scoreText = 'Cards';
                         }
 
                         return (
                             <div key={rule.id} className={`${styles.row} ${isLast ? styles.lastInTier : ''}`}>
-                                <span className={styles.handName}>{rule.name}</span>
+                                <span className={`${styles.handName} ${id === 'viginti' ? styles.isViginti : ''}`}>{rule.name}</span>
                                 <span className={`${styles.chips} ${styles.dynamicText}`}>
                                     {scoreText}
                                 </span>
-                                <span className={styles.multiplier}>{`x${rule.mult.toFixed(1)}`}</span>
+                                <span className={styles.multiplier}>
+                                    {rule.mult === 0 ? '-' : `x${rule.mult.toFixed(1)}`}
+                                </span>
                             </div>
                         );
                     })}

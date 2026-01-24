@@ -56,7 +56,7 @@
 
 .tierHeaderRow {
     margin-top: 15px;
-    border-bottom: 2px solid #ffffff;
+    border-bottom: 2px solid rgba(255, 255, 255, 0.2);
     /* Different color separator for tier name row */
     padding-bottom: 5px;
 }
@@ -69,7 +69,7 @@
     flex: 1.5;
     /* Match handName */
     text-align: left;
-    color: #ffffff;
+    color: #ccc;
     /* Different color for tier names */
     font-size: 1.1em;
     text-transform: uppercase;
@@ -121,4 +121,9 @@
 .multiplier {
     font-weight: 700;
     color: #f1c40f;
+}
+
+.handName.isViginti {
+    color: #ffd700;
+    text-shadow: 0 0 5px rgba(255, 215, 0, 0.5);
 }
