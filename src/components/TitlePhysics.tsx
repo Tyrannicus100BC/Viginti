@@ -62,7 +62,7 @@ export const TitlePhysics: React.FC = () => {
         staticBodies = [];
     };
 
-    const updateStaticBodies = (buttonRotation = 0, letterScales: number[] = []) => {
+    const updateStaticBodies = (buttonRotation = 0, currentRadii: number[] = []) => {
         if (!engineRef.current) return;
         
         // Clear existing
@@ -71,27 +71,32 @@ export const TitlePhysics: React.FC = () => {
         // Add Collision for Title Letters
         const letterEls = document.querySelectorAll(`.${styles.letter}`);
         letterEls.forEach((el, i) => {
+            const char = el.textContent;
             const rect = el.getBoundingClientRect();
             const cx = rect.left + rect.width / 2;
-            const cy = rect.top + rect.height / 2;
+            let cy = rect.top + rect.height / 2;
             
-            // Get the current visual scale of this letter
-            const visualScale = letterScales[i] || 1.0;
-            
-            // Base radius (unscaled)
-            const baseRadius = Math.min(rect.width, rect.height) / (2 * visualScale);
-            
-            // Collision growth is 9x the visual growth (3x the previous 3x)
-            const collisionScale = 1 + 9 * (visualScale - 1);
-            const radius = baseRadius * collisionScale;
+            // Use explicitly passed radius, or fallback to default base radius
+            // Fallback (for initial render) is base radius derived from rect
+            const rectBaseRadius = Math.min(rect.width, rect.height) / 2;
+            const radius = currentRadii[i] || rectBaseRadius;
+
+            if (char === 'I') {
+                cy -= (radius * 0.8); // Maintain the shift logic
+            }
             
             // Circle collision for each letter
             const letterBody = Matter.Bodies.circle(cx, cy, radius, { 
                 isStatic: true, 
-                restitution: 1.0, 
-                friction: 0.01, // 10% of default to allow sliding
+                restitution: 0.3, // Reduced from 1.0 to match a more solid feel
+                friction: 0.01, 
                 frictionStatic: 0,
-                render: { visible: false } 
+                render: { 
+                    visible: false,
+                    fillStyle: 'rgba(255, 215, 0, 0.05)',
+                    strokeStyle: '#ffd700',
+                    lineWidth: 1
+                } 
             });
             
             staticBodies.push(letterBody);
@@ -115,7 +120,12 @@ export const TitlePhysics: React.FC = () => {
                 angle: buttonRotation,
                 friction: 0.01,
                 frictionStatic: 0,
-                render: { visible: false } 
+                render: { 
+                    visible: false,
+                    fillStyle: 'rgba(255, 255, 255, 0.1)',
+                    strokeStyle: '#fff',
+                    lineWidth: 1
+                } 
             });
             
             if (buttonBody) {
@@ -123,6 +133,38 @@ export const TitlePhysics: React.FC = () => {
                 (buttonEl as HTMLElement).style.transform = `rotate(${buttonRotation}rad)`;
             }
         }
+
+        // Add Collision for Gambler Cards
+        const cardEls = document.querySelectorAll('[data-physics="gambler-card"]');
+        cardEls.forEach(el => {
+            const rect = el.getBoundingClientRect();
+            const cx = rect.left + rect.width / 2;
+            const cy = rect.top + rect.height / 2;
+            
+            // Adjust dimensions: 10% taller, 20% less wide
+            const targetWidth = rect.width * 0.8;
+            const targetHeight = rect.height * 1.1;
+
+            // Create a circle based on adjusted height and scale it to adjusted width
+            const baseRadius = targetHeight / 2;
+            const cardBody = Matter.Bodies.circle(cx, cy, baseRadius, {
+                isStatic: true,
+                restitution: 0.3, // Reduced to match title letters
+                friction: 0.01,
+                frictionStatic: 0,
+                render: { 
+                    visible: false,
+                    fillStyle: 'rgba(255, 215, 0, 0.15)',
+                    strokeStyle: '#ffd700',
+                    lineWidth: 1
+                }
+            });
+            
+            // Scale horizontally to reach the target width
+            Matter.Body.scale(cardBody, targetWidth / targetHeight, 1);
+            
+            staticBodies.push(cardBody);
+        });
 
         Matter.World.add(engineRef.current.world, staticBodies);
     };
@@ -154,9 +196,18 @@ export const TitlePhysics: React.FC = () => {
                 const pulseCycle = Math.PI * 4; 
 
                 const letterScales: number[] = [];
+                const collisionRadii: number[] = [];
+                
+                // Track stable word top for growth ceiling
+                const wordRect = els[0].parentElement?.getBoundingClientRect();
+                const wordTop = wordRect?.top || 0;
+                // Target height for pressure wave peaks.
+                // Adjusted to be lower (closer to letters) as requested (50% reduction of gap)
+                const globalTargetY = wordTop - 65; 
 
                 els.forEach((el, i) => {
                     const rect = rects[i];
+                    const char = el.textContent;
                     // Calculate center of this letter relative to the total word width (0 to 1)
                     const letterCenter = rect.left + rect.width / 2;
                     const relativeX = (letterCenter - startX) / totalWidth;
@@ -165,16 +216,61 @@ export const TitlePhysics: React.FC = () => {
                     const yPhase = relativeX * (Math.PI * 2 / 4);
                     const yOffset = Math.sin(time * speed + yPhase) * amplitude;
                     
+                    // Get unscaled dimensions
+                    // We need to approximate base dimensions because the element is currently transformed
+                    // Assuming centered transform origin:
+                    const currentTransform = el.style.transform;
+                    const scaleMatch = currentTransform.match(/scale\(([^)]+)\)/);
+                    const currentScale = scaleMatch ? parseFloat(scaleMatch[1]) : 1.0;
+                    
+                    // Current viewport center of the letter (includes yOffset)
+                    const viewportCy = rect.top + rect.height / 2;
+                    // Resting center (removing the wave movement)
+                    const baseCy = viewportCy - yOffset;
+                    
+                    // Base Radius (from unscaled dimensions)
+                    // Note: 'I' is narrow, so we use min(w,h).
+                    const unscaledWidth = rect.width / currentScale;
+                    const unscaledHeight = rect.height / currentScale;
+                    const baseRadius = Math.min(unscaledWidth, unscaledHeight) / 2;
+
+                    // Calculate Peak Radius Requirement
+                    // We want: Top_Y_at_Peak = globalTargetY
+                    // For normal letters: Top_Y = baseCy - R
+                    // For 'I': Top_Y = baseCy - (0.8 * R) - R = baseCy - 1.8 * R
+                    
+                    let targetPeakRadius: number;
+                    if (char === 'I') {
+                        // baseCy - 1.8 * R = globalTargetY
+                        // 1.8 * R = baseCy - globalTargetY
+                        targetPeakRadius = (baseCy - globalTargetY) / 1.8;
+                    } else {
+                        // baseCy - R = globalTargetY
+                        targetPeakRadius = baseCy - globalTargetY;
+                    }
+                    
+                    // Clamp min radius to base radius so it doesn't shrink
+                    targetPeakRadius = Math.max(targetPeakRadius, baseRadius);
+
                     // Scale Phase: Pressure wave L-to-R proportional to position
                     const sPhase = -(relativeX * Math.PI * 1.5);
                     const theta = (time * scaleSpeed + sPhase) % pulseCycle;
                     
-                    // Gated pulse
+                    // Gated pulse (0 to 1)
                     const scaleSin = (theta > 0 && theta < Math.PI) ? Math.sin(theta) : 0;
-                    const scale = 1.0 + scaleAmplitude * scaleSin;
+                    
+                    // 1. Visual Animation (Standard fixed pulse)
+                    const visualScale = 1.0 + scaleAmplitude * scaleSin;
 
-                    el.style.transform = `translateY(${yOffset}px) scale(${scale})`;
-                    letterScales.push(scale);
+                    // 2. Collision Animation (Targeted growth with Hold)
+                    // Multiply sine by 1.5 and clamp to 1.0 to create a plateau/hold at the peak
+                    const impulseFactor = Math.min(1.0, scaleSin * 1.5);
+                    const currentRadius = baseRadius + (targetPeakRadius - baseRadius) * impulseFactor;
+
+                    el.style.transform = `translateY(${yOffset}px) scale(${visualScale})`;
+                    
+                    letterScales.push(visualScale); // Kept for consistency if needed elsewhere, though unused for collision now
+                    collisionRadii.push(currentRadius);
                 });
 
                 // Button rotation animation
@@ -182,8 +278,8 @@ export const TitlePhysics: React.FC = () => {
                 const buttonRotationSpeed = 0.001;
                 const buttonRotation = Math.sin(time * buttonRotationSpeed) * buttonRotationAmplitude;
 
-                // Update colliders to match new positions, scale, and rotation
-                updateStaticBodies(buttonRotation, letterScales);
+                // Update colliders with explicit radii
+                updateStaticBodies(buttonRotation, collisionRadii);
             }
         }
         animationFrameId = requestAnimationFrame(animateLetters);

@@ -22,7 +22,10 @@ canvas {
     color: #ffd700;
     pointer-events: none;
     z-index: 12; /* Lowered from 902 */
-    transition: transform 0.1s ease;
+    transition: 
+        transform 0.1s ease,
+        left 0.8s cubic-bezier(0.22, 1, 0.36, 1),
+        top 0.8s cubic-bezier(0.22, 1, 0.36, 1);
     animation: fadeInQuick 0.3s ease-out forwards;
 }
 

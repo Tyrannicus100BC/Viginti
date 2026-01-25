@@ -11,6 +11,7 @@ import { TitlePhysics } from './components/TitlePhysics';
 import titleStyles from './components/TitlePhysics.module.css';
 import { CasinoListingView } from './components/CasinoListingView';
 import { EarlyCompletionPopup } from './components/EarlyCompletionPopup';
+import { GamblerSelect } from './components/GamblerSelect';
 
 import { CompsWindow } from './components/CompsWindow';
 import { RelicInventory } from './components/RelicInventory';
@@ -18,7 +19,9 @@ import { RelicStore } from './components/RelicStore';
 import type { PlayerHand } from './types';
 
 // Constants for layout
-const CENTER_OFFSET = 270; // Distance of pots from center
+const POT_DEFAULT_OFFSET = 180; // 1/3 across play area
+const POT_SCORING_OFFSET = 270; // 1/4 across play area (aligned with hands)
+
 const POT_VERTICAL_OFFSET = 120; // Move pots up from center
 
 export default function App() {
@@ -68,8 +71,11 @@ export default function App() {
         debugUndo,
         drawSpecificCard,
         allWinnersEnlarged,
-        dealerVisible
+        dealerVisible,
+        inventory
     } = useGameStore();
+
+    const hasDoubleDownRelic = inventory.some(r => r.id === 'double_down');
 
     const [showDeck, setShowDeck] = useState(false);
     const [isSelectingDebugCard, setIsSelectingDebugCard] = useState(false);
@@ -84,6 +90,12 @@ export default function App() {
     const drawAreaRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [drawAreaCenter, setDrawAreaCenter] = useState({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+
+    const [selectedGamblerId, setSelectedGamblerId] = useState(() => localStorage.getItem('viginti_gambler') || 'default');
+
+    useEffect(() => {
+        localStorage.setItem('viginti_gambler', selectedGamblerId);
+    }, [selectedGamblerId]);
 
     React.useEffect(() => {
         const updateCenter = () => {
@@ -250,15 +262,26 @@ export default function App() {
 
     if (phase === 'init') {
         return (
-            <div className={styles.container} style={{ justifyContent: 'center', cursor: 'pointer' }} onClick={startGame}>
+            <div className={styles.container} style={{ justifyContent: 'center', cursor: 'default' }}>
                 <TitlePhysics />
-                <div className={styles.titleContainer}>
+                <div className={styles.titleContainer} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 10 }}>
                     <h1 className={titleStyles.titleText}>
                         {"VIGINTI".split('').map((char, i) => (
                             <span key={i} className={titleStyles.letter} data-index={i}>{char}</span>
                         ))}
                     </h1>
-                    <button className={`${styles.button} ${styles.startRunButton}`} style={{ zIndex: 1 }}>Start Run</button>
+                    <button 
+                        className={`${styles.button} ${styles.startRunButton}`} 
+                        style={{ zIndex: 1, marginBottom: 40 }}
+                        onClick={() => startGame(selectedGamblerId)}
+                    >
+                        Start Run
+                    </button>
+                    
+                    <GamblerSelect 
+                        selectedId={selectedGamblerId} 
+                        onSelect={setSelectedGamblerId} 
+                    />
                 </div>
             </div>
         );
@@ -274,7 +297,7 @@ export default function App() {
                 <p style={{ fontSize: '1.2rem', color: '#aaa', marginBottom: 40 }}>
                     Final Winnings: ${totalScore.toLocaleString()} / ${targetScore.toLocaleString()}
                 </p>
-                <button className={styles.button} onClick={startGame}>Try Again</button>
+                <button className={styles.button} onClick={() => startGame(selectedGamblerId)}>Try Again</button>
             </div>
         );
     }
@@ -318,6 +341,9 @@ export default function App() {
             dealFirstHand();
         }
     };
+
+    const isTotalWinningsVisible = ((phase === 'scoring' && (isCollectingChips || roundSummary || allWinnersEnlarged)) || phase === 'round_over') && runningSummary && runningSummary.chips > 0;
+    const currentPotOffset = isTotalWinningsVisible ? POT_SCORING_OFFSET : POT_DEFAULT_OFFSET;
 
     return (
         <div
@@ -368,7 +394,7 @@ export default function App() {
                 totalValue={runningSummary?.chips ?? 0}
                 variant="chips"
                 isCollecting={isCollectingChips}
-                center={{ x: drawAreaCenter.x - CENTER_OFFSET, y: drawAreaCenter.y - POT_VERTICAL_OFFSET }}
+                center={{ x: drawAreaCenter.x - currentPotOffset, y: drawAreaCenter.y - POT_VERTICAL_OFFSET }}
                 onCollectionComplete={() => {}}
                 onItemArrived={() => {}}
                 labelPrefix="$"
@@ -381,14 +407,14 @@ export default function App() {
                 totalValue={runningSummary?.mult ?? 0}
                 variant="multiplier"
                 isCollecting={isCollectingChips}
-                center={{ x: drawAreaCenter.x + CENTER_OFFSET, y: drawAreaCenter.y - POT_VERTICAL_OFFSET }}
+                center={{ x: drawAreaCenter.x + currentPotOffset, y: drawAreaCenter.y - POT_VERTICAL_OFFSET }}
                 onCollectionComplete={() => {}}
                 onItemArrived={() => {}}
                 labelPrefix="x"
             />
 
             {/* Total Winnings Label (Center) - Only visible when we have a full summary */}
-            {((phase === 'scoring' && (isCollectingChips || roundSummary || allWinnersEnlarged)) || phase === 'round_over') && runningSummary && runningSummary.chips > 0 && (
+            {isTotalWinningsVisible && runningSummary && runningSummary.chips > 0 && (
                 <div 
                     className={styles.totalWinningsLabel}
                     style={{ 
@@ -479,7 +505,7 @@ export default function App() {
                         ))}
 
                         {/* Double Down Button - Positioned relative to hands container */}
-                        {isDrawAreaVisible && (
+                        {isDrawAreaVisible && hasDoubleDownRelic && (
                             <div
                                 className={`${styles.doubleDownSpot} ${canDoubleDown ? styles.doubleDownActive : ''} ${interactionMode === 'double_down_select' ? styles.doubleDownSelected : ''} ${doubleDownHoverSuppressed ? styles.doubleDownHoverSuppressed : ''}`}
                                 onClick={(e) => {

@@ -5,6 +5,27 @@ import { getBlackjackScore, evaluateHandScore } from '../logic/scoring';
 import { calculateTargetScore } from '../logic/casinoConfig';
 import { RelicManager } from '../logic/relics/manager';
 import type { RelicInstance } from '../logic/relics/types';
+// import { RELIC_REGISTRY } from '../logic/relics/registry';
+
+const getRandomScoringRelics = (count: number, currentInventory: RelicInstance[], excludeIds: string[]) => {
+    const allScoring = RelicManager.getAllRelics().filter(r => r.categories.includes('Scoring') && !excludeIds.includes(r.id));
+    const currentIds = currentInventory.map(i => i.id);
+    const available = allScoring.filter(r => !currentIds.includes(r.id));
+    
+    const picked: RelicInstance[] = [];
+    const pool = [...available];
+    
+    for (let i=0; i<count; i++) {
+        if (pool.length === 0) break;
+        const idx = Math.floor(Math.random() * pool.length);
+        const relic = pool.splice(idx, 1)[0];
+        picked.push({ id: relic.id, state: { ...(relic.properties || {}) } });
+    }
+    return picked;
+};
+
+// Import Gambler Definitions
+import { GAMBLER_DEFINITIONS } from '../logic/gamblers/definitions';
 // import type { RoundSummary } from '../logic/relics/types';
 
 interface GameState {
@@ -38,7 +59,7 @@ interface GameState {
     dealerMessage: string | null;
 
     // Actions
-    startGame: () => void;
+    startGame: (gamblerId?: string) => void;
     dealFirstHand: () => void;
     drawCard: () => void;
     startDoubleDown: () => void;
@@ -144,8 +165,9 @@ export const useGameStore = create<GameState>((set, get) => ({
         });
     },
 
-    startGame: () => {
-        const deck = shuffleDeck(createStandardDeck());
+    startGame: (gamblerId: string = 'default') => {
+        const gambler = GAMBLER_DEFINITIONS.find(g => g.id === gamblerId) || GAMBLER_DEFINITIONS[0];
+        const deck = shuffleDeck(gambler.getInitialDeck());
 
         // Reset to Casino 1 state but don't deal yet
         const emptyHands: PlayerHand[] = Array.from({ length: INITIAL_HAND_COUNT }, (_, i) => ({
@@ -155,6 +177,9 @@ export const useGameStore = create<GameState>((set, get) => ({
             isBust: false,
             blackjackValue: 0
         }));
+
+        // Initialize Inventory from Gambler
+        const initialInventory = gambler.getInitialRelics();
 
         set({
             deck,
@@ -173,7 +198,7 @@ export const useGameStore = create<GameState>((set, get) => ({
             discardPile: [],
             isInitialDeal: true,
             interactionMode: 'default',
-            inventory: [], // Reset runs clear inventory usually
+            inventory: initialInventory,
             runningSummary: null,
             roundSummary: null,
             allWinnersEnlarged: false,
@@ -694,6 +719,11 @@ export const useGameStore = create<GameState>((set, get) => ({
                 blackjackValue: 0
             }));
 
+            // Reward: 1 Random Scoring Relic
+            const currentInv = get().inventory;
+            const reward = getRandomScoringRelics(1, currentInv, ['win', 'viginti']);
+            const newInventory = [...currentInv, ...reward];
+
             set({
                 deck: fullDeck,
                 playerHands: emptyHands,
@@ -710,7 +740,8 @@ export const useGameStore = create<GameState>((set, get) => ({
                 runningSummary: null,
                 roundSummary: null,
                 allWinnersEnlarged: false,
-                dealerVisible: true
+                dealerVisible: true,
+                inventory: newInventory
             });
             return;
         }

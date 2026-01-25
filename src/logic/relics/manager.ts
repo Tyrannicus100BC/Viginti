@@ -5,7 +5,25 @@ import type {
     GameContext, 
     PrioritizedHook
 } from './types';
-import { RELIC_REGISTRY } from './registry';
+import { RELIC_DEFINITIONS } from './definitions';
+
+// Build Registry
+export const RELIC_REGISTRY: Record<string, RelicConfig> = {};
+
+const generateRelicId = (name: string) => name.toLowerCase().replace(/ /g, '_');
+
+RELIC_DEFINITIONS.forEach(def => {
+    const id = def.id || generateRelicId(def.name);
+    const icon = def.icon || `/relics/${id}.png`;
+    
+    RELIC_REGISTRY[id] = {
+        ...def,
+        id,
+        icon,
+        hooks: def.hooks || {}
+    };
+});
+
 
 // Helper to normalize hook to PrioritizedHook
 function normalizeHook<T>(hook: T | PrioritizedHook<T>): PrioritizedHook<T> {
@@ -18,6 +36,10 @@ function normalizeHook<T>(hook: T | PrioritizedHook<T>): PrioritizedHook<T> {
 export class RelicManager {
     static getRelicConfig(id: string): RelicConfig | undefined {
         return RELIC_REGISTRY[id];
+    }
+
+    static getAllRelics(): RelicConfig[] {
+        return Object.values(RELIC_REGISTRY);
     }
 
     // Execute a value hook across all active relics

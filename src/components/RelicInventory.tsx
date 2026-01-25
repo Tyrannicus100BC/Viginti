@@ -1,17 +1,18 @@
 
 import React, { useState } from 'react';
 import { useGameStore } from '../store/gameStore';
-import { RELIC_REGISTRY } from '../logic/relics/registry';
+import { RelicManager } from '../logic/relics/manager';
 import { RelicTooltip } from './RelicTooltip';
 import { TransparentImage } from './TransparentImage';
 
 export const RelicInventory: React.FC = () => {
     const { inventory, activeRelicId } = useGameStore();
+    const visibleInventory = inventory.filter(instance => instance.id !== 'win' && instance.id !== 'viginti');
     // Track index because we might have duplicate relic types
     const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
     const [tooltipPos, setTooltipPos] = useState({ top: 0, left: 0 });
 
-    if (inventory.length === 0) return null;
+    if (visibleInventory.length === 0) return null;
 
     return (
         <div style={{
@@ -27,8 +28,8 @@ export const RelicInventory: React.FC = () => {
             pointerEvents: 'none',
             isolation: 'isolate' // Force a new stacking context root
         }}>
-            {inventory.map((instance, index) => {
-                const config = RELIC_REGISTRY[instance.id];
+            {visibleInventory.map((instance, index) => {
+                const config = RelicManager.getRelicConfig(instance.id);
                 if (!config) return null;
 
                 const isActive = activeRelicId === instance.id;
@@ -105,10 +106,10 @@ export const RelicInventory: React.FC = () => {
                 );
             })}
 
-            {hoveredIndex !== null && inventory[hoveredIndex] && RELIC_REGISTRY[inventory[hoveredIndex].id] && (
+            {hoveredIndex !== null && visibleInventory[hoveredIndex] && RelicManager.getRelicConfig(visibleInventory[hoveredIndex].id) && (
                 <RelicTooltip 
-                    relic={RELIC_REGISTRY[inventory[hoveredIndex].id]}
-                    displayValues={inventory[hoveredIndex].state}
+                    relic={RelicManager.getRelicConfig(visibleInventory[hoveredIndex].id)!}
+                    displayValues={visibleInventory[hoveredIndex].state}
                     hideIcon={true}
                     style={{
                         position: 'absolute',

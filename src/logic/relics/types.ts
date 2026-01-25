@@ -3,20 +3,56 @@ import type { Card, HandScore, ScoringCriterionId } from '../../types';
 
 export type HookType = 'value' | 'interrupt';
 
-export interface Relic {
+export type Relic = {
     id: string;
     name: string;
     description: string;
-    category?: string;
+    categories: string[];
+    icon?: string;
+    handType?: {
+        id: ScoringCriterionId;
+        name: string;
+        chips: number;
+        mult: number;
+        order: number;
+        includesCards?: boolean;
+    };
+}
+
+export type RelicDefinition = {
+    name: string;
+    categories: string[];
+    description: string;
+    properties?: Record<string, any>;
+    hooks?: RelicHooks;
+    handType?: {
+        id: ScoringCriterionId;
+        name: string;
+        chips: number;
+        mult: number;
+        order: number;
+        includesCards?: boolean;
+    };
+    // Optional overrides if strict control is needed
+    id?: string;
     icon?: string;
 }
 
-export interface RelicConfig extends Relic {
+export type RelicConfig = Relic & {
     hooks: RelicHooks;
     properties?: Record<string, any>;
+    handType?: {
+        id: ScoringCriterionId; // Maps to the ID used in criteria
+        name: string;      // Display Name
+        chips: number;     // Base Chips
+        mult: number;      // Base Mult
+        order: number;     // Sort order for UI
+        chipCards?: boolean;
+    };
 }
 
-export interface RelicInstance {
+
+export type RelicInstance = {
     id: string;
     state: Record<string, any>;
 }
@@ -37,7 +73,7 @@ export function withPriority<T>(priority: number, handler: T): PrioritizedHook<T
 
 // Map of hook names to their handler signatures
 // Values can be either the function directly (default priority 0) or a PrioritizedHook
-export interface RelicHooks {
+export type RelicHooks = {
     // Value Hooks (Sync, expected to return modified value)
     getDealsPerCasino?: ValueHook<(value: number, context: GameContext, relicState: any) => number>;
     getDealerStopValue?: ValueHook<(value: number, context: GameContext, relicState: any) => number>;
@@ -53,7 +89,7 @@ export interface RelicHooks {
 
 export type ValueHook<T> = T | PrioritizedHook<T>;
 
-export interface HighlightOptions {
+export type HighlightOptions = {
     preDelay?: number;
     duration?: number;
     postDelay?: number;
@@ -62,32 +98,33 @@ export interface HighlightOptions {
 
 export type HighlightRelicFn = (relicId: string, options?: HighlightOptions) => Promise<void>;
 
-export interface GameContext {
+export type GameContext = {
     inventory: RelicInstance[]; // List of relic instances
 }
 
-export interface CardValueContext extends GameContext {
+export type CardValueContext = GameContext & {
     card: Card;
 }
 
-export interface HandContext extends GameContext {
+export type HandContext = GameContext & {
     handCards: Card[];
     isWin: boolean;
     isDoubled: boolean;
     handsRemaining: number;
+    blackjackValue: number;
 }
 
-export interface InterruptContext extends GameContext {
+export type InterruptContext = GameContext & {
     highlightRelic: HighlightRelicFn;
 }
 
-export interface HandCompletionContext extends InterruptContext {
+export type HandCompletionContext = InterruptContext & {
     handCards: Card[];
     score: HandScore;
     modifyRunningSummary: (chipsToAdd: number, multToAdd: number) => void;
 }
 
-export interface RoundCompletionContext extends InterruptContext {
+export type RoundCompletionContext = InterruptContext & {
     wins: number;
     losses: number;
     vigintis: number;
@@ -96,19 +133,20 @@ export interface RoundCompletionContext extends InterruptContext {
     playerHands: any[]; // Avoid circular dependency with PlayerHand from main types
 }
 
-export interface RoundSummary {
+export type RoundSummary = {
     totalChips: number;
     totalMult: number;
     finalScore: number;
 }
 
-export interface RoundContext extends GameContext {
+export type RoundContext = GameContext & {
     wins: number;
     losses: number;
     vigintis: number; // blackjack wins
 }
 
-export interface ScoreRowContext extends InterruptContext {
+export type ScoreRowContext = InterruptContext & {
     criterionId: ScoringCriterionId;
     score: HandScore;
 }
+

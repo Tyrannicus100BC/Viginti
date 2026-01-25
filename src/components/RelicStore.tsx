@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { useGameStore } from '../store/gameStore';
-import { RELIC_REGISTRY } from '../logic/relics/registry';
+import { RelicManager } from '../logic/relics/manager';
 import { RelicTooltip } from './RelicTooltip';
 
 interface RelicStoreProps {
@@ -11,11 +11,11 @@ interface RelicStoreProps {
 export const RelicStore: React.FC<RelicStoreProps> = ({ onClose }) => {
     const { inventory, addRelic, removeRelic } = useGameStore();
 
-    const allRelics = Object.values(RELIC_REGISTRY);
+    const allRelics = RelicManager.getAllRelics();
 
     // Group relics by category
     const groupedRelics = allRelics.reduce((acc, relic) => {
-        const category = relic.category || 'Uncategorized';
+        const category = relic.categories[0] || 'Uncategorized';
         if (!acc[category]) acc[category] = [];
         acc[category].push(relic);
         return acc;

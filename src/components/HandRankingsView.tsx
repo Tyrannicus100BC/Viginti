@@ -1,23 +1,25 @@
 import React from 'react';
 import styles from './HandRankingsView.module.css';
-import { SCORING_RULES } from '../logic/scoring';
-import type { ScoringCriterionId } from '../types';
+import { formatHandChips, formatHandMult } from '../logic/formatters';
 
 interface HandRankingsViewProps {
+
     onClose: () => void;
 }
 
+import { useGameStore } from '../store/gameStore';
+import { RelicManager } from '../logic/relics/manager';
 
-const ORDERED_IDS = [
-    'viginti',
-    'win',
-    'double_down',
-    'pair',
-    'straight',
-    'flush'
-];
 
 export const HandRankingsView: React.FC<HandRankingsViewProps> = ({ onClose }) => {
+    const inventory = useGameStore(state => state.inventory);
+
+    // Filter inventory for Scoring Relics and sort them
+    const scoringRelics = inventory
+        .map(inst => ({ config: RelicManager.getRelicConfig(inst.id), state: inst.state }))
+        .filter((item): item is { config: NonNullable<typeof item.config>; state: any } => !!item.config && !!item.config.handType)
+        .sort((a, b) => (a.config.handType!.order ?? 99) - (b.config.handType!.order ?? 99));
+
     return (
         <div className={styles.overlay} onClick={onClose}>
             <div className={styles.modal} onClick={e => e.stopPropagation()}>
@@ -31,27 +33,30 @@ export const HandRankingsView: React.FC<HandRankingsViewProps> = ({ onClose }) =
                         <span className={styles.multHeader}>Mult</span>
                     </div>
 
-                    {ORDERED_IDS.map((id, index) => {
-                        const rule = SCORING_RULES[id as ScoringCriterionId];
-                        if (!rule) return null;
-                        const isLast = index === ORDERED_IDS.length - 1;
+                    {scoringRelics.map((item, index) => {
+                        const { config } = item;
+                        if (!config.handType) return null;
+                        const { name, chips, mult, chipCards } = config.handType;
+                        const isLast = index === scoringRelics.length - 1;
 
-                        // Dynamic text mapping
-                        let scoreText = `$${rule.chips}`;
-                        if (id === 'double_down') {
-                            scoreText = '-'; // No chips
-                        } else if (rule.chips === 0) {
-                            scoreText = 'Cards';
+                        const scoreText = formatHandChips(chips, chipCards);
+                        const multText = formatHandMult(mult);
+                        
+                        if (chips === 0 && mult === 0) {
+                             // E.g. purely card based?
                         }
 
+                        // Special styling for Viginti
+                        const isViginti = config.id === 'viginti';
+
                         return (
-                            <div key={rule.id} className={`${styles.row} ${isLast ? styles.lastInTier : ''}`}>
-                                <span className={`${styles.handName} ${id === 'viginti' ? styles.isViginti : ''}`}>{rule.name}</span>
+                            <div key={config.id} className={`${styles.row} ${isLast ? styles.lastInTier : ''}`}>
+                                <span className={`${styles.handName} ${isViginti ? styles.isViginti : ''}`}>{name}</span>
                                 <span className={`${styles.chips} ${styles.dynamicText}`}>
                                     {scoreText}
                                 </span>
                                 <span className={styles.multiplier}>
-                                    {rule.mult === 0 ? '-' : `x${rule.mult.toFixed(1)}`}
+                                    {mult === 0 ? '-' : multText}
                                 </span>
                             </div>
                         );
