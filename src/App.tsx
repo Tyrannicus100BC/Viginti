@@ -702,7 +702,7 @@ export default function App() {
 
             {showDeck && (
                 <DeckView
-                    remainingDeck={deck}
+                    remainingDeck={[...deck, ...((!dealer.isRevealed && dealer.cards.length > 0) ? [dealer.cards[0]] : [])]}
                     activeCards={activeCards}
                     onClose={() => {
                         setShowDeck(false);

@@ -99,8 +99,53 @@
 .inactive {
     background: rgba(255,255,255,0.1);
     color: rgba(255,255,255,0.2) !important;
-    text-decoration: line-through;
-    opacity: 0.4;
+    text-decoration: none; /* Removed line-through as we use pips now */
+    opacity: 0.6;
     box-shadow: none;
     transform: scale(0.95);
+}
+
+.miniCardContent {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+
+.pipsContainer {
+    display: flex;
+    gap: 2px;
+    margin-top: 2px;
+    height: 6px; /* Fixed height to keep alignment */
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    max-width: 100%;
+}
+
+.pip {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+}
+
+.pipRemaining {
+    background-color: currentColor;
+    opacity: 0.9;
+}
+
+.pipDealt {
+    border: 1px solid currentColor;
+    opacity: 0.3;
+    background-color: transparent;
+    box-sizing: border-box;
+}
+
+.emptySlot {
+    width: 45px; /* Match min-width of miniCard */
+    height: 100%;
+    opacity: 0.1;
+    background: rgba(255,255,255,0.05);
+    border-radius: 6px;
 }
