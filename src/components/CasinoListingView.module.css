@@ -17,11 +17,14 @@
     border-radius: 12px;
     width: 90%;
     max-width: 800px;
+    max-height: 90%;
     box-shadow: 0 10px 25px rgba(0,0,0,0.5);
     border: 1px solid #34495e;
     color: #ecf0f1;
     position: relative;
-    overflow: visible;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
 }
 
 .modal h2 {
@@ -35,7 +38,7 @@
 }
 
 .scrollContainer {
-    max-height: 60vh;
+    flex: 1;
     overflow-y: auto;
     padding-right: 10px;
 }

@@ -18,40 +18,32 @@ const getRandomItem = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.len
 
 export const GAMBLER_DEFINITIONS: GamblerDefinition[] = [
     {
-        id: 'mathematician',
-        name: 'The Mathematician',
-        description: 'Calculated and precise. Removes all face cards for a number-heavy deck, starting with powerful Flush synergies.',
-        getInitialDeck: () => {
-            const deck = createStandardDeck();
-            // Remove Face Cards (J, Q, K)
-            return deck.filter(c => !['J', 'Q', 'K'].includes(c.rank));
-        },
-        getInitialRelics: () => {
-            // "Two random Flush scoring relics"
-            const allRelics = RelicManager.getAllRelics();
-            // Filter for relics that are BOTH 'Scoring' (add rule) and 'Flush' (related)
-            const flushScoring = allRelics
-                .filter(r => r.categories.includes('Scoring') && r.categories.includes('Flush'))
-                .map(r => r.id);
-            
-            // Pick 2 unique
-            const shuffled = [...flushScoring].sort(() => Math.random() - 0.5);
-            const selected = shuffled.slice(0, 2);
-            
-            return selected.map(id => getRelicInstance(id));
-        }
-    },
-    {
         id: 'default',
         name: 'The Tourist',
         description: 'Just here for a good time. Starts with a standard 52-card deck and a balanced set of scoring relics.',
         getInitialDeck: () => createStandardDeck(),
         getInitialRelics: () => [
-            getRelicInstance('win'),
+
             getRelicInstance('viginti'),
-            getRelicInstance('pair_sc'),
-            getRelicInstance('straight_sc'),
-            getRelicInstance('flush_sc')
+            getRelicInstance('rank_run_chips'),
+            getRelicInstance('straight_run_chips'),
+            getRelicInstance('flush_run_chips')
+        ]
+    },
+    {
+        id: 'mathematician',
+        name: 'The Mathematician',
+        description: 'Calculated and precise. Removes all face cards for a number-heavy deck, starting with powerful Straight synergies.',
+        getInitialDeck: () => {
+            const deck = createStandardDeck();
+            // Remove Face Cards (J, Q, K)
+            return deck.filter(c => !['J', 'Q', 'K'].includes(c.rank));
+        },
+        getInitialRelics: () => [
+            getRelicInstance('straight_pair_chips'),
+            getRelicInstance('straight_pair_mult'),
+            getRelicInstance('straight_triple_chips'),
+            getRelicInstance('straight_triple_mult'),
         ]
     },
     {
@@ -82,20 +74,47 @@ export const GAMBLER_DEFINITIONS: GamblerDefinition[] = [
             return deck;
         },
         getInitialRelics: () => {
-            // Win, Viginti, and one other random scoring relic
-            const fixed = [getRelicInstance('win'), getRelicInstance('viginti')];
-            
-            // Find "Scoring" category relics, exclude Win/Viginti
             const allRelics = RelicManager.getAllRelics();
-            const scoringPool = allRelics
-                .filter(r => r.categories.includes('Scoring') && !['win', 'viginti'].includes(r.id))
+            const flushFilter = allRelics
+                .filter(r => r.categories.includes('Angle') && r.categories.includes('Flush'))
                 .map(r => r.id);
             
-            const randomId = getRandomItem(scoringPool);
+            // Pick 3 unique
+            const shuffled = [...flushFilter].sort(() => Math.random() - 0.5);
+            const selected = shuffled.slice(0, 3);
             
-            if (randomId) {
-                fixed.push(getRelicInstance(randomId));
-            }
+            return selected.map(id => getRelicInstance(id));
+        }
+    },
+    {
+        id: 'maniac',
+        name: 'The Maniac',
+        description: 'Driven by high stakes and royalty. Starts with action-oriented charms and a broad range of scoring potential.',
+        getInitialDeck: () => createStandardDeck(),
+        getInitialRelics: () => {
+            const fixed = [
+                getRelicInstance('double_down'),
+                getRelicInstance('royalty'),
+
+                getRelicInstance('viginti')
+            ];
+            
+            const allRelics = RelicManager.getAllRelics();
+            
+            const getRandomAngle = (category: string) => {
+                const pool = allRelics
+                    .filter(r => r.categories.includes('Angle') && r.categories.includes(category))
+                    .map(r => r.id);
+                return getRandomItem(pool);
+            };
+
+            const rankAngle = getRandomAngle('Rank');
+            const flushAngle = getRandomAngle('Flush');
+            const straightAngle = getRandomAngle('Straight');
+
+            if (rankAngle) fixed.push(getRelicInstance(rankAngle));
+            if (flushAngle) fixed.push(getRelicInstance(flushAngle));
+            if (straightAngle) fixed.push(getRelicInstance(straightAngle));
             
             return fixed;
         }

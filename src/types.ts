@@ -22,7 +22,15 @@ export type ScoringCriterionId =
   | 'flush'
   | 'straight'
   | 'double_down'
-  | 'three_of_a_kind';
+  | 'rank_pair_chips' | 'rank_pair_mult'
+  | 'rank_triple_chips' | 'rank_triple_mult'
+  | 'rank_run_chips' | 'rank_run_mult'
+  | 'flush_pair_chips' | 'flush_pair_mult'
+  | 'flush_triple_chips' | 'flush_triple_mult'
+  | 'flush_run_chips' | 'flush_run_mult'
+  | 'straight_pair_chips' | 'straight_pair_mult'
+  | 'straight_triple_chips' | 'straight_triple_mult'
+  | 'straight_run_chips' | 'straight_run_mult';
 
 export interface ScoringDetail {
   id: string; // e.g. 'win', 'pair', 'sequence'

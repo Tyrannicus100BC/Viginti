@@ -14,6 +14,197 @@ const getRankCounts = (cards: Card[]) => {
     return counts;
 };
 
+
+// Generic Group Finder
+const getStandardScore = (cards: Card[], baseChips: number, baseMult: number, isRun: boolean, relicState?: any) => {
+    const cardChips = cards.reduce((s, c) => s + RANK_VALUES[c.rank], 0);
+    let finalChips = cardChips + baseChips;
+    let finalMult = baseMult;
+
+    if (isRun && relicState && cards.length > 1) {
+        const extras = cards.length - 1;
+        finalChips += extras * (relicState.per_card_chips || 0);
+        finalMult += extras * (relicState.per_card_mult || 0);
+    }
+    
+    return { chips: finalChips, mult: finalMult };
+};
+
+const findBestGroup = (cards: Card[], type: 'rank' | 'flush' | 'straight', fixedLen: number): Card[] | null => {
+    let candidates: Card[][] = [];
+
+    if (type === 'rank') {
+        const counts = getRankCounts(cards);
+        Object.keys(counts).forEach(rank => {
+            const group = cards.filter(c => c.rank === rank)
+                               .sort((a, b) => POKER_ORDER[b.rank] - POKER_ORDER[a.rank]); // Sort desc just in case
+            if (fixedLen > 0) {
+               if (group.length >= fixedLen) {
+                   // Take top N
+                   candidates.push(group.slice(0, fixedLen));
+               }
+            } else {
+               if (group.length >= 2) {
+                   candidates.push(group);
+               }
+            }
+        });
+    } else if (type === 'flush') {
+        const suits: Record<string, Card[]> = {};
+        cards.forEach(c => {
+            if (!suits[c.suit]) suits[c.suit] = [];
+            suits[c.suit].push(c);
+        });
+        
+        Object.values(suits).forEach(group => {
+            // Sort by value desc for subsetting
+            group.sort((a, b) => POKER_ORDER[b.rank] - POKER_ORDER[a.rank]);
+            
+            if (fixedLen > 0) {
+                if (group.length >= fixedLen) {
+                     candidates.push(group.slice(0, fixedLen));
+                }
+            } else {
+                if (group.length >= 2) {
+                    candidates.push(group);
+                }
+            }
+        });
+    } else if (type === 'straight') {
+        const getRuns = (cardList: Card[], useLowAce: boolean) => {
+            const getOrderVal = (c: Card) => (useLowAce && c.rank === 'A') ? 1 : POKER_ORDER[c.rank];
+            const sorted = [...cardList].sort((a, b) => getOrderVal(a) - getOrderVal(b));
+            
+            let localCandidates: Card[][] = [];
+            if (sorted.length === 0) return localCandidates;
+
+            const pushCandidate = (run: Card[]) => {
+                if (run.length >= (fixedLen || 2)) {
+                    if (fixedLen > 0) {
+                        // Find the best sub-run of exactly fixedLen by maximizing chips
+                        let bestSub: Card[] = [];
+                        let maxChips = -1;
+                        for (let start = 0; start <= run.length - fixedLen; start++) {
+                            const sub = run.slice(start, start + fixedLen);
+                            const chips = sub.reduce((s, c) => s + RANK_VALUES[c.rank], 0);
+                            if (chips > maxChips) {
+                                maxChips = chips;
+                                bestSub = sub;
+                            }
+                        }
+                        localCandidates.push(bestSub);
+                    } else {
+                        localCandidates.push([...run]);
+                    }
+                }
+            };
+
+            let currentRun: Card[] = [sorted[0]];
+            for (let i = 1; i < sorted.length; i++) {
+                const prev = currentRun[currentRun.length - 1];
+                const curr = sorted[i];
+                const pVal = getOrderVal(prev);
+                const cVal = getOrderVal(curr);
+
+                if (cVal === pVal + 1) {
+                    currentRun.push(curr);
+                } else if (cVal === pVal) {
+                    continue;
+                } else {
+                    pushCandidate(currentRun);
+                    currentRun = [curr];
+                }
+            }
+            pushCandidate(currentRun);
+            return localCandidates;
+        };
+
+        // Standard candidates (Ace = 14)
+        candidates.push(...getRuns(cards, false));
+
+        // Ace-low candidates (Ace = 1)
+        if (cards.some(c => c.rank === 'A')) {
+            candidates.push(...getRuns(cards, true));
+        }
+    }
+
+    if (candidates.length === 0) return null;
+
+    // Sort candidates
+    // 1. Length (Desc)
+    // 2. Sum Chips (Desc)
+    candidates.sort((a, b) => {
+        if (a.length !== b.length) return b.length - a.length;
+        const sumA = a.reduce((s, c) => s + RANK_VALUES[c.rank], 0);
+        const sumB = b.reduce((s, c) => s + RANK_VALUES[c.rank], 0);
+        return sumB - sumA;
+    });
+
+    return candidates[0];
+};
+
+const evaluateStandardRelic = (score: HandScore, context: HandContext, type: 'rank' | 'flush' | 'straight', fixedLen: number, relicState?: any) => {
+    const bestGroup = findBestGroup(context.handCards, type, fixedLen);
+    if (bestGroup) {
+         // get definition from context? Or relicState?
+         // We don't have easy access to the definition 'chips'/'mult' directly from here unless we hardcode or look up.
+         // But `RELIC_DEFINITIONS` has it. However `evaluateStandardRelic` is generic.
+         // We can fallback to fetching from `relicState` if we passed it, but `definitions` defined static values in `handType`.
+         // Wait, `handType` in specific definitions:
+         // Rank Pair: chips 10, mult 2.
+         // These are APPLIED by the system automatically if we return a criteria match?
+         // No, `onEvaluateHandScore` calculates the score.
+         // The `handType` prop in definition is metadata, likely used for UI or defaults.
+         // I should probably look up the RELIC_DEFINITIONS or pass the values.
+         // Standard: 
+         // Rank Pair: 10, 2
+         // Rank Triple: 20, 3
+         // Rank Run: 0, 0 (calc dynamic)
+         
+         // HARDCODED MAP for simplicity as per Plan
+         const PROPS: Record<string, {c: number, m: number}> = {
+             'rank_pair': {c: 10, m: 2},
+             'rank_triple': {c: 20, m: 3},
+             'rank_run': {c: 0, m: 0},
+             'flush_pair': {c: 10, m: 2},
+             'flush_triple': {c: 5, m: 3},
+             'flush_run': {c: 0, m: 0},
+             'straight_pair': {c: 10, m: 2},
+             'straight_triple': {c: 20, m: 3},
+             'straight_run': {c: 0, m: 0},
+         };
+         
+         // specific ID?
+         // We need to know which relic we are.
+         // The caller knows.
+         // Let's assume caller calls with specific ID or I infer from type+len
+         
+         const isRun = fixedLen === 0;
+         let id = `${type}_${isRun ? 'run' : (fixedLen === 2 ? 'pair' : 'triple')}`;
+         
+         // Use relicState properties if available, otherwise fallback to hardcoded defaults (legacy support)
+         const base = PROPS[id] || {c: 0, m: 0};
+         const baseChips = relicState?.base_chips !== undefined ? relicState.base_chips : base.c;
+         const baseMult = relicState?.base_mult !== undefined ? relicState.base_mult : base.m;
+         
+         const { chips, mult } = getStandardScore(bestGroup, baseChips, baseMult, isRun, relicState);
+         
+         const newCriteria = [...score.criteria, {
+             id: id as any,
+             name: id.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()),
+             count: 1,
+             chips: chips,
+             multiplier: mult,
+             cardIds: bestGroup.map(c => c.id)
+         }];
+         
+         const totalChips = newCriteria.reduce((s, c) => s + c.chips, 0);
+         const totalMult = newCriteria.reduce((s, c) => s + c.multiplier, 0);
+         return { ...score, criteria: newCriteria, totalChips, totalMultiplier: totalMult, finalScore: Math.floor(totalChips * totalMult) };
+    }
+    return score;
+}
+
 export const Hooks = {
     // JMarr Category
     deft_extra_draw: {
@@ -97,26 +288,7 @@ export const Hooks = {
     },
 
     // Scoring Category
-    win_relic: {
-        onEvaluateHandScore: (score: HandScore, context: HandContext) => {
-            const hasViginti = score.criteria.some(c => c.id === 'viginti');
-            if (context.isWin && !hasViginti) {
-                const cardChips = context.handCards.reduce((s, c) => s + RANK_VALUES[c.rank], 0);
-                const newCriteria = [...score.criteria, {
-                    id: 'win' as any,
-                    name: 'Win',
-                    count: 1,
-                    chips: cardChips + 10,
-                    multiplier: 1,
-                    cardIds: context.handCards.map(c => c.id)
-                }];
-                const totalChips = newCriteria.reduce((s, c) => s + c.chips, 0);
-                const totalMult = newCriteria.reduce((s, c) => s + c.multiplier, 0);
-                return { ...score, criteria: newCriteria, totalChips, totalMultiplier: totalMult, finalScore: Math.floor(totalChips * totalMult) };
-            }
-            return score;
-        }
-    },
+
     viginti_relic: {
         onEvaluateHandScore: withPriority(-10, (score: HandScore, context: HandContext) => {
             if (context.blackjackValue === 21) {
@@ -126,6 +298,19 @@ export const Hooks = {
                     name: 'Viginti',
                     count: 1,
                     chips: cardChips + 50,
+                    multiplier: 1,
+                    cardIds: context.handCards.map(c => c.id)
+                }];
+                const totalChips = newCriteria.reduce((s, c) => s + c.chips, 0);
+                const totalMult = newCriteria.reduce((s, c) => s + c.multiplier, 0);
+                return { ...score, criteria: newCriteria, totalChips, totalMultiplier: totalMult, finalScore: Math.floor(totalChips * totalMult) };
+            } else if (context.isWin) {
+                const cardChips = context.handCards.reduce((s, c) => s + RANK_VALUES[c.rank], 0);
+                const newCriteria = [...score.criteria, {
+                    id: 'win' as any,
+                    name: 'Win',
+                    count: 1,
+                    chips: cardChips + 10,
                     multiplier: 1,
                     cardIds: context.handCards.map(c => c.id)
                 }];
@@ -156,177 +341,46 @@ export const Hooks = {
             return score;
         }
     },
-    
-    // Multi Hand Types
-    every_pair: {
-        onEvaluateHandScore: (score: HandScore, context: HandContext) => {
-            const rankSorted = [...context.handCards].sort((a, b) => POKER_ORDER[a.rank] - POKER_ORDER[b.rank]);
-            const matches = findMatches(rankSorted, SCORING_RULES['pair'], (a, b) => a.rank === b.rank, true);
-            if (matches.length > 0) {
-                 const newCriteria = [...score.criteria];
-                 matches.forEach(m => {
-                    newCriteria.push({
-                        id: 'pair',
-                        name: 'Pair',
-                        count: 1,
-                        chips: m.chips,
-                        multiplier: m.multiplier,
-                        cardIds: m.cardIds,
-                        matches: [m]
-                    });
-                 });
-                 
-                const totalChips = newCriteria.reduce((s, c) => s + c.chips, 0);
-                const totalMult = newCriteria.reduce((s, c) => s + c.multiplier, 0);
-                return { ...score, criteria: newCriteria, totalChips, totalMultiplier: totalMult, finalScore: Math.floor(totalChips * totalMult) };
-            }
-            return score;
-        }
+
+
+    // Standardized Helper Logic
+    rank_pair: {
+        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => 
+            evaluateStandardRelic(score, context, 'rank', 2, relicState)
     },
-    every_straight: {
-        onEvaluateHandScore: (score: HandScore, context: HandContext) => {
-            const straightSorted = [...context.handCards].sort((a, b) => POKER_ORDER[a.rank] - POKER_ORDER[b.rank]);
-            const matches = findMatches(straightSorted, SCORING_RULES['straight'], (a, b) => {
-                const rA = POKER_ORDER[a.rank];
-                const rB = POKER_ORDER[b.rank];
-                if (rB === rA + 1) return true;
-                if (a.rank === 'A' && b.rank === '2') return true;
-                return false;
-            }, false);
-            
-            if (matches.length > 0) {
-                 const newCriteria = [...score.criteria];
-                 matches.forEach(m => {
-                    newCriteria.push({
-                        id: 'straight',
-                        name: 'Straight',
-                        count: 1,
-                        chips: m.chips,
-                        multiplier: m.multiplier,
-                        cardIds: m.cardIds,
-                        matches: [m]
-                    });
-                 });
-                const totalChips = newCriteria.reduce((s, c) => s + c.chips, 0);
-                const totalMult = newCriteria.reduce((s, c) => s + c.multiplier, 0);
-                return { ...score, criteria: newCriteria, totalChips, totalMultiplier: totalMult, finalScore: Math.floor(totalChips * totalMult) };
-            }
-            return score;
-        }
+    rank_triple: {
+        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => 
+            evaluateStandardRelic(score, context, 'rank', 3, relicState)
     },
-    every_flush: {
-        onEvaluateHandScore: (score: HandScore, context: HandContext) => {
-            const flushSorted = [...context.handCards].sort((a, b) => {
-                if (a.suit !== b.suit) return a.suit.localeCompare(b.suit);
-                return POKER_ORDER[a.rank] - POKER_ORDER[b.rank];
-            });
-            const matches = findMatches(flushSorted, SCORING_RULES['flush'], (a, b) => {
-                return a.suit === b.suit;
-            }, true);
-            
-            if (matches.length > 0) {
-                 const newCriteria = [...score.criteria];
-                 matches.forEach(m => {
-                    newCriteria.push({
-                        id: 'flush',
-                        name: 'Flush',
-                        count: 1,
-                        chips: m.chips,
-                        multiplier: m.multiplier,
-                        cardIds: m.cardIds,
-                        matches: [m]
-                    });
-                 });
-                const totalChips = newCriteria.reduce((s, c) => s + c.chips, 0);
-                const totalMult = newCriteria.reduce((s, c) => s + c.multiplier, 0);
-                return { ...score, criteria: newCriteria, totalChips, totalMultiplier: totalMult, finalScore: Math.floor(totalChips * totalMult) };
-            }
-            return score;
-        }
+    rank_run: {
+        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => 
+            evaluateStandardRelic(score, context, 'rank', 0, relicState)
+    },
+    flush_pair: {
+        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => 
+            evaluateStandardRelic(score, context, 'flush', 2, relicState)
+    },
+    flush_triple: {
+        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => 
+            evaluateStandardRelic(score, context, 'flush', 3, relicState)
+    },
+    flush_run: {
+        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => 
+            evaluateStandardRelic(score, context, 'flush', 0, relicState)
+    },
+    straight_pair: {
+        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => 
+            evaluateStandardRelic(score, context, 'straight', 2, relicState)
+    },
+    straight_triple: {
+        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => 
+            evaluateStandardRelic(score, context, 'straight', 3, relicState)
+    },
+    straight_run: {
+        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => 
+            evaluateStandardRelic(score, context, 'straight', 0, relicState)
     },
 
-    // Single Hand Types
-    single_pair: {
-        onEvaluateHandScore: (score: HandScore, context: HandContext) => {
-            const rankSorted = [...context.handCards].sort((a, b) => POKER_ORDER[a.rank] - POKER_ORDER[b.rank]);
-            const matches = findMatches(rankSorted, { chips: 10, mult: 1 }, (a, b) => a.rank === b.rank, true);
-            
-            if (matches.length > 0) {
-                 const bestMatch = matches.sort((a, b) => b.chips - a.chips)[0];
-                 
-                 const newCriteria = [...score.criteria, {
-                    id: 'pair',
-                    name: 'Pair',
-                    count: 1,
-                    chips: bestMatch.chips,
-                    multiplier: bestMatch.multiplier,
-                    cardIds: bestMatch.cardIds,
-                    matches: [bestMatch]
-                 }];
-                const totalChips = newCriteria.reduce((s, c) => s + c.chips, 0);
-                const totalMult = newCriteria.reduce((s, c) => s + c.multiplier, 0);
-                return { ...score, criteria: newCriteria, totalChips, totalMultiplier: totalMult, finalScore: Math.floor(totalChips * totalMult) };
-            }
-            return score;
-        }
-    },
-    single_straight: {
-        onEvaluateHandScore: (score: HandScore, context: HandContext) => {
-            const straightSorted = [...context.handCards].sort((a, b) => POKER_ORDER[a.rank] - POKER_ORDER[b.rank]);
-            const matches = findMatches(straightSorted, { chips: 30, mult: 2 }, (a, b) => {
-                 const rA = POKER_ORDER[a.rank];
-                const rB = POKER_ORDER[b.rank];
-                if (rB === rA + 1) return true;
-                if (a.rank === 'A' && b.rank === '2') return true;
-                return false;
-            }, false);
-            
-            if (matches.length > 0) {
-                 const bestMatch = matches.sort((a, b) => b.chips - a.chips)[0];
-                 const newCriteria = [...score.criteria, {
-                    id: 'straight',
-                    name: 'Straight',
-                    count: 1,
-                    chips: bestMatch.chips,
-                    multiplier: bestMatch.multiplier,
-                    cardIds: bestMatch.cardIds,
-                    matches: [bestMatch]
-                 }];
-                const totalChips = newCriteria.reduce((s, c) => s + c.chips, 0);
-                const totalMult = newCriteria.reduce((s, c) => s + c.multiplier, 0);
-                return { ...score, criteria: newCriteria, totalChips, totalMultiplier: totalMult, finalScore: Math.floor(totalChips * totalMult) };
-            }
-            return score;
-        }
-    },
-    single_flush: {
-        onEvaluateHandScore: (score: HandScore, context: HandContext) => {
-            const flushSorted = [...context.handCards].sort((a, b) => {
-                if (a.suit !== b.suit) return a.suit.localeCompare(b.suit);
-                return POKER_ORDER[a.rank] - POKER_ORDER[b.rank];
-            });
-            const matches = findMatches(flushSorted, { chips: 20, mult: 1.5 }, (a, b) => {
-                return a.suit === b.suit;
-            }, true);
-            
-            if (matches.length > 0) {
-                 const bestMatch = matches.sort((a, b) => b.chips - a.chips)[0];
-                 const newCriteria = [...score.criteria, {
-                    id: 'flush',
-                    name: 'Flush',
-                    count: 1,
-                    chips: bestMatch.chips,
-                    multiplier: bestMatch.multiplier,
-                    cardIds: bestMatch.cardIds,
-                    matches: [bestMatch]
-                 }];
-                const totalChips = newCriteria.reduce((s, c) => s + c.chips, 0);
-                const totalMult = newCriteria.reduce((s, c) => s + c.multiplier, 0);
-                return { ...score, criteria: newCriteria, totalChips, totalMultiplier: totalMult, finalScore: Math.floor(totalChips * totalMult) };
-            }
-            return score;
-        }
-    },
 
     // Face / Bonus Chips / Mult Modifiers
     lucky_coin_pair_chips: {

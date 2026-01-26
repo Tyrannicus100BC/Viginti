@@ -17,6 +17,14 @@ export type Relic = {
         order: number;
         chipCards?: boolean;
     };
+    extraHandTypes?: Record<string, {
+        id: ScoringCriterionId;
+        name: string;
+        chips: number;
+        mult: number;
+        order: number;
+        chipCards?: boolean;
+    }>;
 }
 
 export type RelicDefinition = {
@@ -33,6 +41,14 @@ export type RelicDefinition = {
         order: number;
         chipCards?: boolean;
     };
+    extraHandTypes?: Record<string, {
+        id: ScoringCriterionId;
+        name: string;
+        chips: number;
+        mult: number;
+        order: number;
+        chipCards?: boolean;
+    }>;
     // Optional overrides if strict control is needed
     id?: string;
     icon?: string;
@@ -49,6 +65,14 @@ export type RelicConfig = Relic & {
         order: number;     // Sort order for UI
         chipCards?: boolean;
     };
+    extraHandTypes?: Record<string, {
+        id: ScoringCriterionId;
+        name: string;
+        chips: number;
+        mult: number;
+        order: number;
+        chipCards?: boolean;
+    }>;
 }
 
 

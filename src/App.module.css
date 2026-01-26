@@ -40,7 +40,7 @@
 .headerSpacer {
     height: 80px;
     width: 100%;
-    margin-bottom: 25px;
+    margin-bottom: 0px;
     flex-shrink: 0;
 }
 
@@ -882,7 +882,7 @@
     gap: 0;
     padding-top: 0;
     margin-top: 0;
-    width: 100px; /* Reduced to match smaller relics */
+    width: 220px;
     align-items: center;
     pointer-events: none; /* Allow clicks through to board */
     z-index: 50;

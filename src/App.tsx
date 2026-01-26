@@ -503,23 +503,48 @@ export default function App() {
             <div className={styles.gameWrapper}>
                 <div className={styles.sidebarsContainer}>
                     <div className={styles.leftSidebar}>
-                        <div className={styles.zoneLabel}>Charms</div>
-                        <div className={styles.sidebarBox}>
-                            <RelicInventory 
-                                onManage={() => {
-                                    setRelicStoreFilter('Charm');
-                                    setShowRelicStore(true);
-                                }}
-                                enabledCategories={['Charm']}
-                            />
+                        <div 
+                            className={`${styles.zoneLabel} ${debugEnabled ? styles.manageDebugBtn : ''}`}
+                            style={{ 
+                                alignSelf: 'flex-start',
+                                width: 'auto',
+                                marginBottom: 10,
+                                opacity: debugEnabled ? 1 : 0.5,
+                                padding: debugEnabled ? '4px 12px' : 0,
+                                cursor: debugEnabled ? 'pointer' : 'default',
+                                pointerEvents: 'auto'
+                            }}
+                            onClick={debugEnabled ? () => {
+                                setRelicStoreFilter('Charm');
+                                setShowRelicStore(true);
+                            } : undefined}
+                        >
+                            Charms
                         </div>
+                        <RelicInventory 
+                            enabledCategories={['Charm']}
+                        />
                     </div>
                     <div className={styles.sidebar}>
+                        <div 
+                             className={`${styles.zoneLabel} ${debugEnabled ? styles.manageDebugBtn : ''}`}
+                             style={{ 
+                                 alignSelf: 'flex-end',
+                                 width: 'auto',
+                                 marginBottom: 10,
+                                 opacity: debugEnabled ? 1 : 0.5,
+                                 padding: debugEnabled ? '4px 12px' : 0,
+                                 cursor: debugEnabled ? 'pointer' : 'default',
+                                 pointerEvents: 'auto'
+                             }}
+                             onClick={debugEnabled ? () => {
+                                 setRelicStoreFilter('Angle');
+                                 setShowRelicStore(true);
+                             } : undefined}
+                        >
+                            Angles
+                        </div>
                          <RelicInventory 
-                            onManage={() => {
-                                setRelicStoreFilter('Angle');
-                                setShowRelicStore(true);
-                            }}
                             enabledCategories={['Angle']}
                             viewMode="table"
                         />

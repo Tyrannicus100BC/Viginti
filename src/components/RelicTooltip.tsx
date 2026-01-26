@@ -10,9 +10,10 @@ interface RelicTooltipProps {
     style?: React.CSSProperties;
     className?: string;
     hideIcon?: boolean;
+    isRightAligned?: boolean;
 }
 
-export const RelicTooltip: React.FC<RelicTooltipProps> = ({ relic, displayValues, style, className, hideIcon }) => {
+export const RelicTooltip: React.FC<RelicTooltipProps> = ({ relic, displayValues, style, className, hideIcon, isRightAligned }) => {
     const formatDescription = (text: string, values?: Record<string, any>) => {
         const hand = relic.handType;
         const context: any = {
@@ -26,6 +27,19 @@ export const RelicTooltip: React.FC<RelicTooltipProps> = ({ relic, displayValues
                     : undefined
             } : undefined
         };
+
+        if (relic.extraHandTypes) {
+            Object.entries(relic.extraHandTypes).forEach(([key, ht]) => {
+                context[key] = {
+                    ...ht,
+                    chips: ht.chips !== undefined ? formatHandChips(ht.chips, ht.chipCards) : undefined,
+                    mult: ht.mult !== undefined ? formatHandMult(ht.mult) : undefined,
+                    score: ht.chips !== undefined && ht.mult !== undefined 
+                        ? formatHandScore(ht.chips, ht.mult, ht.chipCards) 
+                        : undefined
+                };
+            });
+        }
 
         return text.replace(/\$\{([\w.]+)\}|\{([\w.]+)\}/g, (_, key1, key2) => {
             const key = key1 || key2;
@@ -43,15 +57,19 @@ export const RelicTooltip: React.FC<RelicTooltipProps> = ({ relic, displayValues
         const text = formatDescription(rawText, displayValues);
         // Regex to match:
         // 1. <...> (bracketed text for chips/green highlighting)
-        // 2. [...] (bracketed text for hand highlighting)
-        // 3. x followed by digits (multipliers)
-        // 4. Cards (optionally followed by + and $amount)
-        // 5. $ or + followed by digits, or digits followed by "chips" (chips values)
-        const parts = text.split(/(<[^>]+>|\[.*?\]|x\d+(?:\.\d+)?|Cards(?:\s*\+\s*[\$\+]{0,2}\d+)?|[\$\+]{1,2}\d+(?:\s*chips?)?|\d+\s*chips?)/gi);
+        // 2. {...} (curly braced text for mult/yellow highlighting)
+        // 3. [...] (bracketed text for hand highlighting)
+        // 4. x followed by digits (multipliers)
+        // 5. Cards (optionally followed by + and $amount)
+        // 6. $ or + followed by digits, or digits followed by "chips" (chips values)
+        const parts = text.split(/(<[^>]+>|\{[^}]+\}|\[.*?\]|x\d+(?:\.\d+)?|Cards(?:\s*\+\s*[\$\+]{0,2}\d+)?|[\$\+]{1,2}\d+(?:\s*chips?)?|\d+\s*chips?)/gi);
         
         return parts.map((part, i) => {
             if (part.startsWith('<') && part.endsWith('>')) {
                 return <span key={i} className={styles.chipsValue}>{part.slice(1, -1)}</span>;
+            }
+            if (part.startsWith('{') && part.endsWith('}')) {
+                return <span key={i} className={styles.multValue}>{part.slice(1, -1)}</span>;
             }
             if (part.startsWith('[') && part.endsWith(']')) {
                 return <span key={i} className={styles.handHighlight}>{part.slice(1, -1)}</span>;
@@ -60,8 +78,8 @@ export const RelicTooltip: React.FC<RelicTooltipProps> = ({ relic, displayValues
                 return <span key={i} className={styles.multValue}>{part}</span>;
             }
             if (
-                (/^[\$\+\d]/i.test(part) && (part.startsWith('$') || part.startsWith('+') || part.toLowerCase().includes('chips'))) ||
-                part.toLowerCase().startsWith('cards')
+                (/^[\$\+\d]/i.test(part.trim()) && (part.trim().startsWith('$') || part.trim().startsWith('+') || part.toLowerCase().includes('chips'))) ||
+                part.toLowerCase().trim().startsWith('cards')
             ) {
                 return <span key={i} className={styles.chipsValue}>{part}</span>;
             }
@@ -72,24 +90,38 @@ export const RelicTooltip: React.FC<RelicTooltipProps> = ({ relic, displayValues
     return (
         <div className={`${styles.container} ${className || ''}`} style={style}>
             <div 
-                className={styles.iconContainer}
+                className={styles.header}
                 style={{
-                    // If hiding icon, make it invisible but keep layout space
-                    opacity: hideIcon ? 0 : 1,
-                    visibility: hideIcon ? 'hidden' : 'visible'
+                    flexDirection: isRightAligned ? 'row-reverse' : 'row',
+                    textAlign: isRightAligned ? 'right' : 'left'
                 }}
             >
-                {relic.icon && !hideIcon ? (
-                    <TransparentImage src={relic.icon} alt={relic.name} className={styles.icon} threshold={250} />
-                ) : relic.icon ? null : (
-                    <div className={styles.placeholderIcon}>
-                        {relic.name.substring(0, 2).toUpperCase()}
-                    </div>
-                )}
+                <div 
+                    className={styles.iconContainer}
+                    style={{
+                        opacity: hideIcon ? 0 : 1,
+                        visibility: hideIcon ? 'hidden' : 'visible'
+                    }}
+                >
+                    {relic.icon && !hideIcon ? (
+                        <TransparentImage src={relic.icon} alt={relic.name} className={styles.icon} threshold={250} />
+                    ) : relic.icon ? null : (
+                        <div className={styles.placeholderIcon}>
+                            {relic.name.substring(0, 2).toUpperCase()}
+                        </div>
+                    )}
+                </div>
+                <div className={styles.title} style={{ textAlign: isRightAligned ? 'right' : 'left' }}>
+                    {relic.handType?.name || relic.name}
+                </div>
             </div>
             <div className={styles.content}>
-                <div className={styles.title}>{relic.name}</div>
-                <div className={styles.description}>{renderDescription(relic.description)}</div>
+                <div 
+                    className={styles.description}
+                    style={{ textAlign: isRightAligned ? 'right' : 'left' }}
+                >
+                    {renderDescription(relic.description)}
+                </div>
             </div>
         </div>
     );

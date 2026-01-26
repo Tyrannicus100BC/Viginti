@@ -750,7 +750,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
             // Reward: 1 Random Scoring Relic
             const currentInv = get().inventory;
-            const reward = getRandomScoringRelics(1, currentInv, ['win', 'viginti']);
+            const reward = getRandomScoringRelics(1, currentInv, ['viginti']);
             const newInventory = [...currentInv, ...reward];
 
             set({
