@@ -15,7 +15,7 @@ export type Relic = {
         chips: number;
         mult: number;
         order: number;
-        includesCards?: boolean;
+        chipCards?: boolean;
     };
 }
 
@@ -31,7 +31,7 @@ export type RelicDefinition = {
         chips: number;
         mult: number;
         order: number;
-        includesCards?: boolean;
+        chipCards?: boolean;
     };
     // Optional overrides if strict control is needed
     id?: string;

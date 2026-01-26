@@ -6,16 +6,23 @@ import { RelicTooltip } from './RelicTooltip';
 
 interface RelicStoreProps {
     onClose: () => void;
+    filterCategory?: string;
 }
 
-export const RelicStore: React.FC<RelicStoreProps> = ({ onClose }) => {
+export const RelicStore: React.FC<RelicStoreProps> = ({ onClose, filterCategory }) => {
     const { inventory, addRelic, removeRelic } = useGameStore();
 
     const allRelics = RelicManager.getAllRelics();
+    
+    const displayRelics = filterCategory 
+        ? allRelics.filter(r => r.categories.includes(filterCategory))
+        : allRelics;
 
     // Group relics by category
-    const groupedRelics = allRelics.reduce((acc, relic) => {
-        const category = relic.categories[0] || 'Uncategorized';
+    const groupedRelics = displayRelics.reduce((acc, relic) => {
+        const specificCategories = relic.categories.filter(c => c.toLowerCase() !== 'charm');
+        const category = specificCategories.length > 0 ? specificCategories[0] : (relic.categories[0] || 'Uncategorized');
+
         if (!acc[category]) acc[category] = [];
         acc[category].push(relic);
         return acc;

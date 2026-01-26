@@ -25,12 +25,12 @@ export function formatHandMult(mult: number): string {
     return `x${val}`; 
 }
 
-export function formatHandScore(chips: number, mult: number, chipCards: boolean = false): string {
+export function formatHandScore(chips: number, mult: number, chipCards: boolean = false, separator: string = ' and '): string {
     const chipStr = formatHandChips(chips, chipCards);
     const multStr = formatHandMult(mult);
 
     if (chipStr && multStr) {
-        return `${chipStr} and ${multStr}`;
+        return `${chipStr}${separator}${multStr}`;
     }
     return chipStr || multStr;
 }

@@ -248,7 +248,10 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
     <div
       ref={containerRef}
       className={`${styles.handContainer} ${canSelect ? styles.clickable : ''} ${(isScoringFocus || isEnlarged) ? styles.scoringFocus : ''}`}
-      onClick={canSelect ? onSelect : undefined}
+      onClick={canSelect ? (e) => {
+        e.stopPropagation();
+        onSelect?.();
+      } : undefined}
       style={{ transformOrigin }}
     >
       {/* Scoring List */}

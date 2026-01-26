@@ -5,14 +5,32 @@ import { useGameStore } from '../store/gameStore';
 import { RelicManager } from '../logic/relics/manager';
 import { RelicTooltip } from './RelicTooltip';
 import { TransparentImage } from './TransparentImage';
+import { formatHandChips, formatHandMult, formatHandScore } from '../logic/formatters';
 
 interface RelicInventoryProps {
     onManage?: () => void;
+    enabledCategories?: string[];
+    viewMode?: 'icons' | 'table';
 }
 
-export const RelicInventory: React.FC<RelicInventoryProps> = ({ onManage }) => {
-    const { inventory, activeRelicId } = useGameStore();
-    const visibleInventory = inventory.filter(instance => instance.id !== 'win' && instance.id !== 'viginti');
+export const RelicInventory: React.FC<RelicInventoryProps> = ({ onManage, enabledCategories, viewMode = 'icons' }) => {
+    const { inventory, activeRelicId, debugEnabled } = useGameStore();
+
+    const visibleInventory = inventory.filter(instance => {
+        // 'win' and 'viginti' are now handled by categories (they are 'Angle's)
+        
+        if (enabledCategories && enabledCategories.length > 0) {
+            const config = RelicManager.getRelicConfig(instance.id);
+            if (!config) return false;
+            
+            // Check if relic has at least one of the enabled categories
+            // 'Angle' relics are those with handType. 'Charm' relics are the rest.
+            // Definitions have been updated to include these tags explicitly.
+            return config.categories.some(cat => enabledCategories.includes(cat));
+        }
+        
+        return true;
+    });
     // Track index because we might have duplicate relic types
     const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
     const [tooltipPos, setTooltipPos] = useState({ top: 0, left: 0 });
@@ -20,6 +38,83 @@ export const RelicInventory: React.FC<RelicInventoryProps> = ({ onManage }) => {
     // if (visibleInventory.length === 0) return null; // Remove this to always show Manage button if needed, or keep it if it should only show if you have relics. 
     // Wait, the user said "at the end of the relic list". If list is empty, should it show? 
     // Usually debug buttons are always there.
+
+    if (viewMode === 'table') {
+        const sortedInventory = [...visibleInventory].sort((a, b) => {
+             const configA = RelicManager.getRelicConfig(a.id);
+             const configB = RelicManager.getRelicConfig(b.id);
+             // Sort by order if available, else name
+             const orderA = configA?.handType?.order ?? 999;
+             const orderB = configB?.handType?.order ?? 999;
+             return orderA - orderB;
+        });
+
+        const renderScore = (chips: number, mult: number, chipCards?: boolean) => {
+            const text = formatHandScore(chips, mult, chipCards, '\u00A0\u00A0\u00A0');
+            const parts = text.split(/(x\d+(?:\.\d+)?|Cards(?:\s*\+\s*[\$\+]{0,2}\d+)?|[\$\+]{1,2}\d+(?:\s*chips?)?|\d+\s*chips?)/gi);
+            
+            return parts.map((part, i) => {
+                if (/^x\d/i.test(part)) {
+                    return <span key={i} className={styles.multValue}>{part}</span>;
+                }
+                if (
+                    (/^[\$\+\d]/i.test(part) && (part.startsWith('$') || part.startsWith('+') || part.toLowerCase().includes('chips'))) ||
+                    part.toLowerCase().startsWith('cards')
+                ) {
+                    return <span key={i} className={styles.chipsValue}>{part}</span>;
+                }
+                return part;
+            });
+        };
+
+        return (
+            <div style={{ width: '100%', display: 'flex', flexDirection: 'column', color: '#ecf0f1', fontSize: '0.8rem', pointerEvents: 'none' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0px 8px 0px 8px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                    <div className={styles.zoneLabel}>Angles</div>
+                    <div className={styles.zoneLabel}>Value</div>
+                </div>
+                {sortedInventory.map((instance, index) => {
+                    const config = RelicManager.getRelicConfig(instance.id);
+                    if (!config) return null;
+                    
+                    // Allow state to override base definitions if present (e.g. upgrades)
+                    const chips = instance.state?.chips ?? config.handType?.chips ?? 0;
+                    const mult = instance.state?.mult ?? config.handType?.mult ?? 0;
+
+                    return (
+                        <div key={`${instance.id}-${index}`} style={{ 
+                            display: 'flex', 
+                            justifyContent: 'space-between',
+                            padding: '6px 8px', 
+                            borderBottom: '1px solid rgba(255,255,255,0.05)', 
+                            backgroundColor: hoveredIndex === index ? 'rgba(255,255,255,0.05)' : 'transparent',
+                            cursor: 'default',
+                            alignItems: 'center',
+                            pointerEvents: 'auto'
+                        }}
+                        onMouseEnter={() => setHoveredIndex(index)}
+                        onMouseLeave={() => setHoveredIndex(null)}
+                        >
+                            <div 
+                                className={instance.id === 'viginti' ? styles.vigintiHighlight : styles.handHighlight}
+                                style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: '500' }}
+                            >
+                                {config.handType?.name || config.name}
+                            </div>
+                            <div style={{ fontWeight: 'bold' }}>
+                                {renderScore(chips, mult, config.handType?.chipCards)}
+                            </div>
+                        </div>
+                    );
+                })}
+                 {debugEnabled && (
+                    <button onClick={onManage} className={styles.manageDebugBtn} style={{ marginTop: 10, alignSelf: 'center', pointerEvents: 'auto' }}>
+                        Manage
+                    </button>
+                )}
+            </div>
+        );
+    }
 
     return (
         <div style={{
@@ -31,7 +126,8 @@ export const RelicInventory: React.FC<RelicInventoryProps> = ({ onManage }) => {
             isolation: 'isolate', // Force a new stacking context root
             width: '100%',
             alignItems: 'center', // Center relics and button
-            position: 'relative' // Enable absolute positioning for children (tooltips)
+            position: 'relative', // Enable absolute positioning for children (tooltips)
+            pointerEvents: 'none'
         }}>
             {visibleInventory.map((instance, index) => {
                 const config = RelicManager.getRelicConfig(instance.id);
@@ -112,13 +208,15 @@ export const RelicInventory: React.FC<RelicInventoryProps> = ({ onManage }) => {
             })}
 
             {/* Manage Debug Button */}
-            <button
-                onClick={onManage}
-                className={styles.manageDebugBtn}
-                style={{ marginTop: 20 }}
-            >
-                Manage
-            </button>
+            {debugEnabled && (
+                <button
+                    onClick={onManage}
+                    className={styles.manageDebugBtn}
+                    style={{ marginTop: 20, pointerEvents: 'auto' }}
+                >
+                    Manage
+                </button>
+            )}
 
             {hoveredIndex !== null && visibleInventory[hoveredIndex] && RelicManager.getRelicConfig(visibleInventory[hoveredIndex].id) && (
                 <RelicTooltip 

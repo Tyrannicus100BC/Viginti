@@ -45,8 +45,9 @@ export const RelicTooltip: React.FC<RelicTooltipProps> = ({ relic, displayValues
         // 1. <...> (bracketed text for chips/green highlighting)
         // 2. [...] (bracketed text for hand highlighting)
         // 3. x followed by digits (multipliers)
-        // 4. $ or + followed by digits, or digits followed by "chips" (chips values)
-        const parts = text.split(/(<[^>]+>|\[.*?\]|x\d+(?:\.\d+)?|(?:\$|\+)?\d+\s*chips?|(?:\$|\+)\d+)/gi);
+        // 4. Cards (optionally followed by + and $amount)
+        // 5. $ or + followed by digits, or digits followed by "chips" (chips values)
+        const parts = text.split(/(<[^>]+>|\[.*?\]|x\d+(?:\.\d+)?|Cards(?:\s*\+\s*[\$\+]{0,2}\d+)?|[\$\+]{1,2}\d+(?:\s*chips?)?|\d+\s*chips?)/gi);
         
         return parts.map((part, i) => {
             if (part.startsWith('<') && part.endsWith('>')) {
@@ -58,7 +59,10 @@ export const RelicTooltip: React.FC<RelicTooltipProps> = ({ relic, displayValues
             if (/^x\d/i.test(part)) {
                 return <span key={i} className={styles.multValue}>{part}</span>;
             }
-            if (/^[\$\+\d]/i.test(part) && (part.startsWith('$') || part.startsWith('+') || part.toLowerCase().includes('chips'))) {
+            if (
+                (/^[\$\+\d]/i.test(part) && (part.startsWith('$') || part.startsWith('+') || part.toLowerCase().includes('chips'))) ||
+                part.toLowerCase().startsWith('cards')
+            ) {
                 return <span key={i} className={styles.chipsValue}>{part}</span>;
             }
             return part;

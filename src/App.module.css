@@ -11,38 +11,31 @@
     position: relative;
 }
 
-.header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    width: 800px;
-    max-width: calc(100% - 40px);
-    padding: 16px 32px;
-    background: #1e1e1e;
-    border-radius: 16px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
-    transition:
-        top 0.8s cubic-bezier(0.22, 1, 0.36, 1),
-        width 0.8s cubic-bezier(0.22, 1, 0.36, 1),
-        transform 0.8s cubic-bezier(0.22, 1, 0.36, 1),
-        padding 0.8s cubic-bezier(0.22, 1, 0.36, 1),
-        box-shadow 0.8s cubic-bezier(0.22, 1, 0.36, 1),
-        height 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+.debugToggle {
     position: fixed;
-    top: 20px;
-    left: 0;
+    top: 0;
     right: 0;
-    margin-left: auto;
-    margin-right: auto;
-    transform: translateY(0);
+    width: 180px;
+    height: 180px;
     z-index: 1000;
-    border: 1px solid #333;
-    box-sizing: border-box;
-    overflow: visible;
-    /* Allow pulse to overflow if needed */
-    height: 90px;
-    will-change: top, transform, width, height;
+    cursor: pointer;
+    background: transparent;
+    border: none;
 }
+
+.bugIcon {
+    position: fixed;
+    top: 15px;
+    right: 15px;
+    width: 72px;
+    height: 72px;
+    color: rgba(255, 255, 255, 0.3);
+    pointer-events: none;
+    z-index: 999;
+    fill: currentColor;
+}
+
+/* Consolidated header and top-nav styles moved below to lines 640+ */
 
 .headerSpacer {
     height: 80px;
@@ -51,16 +44,6 @@
     flex-shrink: 0;
 }
 
-
-.headerCentered {
-    transform: translateY(-50%);
-    width: 650px;
-    height: 150px;
-    /* Explicit height for overlay mode */
-    padding: 30px 60px;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
-    justify-content: center;
-}
 
 .stat {
     display: flex;
@@ -581,6 +564,93 @@
     background: #d35400;
 }
 
+/* Header Icon Buttons */
+/* Header Icon Buttons */
+.headerIconButton {
+  background: #1e1e1e;
+  border: 1px solid #333;
+  border-radius: 12px;
+  width: 60px; /* Match header height */
+  height: 60px; /* Match header height */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #ecf0f1;
+  transition: all 0.2s ease;
+  padding: 12px; /* Increased padding slightly */
+  flex-shrink: 0; 
+}
+
+.headerIconButton:hover {
+  background: rgba(44, 62, 80, 0.8);
+  border-color: #f1c40f;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  color: #f1c40f;
+}
+
+.headerIconSvg {
+  width: 100%;
+  height: 100%;
+  fill: currentColor;
+}
+
+
+.topNavContainer {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 800px;
+    max-width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 1000;
+    pointer-events: none; /* Let clicks pass through transparent areas */
+}
+
+.topNavContainer > * {
+    pointer-events: auto; /* Re-enable clicks on children */
+}
+
+.header {
+    position: relative;
+    top: 0;
+    flex: 1;
+    margin: 0 12px;
+    height: 60px;
+    background: #1e1e1e;
+    backdrop-filter: blur(10px);
+    border-radius: 12px;
+    border: 1px solid #333;
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    padding: 0 20px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    transition: all 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.headerCentered {
+    /* Overlay mode styles */
+    position: absolute; /* Relative to topNavContainer */
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 650px;
+    height: 150px;
+    padding: 30px 60px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+    justify-content: center;
+    z-index: 1001;
+}
+
+.headerCentered .stat + .stat {
+    margin-left: 60px;
+}
+
+
 .dealerMessage {
     position: absolute;
     top: 70px;
@@ -799,10 +869,11 @@
     gap: 0;
     padding-top: 0;
     margin-top: 0; 
-    width: 100px; /* Reduced to match smaller relics */
+    width: 220px; /* Reduced width to avoid overlapping dealer area */
     align-items: center;
-    pointer-events: auto; /* Re-enable clicks */
+    pointer-events: none; /* Allow clicks through to board */
     z-index: 50;
+    align-self: flex-start; /* Only take header/relic height */
 }
 
 .leftSidebar {
@@ -813,8 +884,9 @@
     margin-top: 0;
     width: 100px; /* Reduced to match smaller relics */
     align-items: center;
-    pointer-events: auto; /* Re-enable clicks */
+    pointer-events: none; /* Allow clicks through to board */
     z-index: 50;
+    align-self: flex-start; /* Only take header/relic height */
 }
 
 .sidebarBox {
@@ -945,4 +1017,23 @@
 .debugHidden {
     opacity: 0;
     pointer-events: none;
+}
+
+/* Value Formatting - Matching RelicTooltip colors */
+.chipsValue {
+    color: #44ff44; /* Green */
+    font-weight: bold;
+}
+
+.multValue {
+    color: #f1c40f; /* Yellow */
+    font-weight: bold;
+}
+
+.handHighlight {
+    color: #64b5f6; /* Blue for hand types */
+}
+
+.vigintiHighlight {
+    color: #ffd700; /* Gold for Viginti */
 }

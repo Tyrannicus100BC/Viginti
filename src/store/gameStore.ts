@@ -58,6 +58,8 @@ interface GameState {
     dealerMessageExiting: boolean;
     dealerMessage: string | null;
 
+    debugEnabled: boolean;
+
     // Actions
     startGame: (gamblerId?: string) => void;
     dealFirstHand: () => void;
@@ -71,6 +73,8 @@ interface GameState {
     completeRoundEarly: () => void;
     startChipCollection: () => Promise<void>;
     chipCollectionComplete: () => void;
+
+    toggleDebug: () => void;
 
     animationSpeed: number;
     setAnimationSpeed: (speed: number) => void;
@@ -115,8 +119,17 @@ export const useGameStore = create<GameState>((set, get) => ({
     isShaking: false,
     allWinnersEnlarged: false,
     dealerVisible: true,
+    debugEnabled: localStorage.getItem('viginti_debug') === 'true',
     animationSpeed: 1,
     setAnimationSpeed: (speed) => set({ animationSpeed: speed }),
+
+    toggleDebug: () => {
+        set(state => {
+            const newValue = !state.debugEnabled;
+            localStorage.setItem('viginti_debug', String(newValue));
+            return { debugEnabled: newValue };
+        });
+    },
 
     incrementScore: (amount) => set(state => ({ totalScore: state.totalScore + amount })),
 
@@ -331,6 +344,14 @@ export const useGameStore = create<GameState>((set, get) => ({
             deck: newDeck,
             interactionMode: 'default'
         });
+
+        // Auto-stand if all hands are unplayable
+        const allUnplayable = newHands.every(h => h.isBust || h.isHeld || h.blackjackValue === 21);
+        if (allUnplayable) {
+            setTimeout(() => {
+                get().holdReturns();
+            }, 1000);
+        }
     },
 
     assignCard: (handIndex) => {
@@ -357,6 +378,14 @@ export const useGameStore = create<GameState>((set, get) => ({
         });
 
         set({ playerHands: newHands, drawnCard: null });
+
+        // Auto-stand if all hands are unplayable
+        const allUnplayable = newHands.every(h => h.isBust || h.isHeld || h.blackjackValue === 21);
+        if (allUnplayable) {
+            setTimeout(() => {
+                get().holdReturns();
+            }, 1000);
+        }
     },
 
     holdReturns: async (forceDealerBust = false) => {

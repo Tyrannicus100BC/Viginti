@@ -21,7 +21,8 @@ export type ScoringCriterionId =
   | 'pair'
   | 'flush'
   | 'straight'
-  | 'double_down';
+  | 'double_down'
+  | 'three_of_a_kind';
 
 export interface ScoringDetail {
   id: string; // e.g. 'win', 'pair', 'sequence'

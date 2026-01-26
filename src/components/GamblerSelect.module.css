@@ -1,84 +1,199 @@
-
 .container {
     position: absolute;
-    bottom: 40px;
+    bottom: 60px;
     left: 50%;
     transform: translateX(-50%);
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 12px;
-    z-index: 10;
+    z-index: 100; /* Higher z-index for overlay */
     pointer-events: auto;
 }
 
-.label {
-    font-size: 0.7rem;
-    text-transform: uppercase;
-    letter-spacing: 2px;
-    color: #ffffff; /* White instead of gray */
-    opacity: 0.8;
-    font-weight: 700;
-}
-
-.cardsContainer {
-    display: flex;
-    gap: 20px;
-    justify-content: center;
-}
-
-.card {
-    background: rgba(0, 0, 0, 0.6);
-    border: 2px solid #444;
-    border-radius: 12px;
-    padding: 12px 20px;
-    width: 280px; /* Wider */
-    height: 120px; /* Shorter fixed height */
-    cursor: pointer;
-    transition: all 0.2s ease;
+.selectionWrapper {
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    backdrop-filter: blur(4px);
-    box-sizing: border-box;
+    gap: 4px;
 }
 
-.card:hover {
-    border-color: #888;
-    background: rgba(0, 0, 0, 0.7);
-    transform: translateY(-5px);
+.selectedButton {
+    background: rgba(0, 0, 0, 0.4);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-radius: 12px;
+    padding: 10px 24px;
+    min-width: 200px;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    backdrop-filter: blur(8px);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
 }
 
-.selected {
-    border-color: #ffd700; /* Yellow accent */
-    background: rgba(255, 215, 0, 0.15);
-    box-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
+.selectedButton:hover {
+    border-color: #ffd700;
+    background: rgba(255, 215, 0, 0.1);
+    transform: scale(1.05);
+    box-shadow: 0 6px 20px rgba(255, 215, 0, 0.2);
 }
 
-.selected:hover {
-    border-color: #fff2ac;
-    background: rgba(255, 215, 0, 0.25);
-    box-shadow: 0 0 30px rgba(255, 215, 0, 0.5);
-    transform: translateY(-5px) scale(1.02);
-}
-
-.name {
+.selectedName {
     font-family: 'Outfit', sans-serif;
-    font-size: 1.2rem;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: 0.5px;
+}
+
+.changeLabel {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: rgba(255, 255, 255, 0.5);
+    cursor: pointer;
+    font-weight: 700;
+    transition: color 0.2s ease;
+}
+
+.changeLabel:hover {
+    color: #ffd700;
+}
+
+/* Overlay Styles */
+.overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(5px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+    animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.overlayContent {
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 24px;
+    width: 90%;
+    max-width: 800px; /* Widened from 450px */
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.7);
+    position: relative;
+    overflow: hidden;
+    animation: slideUp 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes slideUp {
+    from { transform: translateY(40px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+.overlayHeader {
+    padding: 32px 40px;
+    border-bottom: 1px solid #333;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #222;
+}
+
+.overlayTitle {
+    font-family: 'Outfit', sans-serif;
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: 1px;
+}
+
+.closeButton {
+    background: none;
+    border: none;
+    color: #666;
+    font-size: 2rem;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0;
+    transition: color 0.2s ease;
+}
+
+.closeButton:hover {
+    color: #fff;
+}
+
+.scrollList {
+    padding: 30px 40px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+/* Custom Scrollbar */
+.scrollList::-webkit-scrollbar {
+    width: 10px;
+}
+
+.scrollList::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.scrollList::-webkit-scrollbar-thumb {
+    background: #333;
+    border-radius: 5px;
+}
+
+.scrollList::-webkit-scrollbar-thumb:hover {
+    background: #444;
+}
+
+.overlayCard {
+    background: #252525;
+    border: 2px solid #333;
+    border-radius: 16px;
+    padding: 24px 32px;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.overlayCard:hover {
+    background: #2a2a2a;
+    border-color: #555;
+    transform: scale(1.01) translateX(10px);
+}
+
+.overlaySelected {
+    border-color: #ffd700;
+    background: rgba(255, 215, 0, 0.08);
+    box-shadow: 0 0 30px rgba(255, 215, 0, 0.1);
+}
+
+.overlaySelected:hover {
+    border-color: #fff2ac;
+    background: rgba(255, 215, 0, 0.12);
+}
+
+.overlayCardName {
+    font-family: 'Outfit', sans-serif;
+    font-size: 1.4rem;
     font-weight: 700;
     color: #fff;
     margin-bottom: 8px;
-    text-align: center;
 }
 
-.description {
-    font-size: 0.75rem; /* Reduced from 0.9rem */
+.overlayCardDescription {
+    font-size: 1rem;
     color: #ccc;
-    text-align: center;
-    line-height: 1.4;
-}
-
-.status {
-    width: 100%;
+    line-height: 1.5;
+    max-width: 90%;
 }

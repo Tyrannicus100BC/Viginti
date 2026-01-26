@@ -5,7 +5,6 @@ import { fireConfetti } from './utils/confetti';
 import { PlayingCard } from './components/PlayingCard';
 import { Hand } from './components/Hand';
 import { DeckView } from './components/DeckView';
-import { HandRankingsView } from './components/HandRankingsView';
 import { PhysicsPot } from './components/PhysicsPot';
 import { TitlePhysics } from './components/TitlePhysics';
 import titleStyles from './components/TitlePhysics.module.css';
@@ -18,6 +17,7 @@ import { RelicInventory } from './components/RelicInventory';
 import { RelicStore } from './components/RelicStore';
 import type { PlayerHand } from './types';
 import { useLayout } from './components/ResponsiveLayout';
+import { CasinosButton, DeckButton } from './components/HeaderButtons';
 
 // Constants for layout
 const POT_TOP_Y = 380; // Anchor pots to this Y value
@@ -70,7 +70,9 @@ export default function App() {
         drawSpecificCard,
         allWinnersEnlarged,
         dealerVisible,
-        inventory
+        inventory,
+        debugEnabled,
+        toggleDebug
     } = useGameStore();
 
     const { scale, viewportWidth, viewportHeight } = useLayout();
@@ -79,10 +81,11 @@ export default function App() {
 
     const [showDeck, setShowDeck] = useState(false);
     const [isSelectingDebugCard, setIsSelectingDebugCard] = useState(false);
-    const [showHandRankings, setShowHandRankings] = useState(false);
+    // showHandRankings removed
     const [showCasinoListing, setShowCasinoListing] = useState(false);
     const [showCompsWindow, setShowCompsWindow] = useState(false);
     const [showRelicStore, setShowRelicStore] = useState(false);
+    const [relicStoreFilter, setRelicStoreFilter] = useState<string | undefined>(undefined);
     const [overlayComplete, setOverlayComplete] = useState(false);
     const [scoreAnimate, setScoreAnimate] = useState(false);
     const [doubleDownHoverSuppressed, setDoubleDownHoverSuppressed] = useState(false);
@@ -262,9 +265,10 @@ export default function App() {
         }
     };
 
-    const canDraw = phase === 'playing' && !drawnCard && !dealer.isRevealed && !isInitialDeal && interactionMode === 'default';
-    const canDoubleDown = phase === 'playing' && !drawnCard && !dealer.isRevealed && !isInitialDeal; // Can start flow
-    const canHold = phase === 'playing' && !drawnCard && !dealer.isRevealed && !isInitialDeal && interactionMode === 'default';
+    const areAllHandsUnplayable = playerHands.every(h => h.isBust || h.isHeld || h.blackjackValue === 21);
+    const canDraw = phase === 'playing' && !drawnCard && !dealer.isRevealed && !isInitialDeal && interactionMode === 'default' && !areAllHandsUnplayable;
+    const canDoubleDown = phase === 'playing' && !drawnCard && !dealer.isRevealed && !isInitialDeal && !areAllHandsUnplayable; // Can start flow
+    const canHold = phase === 'playing' && !drawnCard && !dealer.isRevealed && !isInitialDeal && interactionMode === 'default' && !areAllHandsUnplayable;
     const isDrawAreaVisible = phase === 'playing' && !dealer.isRevealed && !isInitialDeal;
 
     // Reset debug button state when draw area reappears
@@ -299,12 +303,25 @@ export default function App() {
                     >
                         Start Run
                     </button>
-                    
-                    <GamblerSelect 
-                        selectedId={selectedGamblerId} 
-                        onSelect={setSelectedGamblerId} 
-                    />
                 </div>
+                
+                <GamblerSelect 
+                    selectedId={selectedGamblerId} 
+                    onSelect={setSelectedGamblerId} 
+                />
+                <button 
+                    className={styles.debugToggle} 
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        toggleDebug();
+                    }}
+                    title="Toggle Debug Mode"
+                />
+                {debugEnabled && (
+                    <svg className={styles.bugIcon} viewBox="0 0 24 24">
+                        <path d="M20 8h-2.81c-.45-.78-1.07-1.45-1.82-1.96L17 4.41 15.59 3l-2.17 2.17C12.96 5.06 12.49 5 12 5c-.49 0-.96.06-1.41.17L8.41 3 7 4.41l1.62 1.63C7.88 6.55 7.26 7.22 6.81 8H4v2h2.09c-.05.33-.09.66-.09 1v1H4v2h2v1c0 .34.04.67.09 1H4v2h2.81c1.04 1.79 2.97 3 5.19 3s4.15-1.21 5.19-3H20v-2h-2.09c.05-.33.09-.66.09-1v-1h2v-2h-2v-1c0-.34-.04-.67-.09-1H20V8zm-6 8h-4v-2h4v2zm0-4h-4v-2h4v2z"/>
+                    </svg>
+                )}
             </div>
         );
     }
@@ -336,7 +353,7 @@ export default function App() {
 
     // Click anywhere to hit (draw) or advance to next round
     const handleGlobalClick = (e: React.MouseEvent) => {
-        if (showDeck || showHandRankings || showCasinoListing || showCompsWindow || showRelicStore) return;
+        if (showDeck || showCasinoListing || showCompsWindow || showRelicStore) return;
 
         // Ignore clicks on buttons or interactive elements
         const target = e.target as HTMLElement;
@@ -389,41 +406,47 @@ export default function App() {
             className={`${styles.container} ${isShaking ? 'shake-screen red-tint' : ''}`}
             onClick={handleGlobalClick}
         >
-            <header
-                className={`${styles.header} ${isOverlayMode ? styles.headerCentered : ''}`}
-                style={isOverlayMode ? { top: drawAreaCenter.y - 20 } : {}}
-            >
-                <div className={styles.stat}>
-                    <span className={styles.statLabel}>Casino</span>
-                    <span key={displayRound} className={`${styles.statValue} ${roundAnimate ? styles.statValueAnimate : ''}`}>{displayRound}</span>
-                </div>
-                <div className={styles.stat}>
-                    <span className={styles.statLabel}>Target</span>
-                    <span key={displayTarget} className={`${styles.statValue} ${targetAnimate ? styles.statValueAnimate : ''}`}>
-                        {"$" + displayTarget.toLocaleString()}
-                    </span>
-                </div>
-                <div className={`${styles.stat} ${isOverlayMode ? styles.statHidden : ''}`}>
-                    <span className={styles.statLabel}>Winnings</span>
-                    <span
-                        id="total-score-display"
-                        key={totalScore}
-                        className={`${styles.statValue} ${scoreAnimate ? styles.statValueAnimate : ''} ${(phase === 'round_over' || phase === 'entering_casino') ? styles.statValueClickable : ''}`}
-                        onClick={(phase === 'round_over' || phase === 'entering_casino') ? triggerDebugChips : undefined}
-                        title={(phase === 'round_over' || phase === 'entering_casino') ? "Add Debug Chips" : undefined}
-                    >
-                        {"$" + totalScore.toLocaleString()}
-                    </span>
-                </div>
-                <div className={`${styles.stat} ${isOverlayMode ? styles.statHidden : ''}`}>
-                    <span className={styles.statLabel}>Deals</span>
-                    <span key={handsRemaining} className={`${styles.statValue} ${handsAnimate ? styles.statValueAnimate : ''}`}>{handsRemaining}</span>
-                </div>
-                <div className={styles.stat}>
-                    <span className={styles.statLabel}>Comps</span>
-                    <span key={displayComps} className={`${styles.statValue} ${compsAnimate ? styles.statValueAnimate : ''}`}>{displayComps}</span>
-                </div>
-            </header>
+            <div className={styles.topNavContainer}>
+                <CasinosButton onClick={() => setShowCasinoListing(true)} />
+                
+                <header
+                    className={`${styles.header} ${isOverlayMode ? styles.headerCentered : ''}`}
+                    style={isOverlayMode ? { top: drawAreaCenter.y - 20 } : {}}
+                >
+                    <div className={styles.stat}>
+                        <span className={styles.statLabel}>Casino</span>
+                        <span key={displayRound} className={`${styles.statValue} ${roundAnimate ? styles.statValueAnimate : ''}`}>{displayRound}</span>
+                    </div>
+                    <div className={styles.stat}>
+                        <span className={styles.statLabel}>Target</span>
+                        <span key={displayTarget} className={`${styles.statValue} ${targetAnimate ? styles.statValueAnimate : ''}`}>
+                            {"$" + displayTarget.toLocaleString()}
+                        </span>
+                    </div>
+                    <div className={`${styles.stat} ${isOverlayMode ? styles.statHidden : ''}`}>
+                        <span className={styles.statLabel}>Winnings</span>
+                        <span
+                            id="total-score-display"
+                            key={totalScore}
+                            className={`${styles.statValue} ${scoreAnimate ? styles.statValueAnimate : ''} ${(phase === 'round_over' || phase === 'entering_casino') ? styles.statValueClickable : ''}`}
+                            onClick={(phase === 'round_over' || phase === 'entering_casino') ? triggerDebugChips : undefined}
+                            title={(phase === 'round_over' || phase === 'entering_casino') ? "Add Debug Chips" : undefined}
+                        >
+                            {"$" + totalScore.toLocaleString()}
+                        </span>
+                    </div>
+                    <div className={`${styles.stat} ${isOverlayMode ? styles.statHidden : ''}`}>
+                        <span className={styles.statLabel}>Deals</span>
+                        <span key={handsRemaining} className={`${styles.statValue} ${handsAnimate ? styles.statValueAnimate : ''}`}>{handsRemaining}</span>
+                    </div>
+                    <div className={styles.stat}>
+                        <span className={styles.statLabel}>Comps</span>
+                        <span key={displayComps} className={`${styles.statValue} ${compsAnimate ? styles.statValueAnimate : ''}`}>{displayComps}</span>
+                    </div>
+                </header>
+
+                <DeckButton onClick={() => setShowDeck(true)} />
+            </div>
 
             <div className={styles.headerSpacer} />
 
@@ -482,22 +505,24 @@ export default function App() {
                     <div className={styles.leftSidebar}>
                         <div className={styles.zoneLabel}>Charms</div>
                         <div className={styles.sidebarBox}>
-                            <RelicInventory onManage={() => setShowRelicStore(true)} />
+                            <RelicInventory 
+                                onManage={() => {
+                                    setRelicStoreFilter('Charm');
+                                    setShowRelicStore(true);
+                                }}
+                                enabledCategories={['Charm']}
+                            />
                         </div>
                     </div>
                     <div className={styles.sidebar}>
-                        <div className={styles.zoneLabel}>Details</div>
-                        <div className={`${styles.sidebarBox} ${styles.detailsBox}`}>
-                            <button className={`${styles.sidebarBtn} ${styles.casinosBtnStyled}`} onClick={() => setShowCasinoListing(true)}>
-                                Casinos
-                            </button>
-                            <button className={`${styles.sidebarBtn} ${styles.scoresBtnStyled}`} onClick={() => setShowHandRankings(true)}>
-                                Scores
-                            </button>
-                            <button className={`${styles.sidebarBtn} ${styles.deckBtnStyled}`} onClick={() => setShowDeck(true)}>
-                                Deck
-                            </button>
-                        </div>
+                         <RelicInventory 
+                            onManage={() => {
+                                setRelicStoreFilter('Angle');
+                                setShowRelicStore(true);
+                            }}
+                            enabledCategories={['Angle']}
+                            viewMode="table"
+                        />
                     </div>
                 </div>
 
@@ -513,27 +538,29 @@ export default function App() {
                                 stagger={!dealer.isRevealed}
                             />
                         </div>
-                        {/* Win Button */}
-                        <button 
-                            className={`${styles.subtleDebugBtn} ${styles.debugFade} ${
-                                phase === 'playing' && isDrawAreaVisible && !hasClickedWin
-                                    ? styles.debugVisible 
-                                    : styles.debugHidden
-                            }`} 
-                            onClick={() => {
-                                setHasClickedWin(true);
-                                debugWin();
-                            }}
-                            style={{ 
-                                width: 100, 
-                                position: 'absolute',
-                                bottom: -40,
-                                left: '50%',
-                                transform: 'translateX(-50%)'
-                            }}
-                        >
-                            Win
-                        </button>
+                         {/* Win Button */}
+                        {debugEnabled && (
+                            <button 
+                                className={`${styles.subtleDebugBtn} ${styles.debugFade} ${
+                                    phase === 'playing' && isDrawAreaVisible && !hasClickedWin
+                                        ? styles.debugVisible 
+                                        : styles.debugHidden
+                                }`} 
+                                onClick={() => {
+                                    setHasClickedWin(true);
+                                    debugWin();
+                                }}
+                                style={{ 
+                                    width: 100, 
+                                    position: 'absolute',
+                                    bottom: -40,
+                                    left: '50%',
+                                    transform: 'translateX(-50%)'
+                                }}
+                            >
+                                Win
+                            </button>
+                        )}
                     </div>
 
                     {dealerMessage && (
@@ -549,42 +576,44 @@ export default function App() {
                 <div className={styles.bottomContent}>
                     <div className={styles.middleZone} style={{ position: 'relative' }}>
                         <div className={styles.drawAreaContainer} ref={drawAreaRef}>
-                            {/* Undo / Draw Buttons */}
-                            <div 
-                                className={`${styles.debugFade} ${isDrawAreaVisible ? styles.debugVisible : styles.debugHidden}`}
-                                style={{ 
-                                width: 100, 
-                                display: 'flex', 
-                                flexDirection: 'column', 
-                                alignItems: 'center', 
-                                position: 'absolute',
-                                top: -40,
-                                left: '50%',
-                                transform: 'translateX(-50%)',
-                                zIndex: 10
-                            }}>
-                                 {drawnCard && (
-                                    <button className={styles.subtleDebugBtn} onClick={debugUndo}>
-                                        Undo
-                                    </button>
-                                )}
-                                 {!drawnCard && (
-                                    <button 
-                                        className={styles.subtleDebugBtn}
-                                        onClick={() => {
-                                            setShowDeck(true);
-                                            setIsSelectingDebugCard(true);
-                                        }}
-                                    >
-                                        CHOOSE
-                                    </button>
-                                )}
-                            </div>
+                         {debugEnabled && (
+                             <div 
+                                 className={`${styles.debugFade} ${isDrawAreaVisible ? styles.debugVisible : styles.debugHidden}`}
+                                 style={{ 
+                                 width: 100, 
+                                 display: 'flex', 
+                                 flexDirection: 'column', 
+                                 alignItems: 'center', 
+                                 position: 'absolute',
+                                 top: -40,
+                                 left: '50%',
+                                 transform: 'translateX(-50%)',
+                                 zIndex: 10
+                             }}>
+                                  {drawnCard && (
+                                     <button className={styles.subtleDebugBtn} onClick={debugUndo}>
+                                         Undo
+                                     </button>
+                                 )}
+                                  {!drawnCard && (
+                                     <button 
+                                         className={styles.subtleDebugBtn}
+                                         onClick={() => {
+                                             setShowDeck(true);
+                                             setIsSelectingDebugCard(true);
+                                         }}
+                                     >
+                                         CHOOSE
+                                     </button>
+                                 )}
+                             </div>
+                         )}
 
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                 <div
                                     className={`${styles.drawnCardSpot} ${!drawnCard && canDraw ? styles.hitSpot : ''} ${!isDrawAreaVisible ? styles.hiddenSpot : ''}`}
-                                    onClick={() => {
+                                    onClick={(e) => {
+                                        e.stopPropagation();
                                         if (canDraw) handleDraw();
                                     }}
                                 >
@@ -665,7 +694,10 @@ export default function App() {
 {((phase === 'playing' && !isInitialDeal) || phase === 'scoring') ? (
                             <button
                                 className={styles.standButton}
-                                onClick={() => holdReturns(false)}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    holdReturns(false);
+                                }}
                                 disabled={!canHold}
                             >
                                 Stand
@@ -673,7 +705,10 @@ export default function App() {
                         ) : (phase === 'round_over' || phase === 'entering_casino' || (phase === 'playing' && isInitialDeal)) ? (
                             <button
                                 className={styles.nextRoundButton}
-                                onClick={phase === 'entering_casino' ? dealFirstHand : () => nextRound()}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    phase === 'entering_casino' ? dealFirstHand() : nextRound();
+                                }}
                                 disabled={phase === 'playing' && isInitialDeal}
                                 style={phase === 'round_over' && totalScore < targetScore && handsRemaining <= 0 ? { color: '#ff4444', borderColor: '#ff4444' } : {}}
                             >
@@ -715,11 +750,7 @@ export default function App() {
                 />
             )}
 
-            {showHandRankings && (
-                <HandRankingsView
-                    onClose={() => setShowHandRankings(false)}
-                />
-            )}
+            {/* showHandRankings block removed */}
 
             {showCasinoListing && (
                 <CasinoListingView
@@ -735,7 +766,10 @@ export default function App() {
             )}
 
             {showRelicStore && (
-                <RelicStore onClose={() => setShowRelicStore(false)} />
+                <RelicStore 
+                    onClose={() => setShowRelicStore(false)} 
+                    filterCategory={relicStoreFilter}
+                />
             )}
 
             {/* FinalScoreOverlay removed */}
