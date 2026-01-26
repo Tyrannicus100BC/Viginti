@@ -1,6 +1,6 @@
 
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useLayoutEffect } from 'react';
 import type { PlayerHand } from '../types';
 import { PlayingCard } from './PlayingCard';
 import styles from './Hand.module.css';
@@ -38,6 +38,9 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
   // New State for sequential updates
   const [rowValues, setRowValues] = useState<Record<number, { chips: number, mult: number, count: number }>>({});
   const [activeHighlightIds, setActiveHighlightIds] = useState<string[] | null>(null);
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [transformOrigin, setTransformOrigin] = useState('center center');
 
   const animationRef = useRef<boolean>(false);
 
@@ -211,10 +214,42 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
   }, [isWin, hand.finalScore, isScoringFocus]);
 
 
+  // Effect to determine transform origin
+  useLayoutEffect(() => {
+    if ((isScoringFocus || isEnlarged) && containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        const viewportWidth = window.innerWidth;
+        
+        // We scale by 1.5
+        const scaledWidth = rect.width * 1.5;
+        const widthDiff = scaledWidth - rect.width;
+        
+        // Default center assumes expansion goes half left, half right
+        const expansionPerSide = widthDiff / 2;
+        
+        const wouldGoOffLeft = (rect.left - expansionPerSide) < 20; // 20px padding
+        const wouldGoOffRight = (rect.right + expansionPerSide) > (viewportWidth - 20);
+        
+        if (wouldGoOffLeft) {
+            setTransformOrigin('left center');
+        } else if (wouldGoOffRight) {
+            setTransformOrigin('right center');
+        } else {
+            setTransformOrigin('center center');
+        }
+    }
+    // Note: We do NOT reset to center on exit. 
+    // This effectively preserves the origin during the shrink animation (scale 1.5 -> 1.0).
+    // Switching origin while scaled > 1.0 would cause a visual jump.
+    // When checks run again on next focus (at scale 1.0), it will seamlessly update.
+  }, [isScoringFocus, isEnlarged]); // Re-eval when focus changes
+
   return (
     <div
+      ref={containerRef}
       className={`${styles.handContainer} ${canSelect ? styles.clickable : ''} ${(isScoringFocus || isEnlarged) ? styles.scoringFocus : ''}`}
       onClick={canSelect ? onSelect : undefined}
+      style={{ transformOrigin }}
     >
       {/* Scoring List */}
       {isWin && hand.finalScore && (

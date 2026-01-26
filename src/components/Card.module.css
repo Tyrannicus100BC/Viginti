@@ -24,6 +24,10 @@
 }
 
 /* Being "drawn" (highlighted) typically shouldn't rotate, but if it does, it's fine */
+.drawn {
+    z-index: 1;
+}
+
 .drawn .card {
     outline: 3px solid #ffd700;
     box-shadow: 0 0 15px rgba(255, 215, 0, 0.5);

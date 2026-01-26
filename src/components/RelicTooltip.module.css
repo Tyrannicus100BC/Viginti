@@ -2,10 +2,10 @@
     display: flex;
     background: linear-gradient(135deg, rgba(30, 30, 40, 0.98), rgba(15, 15, 20, 0.98));
     border: 1px solid rgba(255, 215, 0, 0.3);
-    border-radius: 52px 16px 16px 52px;
+    border-radius: 40px 16px 16px 40px; /* Adjusted for 56px icon + 12px padding = 40px radius */
     padding: 12px;
-    gap: 20px;
-    width: 420px;
+    gap: 15px; /* Slightly reduced gap */
+    width: 380px; /* Slightly reduced width */
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
     backdrop-filter: blur(12px);
     animation: fadeIn 0.15s ease-out forwards;
@@ -17,8 +17,8 @@
 }
 
 .iconContainer {
-    width: 80px; 
-    height: 80px;
+    width: 56px; 
+    height: 56px;
     background: #2c3e50;
     border-radius: 50%;
     display: flex;
@@ -42,7 +42,7 @@
 .placeholderIcon {
     font-weight: 800;
     color: #ecf0f1;
-    font-size: 1.5rem;
+    font-size: 1rem; /* Reduced from 1.5rem */
 }
 
 .content {
@@ -53,18 +53,18 @@
 
 .title {
     color: #ffd700;
-    font-size: 1.25rem;
+    font-size: 1.1rem; /* Reduced from 1.25rem */
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 2px;
-    margin-bottom: 8px;
+    margin-bottom: 4px;
     text-shadow: 0 2px 4px rgba(0,0,0,0.3);
 }
 
 .description {
     color: #ecf0f1;
-    font-size: 1rem;
-    line-height: 1.5;
+    font-size: 0.9rem; /* Reduced from 1rem */
+    line-height: 1.4;
     opacity: 0.9;
     font-weight: 400;
 }

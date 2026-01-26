@@ -1,32 +1,37 @@
 
 import React, { useState } from 'react';
+import styles from '../App.module.css';
 import { useGameStore } from '../store/gameStore';
 import { RelicManager } from '../logic/relics/manager';
 import { RelicTooltip } from './RelicTooltip';
 import { TransparentImage } from './TransparentImage';
 
-export const RelicInventory: React.FC = () => {
+interface RelicInventoryProps {
+    onManage?: () => void;
+}
+
+export const RelicInventory: React.FC<RelicInventoryProps> = ({ onManage }) => {
     const { inventory, activeRelicId } = useGameStore();
     const visibleInventory = inventory.filter(instance => instance.id !== 'win' && instance.id !== 'viginti');
     // Track index because we might have duplicate relic types
     const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
     const [tooltipPos, setTooltipPos] = useState({ top: 0, left: 0 });
 
-    if (visibleInventory.length === 0) return null;
+    // if (visibleInventory.length === 0) return null; // Remove this to always show Manage button if needed, or keep it if it should only show if you have relics. 
+    // Wait, the user said "at the end of the relic list". If list is empty, should it show? 
+    // Usually debug buttons are always there.
 
     return (
         <div style={{
-            position: 'fixed',
-            left: 20,
-            top: 0,
-            bottom: 0,
             display: 'flex',
             flexDirection: 'column',
-            justifyContent: 'center',
-            gap: 12,
+            justifyContent: 'flex-start', // Align to top
+            gap: 10,
             zIndex: 2000,
-            pointerEvents: 'none',
-            isolation: 'isolate' // Force a new stacking context root
+            isolation: 'isolate', // Force a new stacking context root
+            width: '100%',
+            alignItems: 'center', // Center relics and button
+            position: 'relative' // Enable absolute positioning for children (tooltips)
         }}>
             {visibleInventory.map((instance, index) => {
                 const config = RelicManager.getRelicConfig(instance.id);
@@ -40,16 +45,16 @@ export const RelicInventory: React.FC = () => {
                         key={`${instance.id}-${index}`} 
                         onMouseEnter={(e) => {
                             setHoveredIndex(index);
-                            const rect = e.currentTarget.getBoundingClientRect();
+                            const target = e.currentTarget;
                             setTooltipPos({ 
-                                top: rect.top + rect.height / 2, 
-                                left: rect.left - 20 - 12 
+                                top: target.offsetTop, 
+                                left: target.offsetLeft
                             });
                         }}
                         onMouseLeave={() => setHoveredIndex(null)}
                         style={{
-                            width: 80,
-                            height: 80,
+                            width: 56,
+                            height: 56,
                             borderRadius: '50%',
                             background: isActive ? '#f1c40f' : '#2c3e50',
                             border: isActive ? '4px solid #f39c12' : '4px solid rgba(255, 215, 0, 0.6)',
@@ -92,7 +97,7 @@ export const RelicInventory: React.FC = () => {
                                  />
                              ) : (
                                  <div style={{
-                                     fontSize: '0.8rem',
+                                     fontSize: '0.6rem',
                                      fontWeight: 'bold',
                                      textAlign: 'center',
                                      color: isActive ? '#fff' : '#ecf0f1',
@@ -106,6 +111,15 @@ export const RelicInventory: React.FC = () => {
                 );
             })}
 
+            {/* Manage Debug Button */}
+            <button
+                onClick={onManage}
+                className={styles.manageDebugBtn}
+                style={{ marginTop: 20 }}
+            >
+                Manage
+            </button>
+
             {hoveredIndex !== null && visibleInventory[hoveredIndex] && RelicManager.getRelicConfig(visibleInventory[hoveredIndex].id) && (
                 <RelicTooltip 
                     relic={RelicManager.getRelicConfig(visibleInventory[hoveredIndex].id)!}
@@ -113,9 +127,8 @@ export const RelicInventory: React.FC = () => {
                     hideIcon={true}
                     style={{
                         position: 'absolute',
-                        top: tooltipPos.top,
-                        left: tooltipPos.left,
-                        transform: 'translateY(-50%)',
+                        top: tooltipPos.top - 13, // Offset by tooltip padding (12px) + border (1px)
+                        left: tooltipPos.left - 13, // Offset by tooltip padding (12px) + border (1px)
                         pointerEvents: 'none',
                         zIndex: 50 // Between items (1) and hovered-top (100)
                     }}
@@ -124,4 +137,5 @@ export const RelicInventory: React.FC = () => {
         </div>
     );
 };
+
 

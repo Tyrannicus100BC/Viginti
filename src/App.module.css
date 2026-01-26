@@ -1,5 +1,5 @@
 .container {
-    min-height: 100vh;
+    height: 100%;
     color: #ecf0f1;
     display: flex;
     flex-direction: column;
@@ -150,23 +150,42 @@
 }
 
 .board {
-    flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
-    width: 100%;
-    max-width: 1000px;
+    width: 800px;
+    max-width: 100%;
     position: relative;
     z-index: 20;
-    /* Above PhysicsPot (10) */
+    height: 100%;
+    justify-content: space-between;
+    padding-bottom: 20px; /* Safe padding for bottom edge */
+    box-sizing: border-box;
+}
+
+.topContent {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+}
+
+.bottomContent {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
 }
 
 .dealerZone {
-    margin-bottom: 60px;
+    margin-bottom: 40px;
     display: flex;
     flex-direction: column;
     align-items: center;
     transition: opacity 0.5s ease;
+    position: relative;
 }
 
 .dealerZoneHidden {
@@ -187,21 +206,22 @@
     flex-direction: column;
     align-items: center;
     position: relative;
-    margin-bottom: 8px;
+    margin-bottom: 0px;
 }
 
 .drawAreaContainer {
     display: flex;
     flex-direction: column;
     align-items: center;
+    position: relative;
 }
 
 .drawnCardSpot {
     width: 100px;
-    height: 140px;
+    height: 132px;
     border: 2px dashed #444;
     /* Default gray */
-    border-radius: 8px;
+    border-radius: 15px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -209,8 +229,9 @@
     font-weight: bold;
     font-size: 0.8rem;
     position: relative;
-    transition: all 0.2s ease;
+    transition: all 0.5s ease;
     background: rgba(255, 255, 255, 0.02);
+    opacity: 1;
 }
 
 .hitSpot {
@@ -227,9 +248,8 @@
 }
 
 .hiddenSpot {
-    border-color: transparent;
-    background: transparent;
-    box-shadow: none;
+    opacity: 0;
+    pointer-events: none;
 }
 
 .hitText {
@@ -237,16 +257,21 @@
     color: #ffd700;
     text-transform: uppercase;
     letter-spacing: 2px;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    transition: opacity 0.5s ease;
+    opacity: 0;
+    z-index: 0;
 }
 
 .infoTextContainer {
-    margin-top: 11px;
+    margin-top: 6px;
     min-height: 30px;
     /* Fixed height to prevent jumping */
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
+    display: grid;
+    place-items: center;
     width: 100%;
 }
 
@@ -254,16 +279,21 @@
     display: flex;
     justify-content: center;
     width: 100%;
+    max-width: 100%;
     position: relative;
-    margin-top: 30px;
+    margin-top: 4px;
+    box-sizing: border-box;
+    overflow: visible; /* Allow scoring focus overlap */
 }
 
 .playerHandsContainer {
     display: flex;
-    gap: 20px;
+    gap: 15px; /* Slightly reduced gap to help on narrow windows */
     justify-content: center;
     position: relative;
-    width: fit-content;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
 }
 
 .controls {
@@ -331,15 +361,24 @@
     box-shadow: 0 4px 10px rgba(231, 76, 60, 0.3);
 }
 
+.actionButtonContainer {
+    width: 100%;
+    max-width: 100%;
+    height: 80px; /* Fixed height for the button area */
+    margin-top: 15px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
 .standButton {
     width: 100%;
-    max-width: 800px;
-    /* Aligns roughly with 3 hands */
+    height: 100%; /* Fill container */
     background: #0f0202;
     /* Very dark, almost black-red */
     color: #c0392b;
     border: 1px solid #3c1010;
-    margin-top: 23px;
+    /* margin-top: 23px; Removed, handled by container */
     padding: 20px;
     font-size: 1.2rem;
     letter-spacing: 4px;
@@ -351,29 +390,21 @@
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
 }
 
-.standButton:hover:not(:disabled) {
-    background: #1a0505;
-    border-color: #e74c3c;
-    color: #e74c3c;
-    transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(231, 76, 60, 0.15);
-}
-
 .standButton:disabled {
     opacity: 0.5;
     cursor: not-allowed;
     filter: grayscale(1);
+    box-shadow: none;
 }
 
 .nextRoundButton {
     width: 100%;
-    max-width: 800px;
-    /* Aligns roughly with 3 hands */
+    height: 100%; /* Fill container */
     background: #0f0e02;
     /* Very dark, almost black-yellow */
     color: #f1c40f;
     border: 1px solid #4b3b00;
-    margin-top: 23px;
+    /* margin-top: 23px; Removed, handled by container */
     padding: 20px;
     font-size: 1.2rem;
     letter-spacing: 4px;
@@ -399,31 +430,35 @@
     filter: grayscale(1);
 }
 
+.actionPlaceholder {
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.2);
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    box-sizing: border-box;
+}
+
 .clickAnywhere {
     color: #7f8c8d;
     font-size: 0.8rem;
     text-transform: uppercase;
     letter-spacing: 2px;
-    opacity: 0.7;
-    animation: fadeIn 0.5s;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+    grid-area: 1 / 1;
 }
 
 .instructions {
     color: #ffd700;
     font-size: 0.9rem;
-    animation: fadeIn 0.5s;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+    grid-area: 1 / 1;
 }
 
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(-5px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+.textVisible {
+    opacity: 1;
 }
 
 .deckBtn {
@@ -732,4 +767,182 @@
     height: 100vh;
     pointer-events: none;
     z-index: 2000;
+}
+
+.gameWrapper {
+    display: flex;
+    flex-direction: row;
+    width: 100%;
+    height: 100%;
+    align-items: stretch;
+    justify-content: center;
+    position: relative;
+}
+
+.sidebarsContainer {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 100%;
+    max-width: 800px;
+    height: 100%;
+    pointer-events: none;
+    display: flex;
+    justify-content: space-between;
+    z-index: 50;
+}
+
+.sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding-top: 0;
+    margin-top: 0; 
+    width: 100px; /* Reduced to match smaller relics */
+    align-items: center;
+    pointer-events: auto; /* Re-enable clicks */
+    z-index: 50;
+}
+
+.leftSidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding-top: 0;
+    margin-top: 0;
+    width: 100px; /* Reduced to match smaller relics */
+    align-items: center;
+    pointer-events: auto; /* Re-enable clicks */
+    z-index: 50;
+}
+
+.sidebarBox {
+    background: rgba(0,0,0,0.2);
+    border-radius: 12px;
+    padding: 12px;
+    width: 100%;
+    border: 2px solid rgba(255,255,255,0.1);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    box-sizing: border-box;
+    gap: 15px;
+}
+
+.detailsBox {
+    height: 220px;
+}
+
+.sidebarBtn {
+    width: 100%;
+    height: auto;
+    border-radius: 8px;
+    border: none;
+    color: white;
+    font-weight: bold;
+    font-size: 0.7rem;
+    cursor: pointer;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    text-transform: uppercase;
+    display: flex;
+    flex: 1; /* Stretch to fill details box */
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    line-height: 1.2;
+    transition: transform 0.2s, background 0.2s, box-shadow 0.2s;
+}
+
+.sidebarBtn:hover {
+    transform: scale(1.1);
+}
+
+.deckBtnStyled { background: #2f404d; border: 1px solid rgba(255,255,255,0.05); }
+.deckBtnStyled:hover { background: #3b5060; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+
+.scoresBtnStyled { background: #3e3442; border: 1px solid rgba(255,255,255,0.05); }
+.scoresBtnStyled:hover { background: #4b3f50; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+
+.casinosBtnStyled { background: #263f3a; border: 1px solid rgba(255,255,255,0.05); }
+.casinosBtnStyled:hover { background: #2f4e48; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+
+.storeBtnStyled { background: #e67e22; }
+.storeBtnStyled:hover { background: #d35400; }
+
+.subtleDebugBtn {
+    background-color: transparent;
+    border: none;
+    color: #777;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 12px;
+    margin-bottom: 0;
+    width: 100%;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    background-image: url("data:image/svg+xml,%3csvg width='100%25' height='100%25' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100%25' height='100%25' fill='none' rx='12' ry='12' stroke='%23777777' stroke-width='1' stroke-dasharray='8%2c 8' stroke-dashoffset='0' stroke-linecap='square'/%3e%3c/svg%3e");
+}
+
+.subtleDebugBtn:hover {
+    color: #ffd700;
+    background-color: rgba(255, 215, 0, 0.05);
+    background-image: url("data:image/svg+xml,%3csvg width='100%25' height='100%25' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100%25' height='100%25' fill='none' rx='12' ry='12' stroke='%23ffd700' stroke-width='1' stroke-dasharray='8%2c 8' stroke-dashoffset='0' stroke-linecap='square'/%3e%3c/svg%3e");
+}
+
+.manageDebugBtn {
+    background-color: transparent;
+    border: none;
+    color: #777;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 6px;
+    margin-bottom: 0;
+    width: 100%;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    background-image: url("data:image/svg+xml,%3csvg width='100%25' height='100%25' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100%25' height='100%25' fill='none' rx='6' ry='6' stroke='%23777777' stroke-width='1' stroke-dasharray='8%2c 8' stroke-dashoffset='0' stroke-linecap='square'/%3e%3c/svg%3e");
+}
+
+.manageDebugBtn:hover {
+    color: #ffd700;
+    background-color: rgba(255, 215, 0, 0.05);
+    background-image: url("data:image/svg+xml,%3csvg width='100%25' height='100%25' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100%25' height='100%25' fill='none' rx='6' ry='6' stroke='%23ffd700' stroke-width='1' stroke-dasharray='8%2c 8' stroke-dashoffset='0' stroke-linecap='square'/%3e%3c/svg%3e");
+}
+
+/* Winnings Label clickable style */
+.statValueClickable {
+    cursor: pointer;
+    border: 1px dashed transparent;
+    border-radius: 4px;
+    padding: 2px 6px;
+    margin: -2px -6px;
+    transition: all 0.2s;
+}
+.statValueClickable:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.debugFade {
+    transition: opacity 0.3s ease;
+}
+
+.debugVisible {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.debugHidden {
+    opacity: 0;
+    pointer-events: none;
 }

@@ -17,12 +17,10 @@ import { CompsWindow } from './components/CompsWindow';
 import { RelicInventory } from './components/RelicInventory';
 import { RelicStore } from './components/RelicStore';
 import type { PlayerHand } from './types';
+import { useLayout } from './components/ResponsiveLayout';
 
 // Constants for layout
-const POT_DEFAULT_OFFSET = 180; // 1/3 across play area
-const POT_SCORING_OFFSET = 270; // 1/4 across play area (aligned with hands)
-
-const POT_VERTICAL_OFFSET = 120; // Move pots up from center
+const POT_TOP_Y = 380; // Anchor pots to this Y value
 
 export default function App() {
     const {
@@ -75,6 +73,8 @@ export default function App() {
         inventory
     } = useGameStore();
 
+    const { scale, viewportWidth, viewportHeight } = useLayout();
+
     const hasDoubleDownRelic = inventory.some(r => r.id === 'double_down');
 
     const [showDeck, setShowDeck] = useState(false);
@@ -86,6 +86,7 @@ export default function App() {
     const [overlayComplete, setOverlayComplete] = useState(false);
     const [scoreAnimate, setScoreAnimate] = useState(false);
     const [doubleDownHoverSuppressed, setDoubleDownHoverSuppressed] = useState(false);
+    const [hasClickedWin, setHasClickedWin] = useState(false);
 
     const drawAreaRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -102,20 +103,22 @@ export default function App() {
             if (drawAreaRef.current) {
                 const rect = drawAreaRef.current.getBoundingClientRect();
                 setDrawAreaCenter({
-                    x: rect.left + rect.width / 2,
-                    y: rect.top + rect.height / 2
+                    x: (rect.left + rect.width / 2) / scale,
+                    y: (rect.top + rect.height / 2) / scale
                 });
             }
         };
         updateCenter();
-        window.addEventListener('resize', updateCenter);
+        // Resize handled by ResponsiveLayout triggering re-render/context update
+        // But we still need to listen if scale changes, which triggers re-render
+        // window.removeEventListener('resize', updateCenter); // Not needed as we depend on scale/phase
+        
         // Also update when phase changes as layout might shift
         const timer = setTimeout(updateCenter, 100);
         return () => {
-            window.removeEventListener('resize', updateCenter);
             clearTimeout(timer);
         };
-    }, [phase, playerHands.length]);
+    }, [phase, playerHands.length, scale]);
 
     const [displayRound, setDisplayRound] = useState(round);
     const [displayTarget, setDisplayTarget] = useState(targetScore);
@@ -131,6 +134,18 @@ export default function App() {
     const runInitializedRef = useRef(false);
     const confettiFiredRef = useRef(false);
 
+    const [showSelectionUI, setShowSelectionUI] = useState(false);
+
+
+    // Watch for drawn card to delay selection UI
+    useEffect(() => {
+        if (drawnCard) {
+            setShowSelectionUI(true);
+        } else {
+            setShowSelectionUI(false);
+        }
+    }, [!!drawnCard]);
+
     // Watch for Total Winnings appearance to fire confetti
     useEffect(() => {
         if (phase === 'playing') {
@@ -140,16 +155,16 @@ export default function App() {
         if ((phase === 'round_over' || roundSummary || isCollectingChips) && runningSummary && runningSummary.chips > 0 && !confettiFiredRef.current) {
             if (canvasRef.current) {
                 confettiFiredRef.current = true;
-                canvasRef.current.width = window.innerWidth;
-                canvasRef.current.height = window.innerHeight;
+                canvasRef.current.width = viewportWidth;
+                canvasRef.current.height = viewportHeight;
 
                 fireConfetti(canvasRef.current, {
                     elementCount: 150,
                     spread: 130,
                     startVelocity: 55,
                     decay: 0.96,
-                    originX: drawAreaCenter.x,
-                    originY: drawAreaCenter.y - 50
+                    originX: viewportWidth / 2,
+                    originY: POT_TOP_Y - 50
                 });
             }
         }
@@ -252,6 +267,13 @@ export default function App() {
     const canHold = phase === 'playing' && !drawnCard && !dealer.isRevealed && !isInitialDeal && interactionMode === 'default';
     const isDrawAreaVisible = phase === 'playing' && !dealer.isRevealed && !isInitialDeal;
 
+    // Reset debug button state when draw area reappears
+    React.useEffect(() => {
+        if (isDrawAreaVisible) {
+            setHasClickedWin(false);
+        }
+    }, [isDrawAreaVisible]);
+
     const activeCards = [
         ...dealer.cards.filter((_, idx) => idx !== 0 || dealer.isRevealed),
         ...playerHands.flatMap(h => h.cards),
@@ -343,7 +365,24 @@ export default function App() {
     };
 
     const isTotalWinningsVisible = ((phase === 'scoring' && (isCollectingChips || roundSummary || allWinnersEnlarged)) || phase === 'round_over') && runningSummary && runningSummary.chips > 0;
-    const currentPotOffset = isTotalWinningsVisible ? POT_SCORING_OFFSET : POT_DEFAULT_OFFSET;
+    
+    // Logic for pot placement relative to the game board (800px max)
+    // The user's "1/3 and 1/4 across the screen" refers to the literal coordinates of the play board.
+    const boardWidth = 800; // The canonical 800px coordinate system
+    
+    // "1/3 across" means the pot is at 1/3 (266px) and 2/3 (533px) of the width.
+    // Offset from center (400px) = 400 - 266 = 133.
+    const defaultOffset = boardWidth / 6;
+
+    // "1/4 across" means the pot is at 1/4 (200px) and 3/4 (600px) of the width.
+    // Offset from center (400px) = 400 - 200 = 200.
+    const scoringOffset = boardWidth / 4;
+    
+    // Apply the offset based on whether total winnings are displayed
+    const currentPotOffset = isTotalWinningsVisible ? scoringOffset : defaultOffset;
+    
+    // Calculate stable center X
+    const centerX = viewportWidth / 2;
 
     return (
         <div
@@ -369,7 +408,9 @@ export default function App() {
                     <span
                         id="total-score-display"
                         key={totalScore}
-                        className={`${styles.statValue} ${scoreAnimate ? styles.statValueAnimate : ''}`}
+                        className={`${styles.statValue} ${scoreAnimate ? styles.statValueAnimate : ''} ${(phase === 'round_over' || phase === 'entering_casino') ? styles.statValueClickable : ''}`}
+                        onClick={(phase === 'round_over' || phase === 'entering_casino') ? triggerDebugChips : undefined}
+                        title={(phase === 'round_over' || phase === 'entering_casino') ? "Add Debug Chips" : undefined}
                     >
                         {"$" + totalScore.toLocaleString()}
                     </span>
@@ -394,20 +435,20 @@ export default function App() {
                 totalValue={runningSummary?.chips ?? 0}
                 variant="chips"
                 isCollecting={isCollectingChips}
-                center={{ x: drawAreaCenter.x - currentPotOffset, y: drawAreaCenter.y - POT_VERTICAL_OFFSET }}
+                center={{ x: centerX - currentPotOffset, y: POT_TOP_Y }}
                 onCollectionComplete={() => {}}
                 onItemArrived={() => {}}
                 labelPrefix="$"
             />
             
-            <RelicInventory />
+            {/* RelicInventory moved to sidebar */}
 
             <PhysicsPot
                 key={`mult-${round}-${handsRemaining}`}
                 totalValue={runningSummary?.mult ?? 0}
                 variant="multiplier"
                 isCollecting={isCollectingChips}
-                center={{ x: drawAreaCenter.x + currentPotOffset, y: drawAreaCenter.y - POT_VERTICAL_OFFSET }}
+                center={{ x: centerX + currentPotOffset, y: POT_TOP_Y }}
                 onCollectionComplete={() => {}}
                 onItemArrived={() => {}}
                 labelPrefix="x"
@@ -418,8 +459,8 @@ export default function App() {
                 <div 
                     className={styles.totalWinningsLabel}
                     style={{ 
-                        left: drawAreaCenter.x, 
-                        top: drawAreaCenter.y - POT_VERTICAL_OFFSET - 135
+                        left: centerX, 
+                        top: POT_TOP_Y - 135
                     }}
                 >
                     <div className={styles.winningsWrapper}>
@@ -436,180 +477,228 @@ export default function App() {
 
             <canvas ref={canvasRef} className={styles.confettiCanvas} />
 
-            <div className={styles.board}>
-                <div className={`${styles.dealerZone} ${!dealerVisible ? styles.dealerZoneHidden : ''}`}>
-                    <div className={styles.zoneLabel}>Dealer</div>
-                    <div style={{ pointerEvents: 'none', position: 'relative' }}>
-                        <Hand
-                            key={`dealer-${handsRemaining}`}
-                            hand={dealerHandProps}
-                            baseDelay={dealer.isRevealed ? 0 : 0.6}
-                            stagger={!dealer.isRevealed}
-                        />
-
+            <div className={styles.gameWrapper}>
+                <div className={styles.sidebarsContainer}>
+                    <div className={styles.leftSidebar}>
+                        <div className={styles.zoneLabel}>Charms</div>
+                        <div className={styles.sidebarBox}>
+                            <RelicInventory onManage={() => setShowRelicStore(true)} />
+                        </div>
+                    </div>
+                    <div className={styles.sidebar}>
+                        <div className={styles.zoneLabel}>Details</div>
+                        <div className={`${styles.sidebarBox} ${styles.detailsBox}`}>
+                            <button className={`${styles.sidebarBtn} ${styles.casinosBtnStyled}`} onClick={() => setShowCasinoListing(true)}>
+                                Casinos
+                            </button>
+                            <button className={`${styles.sidebarBtn} ${styles.scoresBtnStyled}`} onClick={() => setShowHandRankings(true)}>
+                                Scores
+                            </button>
+                            <button className={`${styles.sidebarBtn} ${styles.deckBtnStyled}`} onClick={() => setShowDeck(true)}>
+                                Deck
+                            </button>
+                        </div>
                     </div>
                 </div>
 
-                <div className={styles.middleZone} style={{ position: 'relative' }}>
+                <div className={styles.board}>
+                <div className={styles.topContent}>
+                    <div className={`${styles.dealerZone} ${!dealerVisible ? styles.dealerZoneHidden : ''}`}>
+                        <div className={styles.zoneLabel}>Dealer</div>
+                        <div style={{ pointerEvents: 'none', position: 'relative' }}>
+                            <Hand
+                                key={`dealer-${handsRemaining}`}
+                                hand={dealerHandProps}
+                                baseDelay={dealer.isRevealed ? 0 : 0.6}
+                                stagger={!dealer.isRevealed}
+                            />
+                        </div>
+                        {/* Win Button */}
+                        <button 
+                            className={`${styles.subtleDebugBtn} ${styles.debugFade} ${
+                                phase === 'playing' && isDrawAreaVisible && !hasClickedWin
+                                    ? styles.debugVisible 
+                                    : styles.debugHidden
+                            }`} 
+                            onClick={() => {
+                                setHasClickedWin(true);
+                                debugWin();
+                            }}
+                            style={{ 
+                                width: 100, 
+                                position: 'absolute',
+                                bottom: -40,
+                                left: '50%',
+                                transform: 'translateX(-50%)'
+                            }}
+                        >
+                            Win
+                        </button>
+                    </div>
+
                     {dealerMessage && (
                         <div
                             className={`${styles.dealerMessage} ${dealerMessageExiting ? styles.dealerMessageExiting : ''}`}
+                            style={{ top: POT_TOP_Y }}
                         >
                             {dealerMessage}
                         </div>
                     )}
-                    <div className={styles.drawAreaContainer} ref={drawAreaRef}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <div
-                                className={`${styles.drawnCardSpot} ${!drawnCard && canDraw ? styles.hitSpot : ''} ${!isDrawAreaVisible ? styles.hiddenSpot : ''}`}
-                                onClick={() => {
-                                    if (canDraw) handleDraw();
-                                }}
-                            >
-                                {drawnCard ? (
-                                    <PlayingCard
-                                        card={drawnCard}
-                                        isDrawn
-                                        origin={drawnCard.origin}
-                                    />
-                                ) : (
-                                    canDraw ? <span className={styles.hitText}>HIT</span> : null
+                </div>
+
+                <div className={styles.bottomContent}>
+                    <div className={styles.middleZone} style={{ position: 'relative' }}>
+                        <div className={styles.drawAreaContainer} ref={drawAreaRef}>
+                            {/* Undo / Draw Buttons */}
+                            <div 
+                                className={`${styles.debugFade} ${isDrawAreaVisible ? styles.debugVisible : styles.debugHidden}`}
+                                style={{ 
+                                width: 100, 
+                                display: 'flex', 
+                                flexDirection: 'column', 
+                                alignItems: 'center', 
+                                position: 'absolute',
+                                top: -40,
+                                left: '50%',
+                                transform: 'translateX(-50%)',
+                                zIndex: 10
+                            }}>
+                                 {drawnCard && (
+                                    <button className={styles.subtleDebugBtn} onClick={debugUndo}>
+                                        Undo
+                                    </button>
+                                )}
+                                 {!drawnCard && (
+                                    <button 
+                                        className={styles.subtleDebugBtn}
+                                        onClick={() => {
+                                            setShowDeck(true);
+                                            setIsSelectingDebugCard(true);
+                                        }}
+                                    >
+                                        CHOOSE
+                                    </button>
                                 )}
                             </div>
-                        </div>
 
-                        <div className={styles.infoTextContainer}>
-                            {drawnCard ? (
-                                <div className={styles.instructions}>Select hand for this card</div>
-                            ) : interactionMode === 'double_down_select' ? (
-                                <div className={styles.instructions} style={{ color: '#ffd700' }}>Select hand to Double Down</div>
-                            ) : (
-                                canDraw && <div className={styles.clickAnywhere}>Click Anywhere</div>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <div
+                                    className={`${styles.drawnCardSpot} ${!drawnCard && canDraw ? styles.hitSpot : ''} ${!isDrawAreaVisible ? styles.hiddenSpot : ''}`}
+                                    onClick={() => {
+                                        if (canDraw) handleDraw();
+                                    }}
+                                >
+                                    {/* Card is conditionally rendered on top */}
+                                    {drawnCard && (
+                                        <PlayingCard
+                                            card={drawnCard}
+                                            isDrawn
+                                            origin={drawnCard.origin}
+                                        />
+                                    )}
+                                    {/* HIT text is always rendered but fades in/out */}
+                                    <span className={`${styles.hitText} ${canDraw ? styles.textVisible : ''}`}>HIT</span>
+                                </div>
+                            </div>
+
+                            <div className={styles.infoTextContainer}>
+                                <div className={`${styles.instructions} ${showSelectionUI && drawnCard ? styles.textVisible : ''}`}>
+                                    CHOOSE A HAND
+                                </div>
+                                <div 
+                                    className={`${styles.instructions} ${interactionMode === 'double_down_select' ? styles.textVisible : ''}`} 
+                                    style={{ color: '#ffd700' }}
+                                >
+                                    Select hand to Double Down
+                                </div>
+                                <div className={`${styles.clickAnywhere} ${canDraw ? styles.textVisible : ''}`}>
+                                    Click Anywhere
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className={styles.playerZone}>
+                        <div className={styles.playerHandsContainer}>
+                            {playerHands.map((hand, idx) => {
+                                const canSelectHand = (showSelectionUI && !!drawnCard) || interactionMode === 'double_down_select';
+                                return (
+                                    <Hand
+                                        key={`${hand.id}-${handsRemaining}`}
+                                        hand={hand}
+                                        canSelect={canSelectHand && !hand.isBust && !hand.isHeld && hand.blackjackValue !== 21}
+                                        onSelect={() => handleHandClick(idx)}
+                                        baseDelay={idx === 1 ? 0 : 0.6}
+                                        isScoringFocus={idx === scoringHandIndex}
+                                        isEnlarged={allWinnersEnlarged && hand.outcome === 'win'}
+                                    />
+                                );
+                            })}
+
+                            {/* Double Down Button - Positioned relative to hands container */}
+                            {isDrawAreaVisible && hasDoubleDownRelic && (
+                                <div
+                                    className={`${styles.doubleDownSpot} ${canDoubleDown ? styles.doubleDownActive : ''} ${interactionMode === 'double_down_select' ? styles.doubleDownSelected : ''} ${doubleDownHoverSuppressed ? styles.doubleDownHoverSuppressed : ''}`}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (interactionMode === 'double_down_select') {
+                                            cancelDoubleDown();
+                                            setDoubleDownHoverSuppressed(false);
+                                        } else if (canDoubleDown) {
+                                            startDoubleDown();
+                                            setDoubleDownHoverSuppressed(true);
+                                        }
+                                    }}
+                                    onMouseLeave={() => {
+                                        if (interactionMode === 'double_down_select') {
+                                            setDoubleDownHoverSuppressed(false);
+                                        }
+                                    }}
+                                >
+                                    <span className={styles.doubleDownText}>DOUBLE<br />DOWN</span>
+                                </div>
                             )}
                         </div>
                     </div>
-                </div>
 
-                <div className={styles.playerZone}>
-                    <div className={styles.playerHandsContainer}>
-                        {playerHands.map((hand, idx) => (
-                            <Hand
-                                key={`${hand.id}-${handsRemaining}`}
-                                hand={hand}
-                                canSelect={(!!drawnCard || interactionMode === 'double_down_select') && !hand.isBust && !hand.isHeld && hand.blackjackValue !== 21}
-                                onSelect={() => handleHandClick(idx)}
-                                baseDelay={idx === 1 ? 0 : 0.6}
-                                isScoringFocus={idx === scoringHandIndex}
-                                isEnlarged={allWinnersEnlarged && hand.outcome === 'win'}
-                            />
-                        ))}
-
-                        {/* Double Down Button - Positioned relative to hands container */}
-                        {isDrawAreaVisible && hasDoubleDownRelic && (
-                            <div
-                                className={`${styles.doubleDownSpot} ${canDoubleDown ? styles.doubleDownActive : ''} ${interactionMode === 'double_down_select' ? styles.doubleDownSelected : ''} ${doubleDownHoverSuppressed ? styles.doubleDownHoverSuppressed : ''}`}
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (interactionMode === 'double_down_select') {
-                                        cancelDoubleDown();
-                                        setDoubleDownHoverSuppressed(false);
-                                    } else if (canDoubleDown) {
-                                        startDoubleDown();
-                                        setDoubleDownHoverSuppressed(true);
-                                    }
-                                }}
-                                onMouseLeave={() => {
-                                    if (interactionMode === 'double_down_select') {
-                                        setDoubleDownHoverSuppressed(false);
-                                    }
-                                }}
+                    <div className={styles.actionButtonContainer}>
+{((phase === 'playing' && !isInitialDeal) || phase === 'scoring') ? (
+                            <button
+                                className={styles.standButton}
+                                onClick={() => holdReturns(false)}
+                                disabled={!canHold}
                             >
-                                <span className={styles.doubleDownText}>DOUBLE<br />DOWN</span>
-                            </div>
+                                Stand
+                            </button>
+                        ) : (phase === 'round_over' || phase === 'entering_casino' || (phase === 'playing' && isInitialDeal)) ? (
+                            <button
+                                className={styles.nextRoundButton}
+                                onClick={phase === 'entering_casino' ? dealFirstHand : () => nextRound()}
+                                disabled={phase === 'playing' && isInitialDeal}
+                                style={phase === 'round_over' && totalScore < targetScore && handsRemaining <= 0 ? { color: '#ff4444', borderColor: '#ff4444' } : {}}
+                            >
+                                {phase === 'entering_casino' || (phase === 'playing' && isInitialDeal) ? 'Deal' : (
+                                    totalScore >= targetScore ? 'Next Casino' : 
+                                    (handsRemaining <= 0 ? 'Game Over' : 'Deal')
+                                )}
+                            </button>
+                        ) : (
+                            <div className={styles.actionPlaceholder} />
                         )}
                     </div>
+
+                    {phase === 'round_over' && totalScore >= targetScore && handsRemaining > 0 && (
+                        <EarlyCompletionPopup
+                            handsRemaining={handsRemaining}
+                            onComplete={completeRoundEarly}
+                            onContinue={() => nextRound(true)}
+                        />
+                    )}
+                </div>
                 </div>
 
-                {phase === 'playing' && (
-                    <button
-                        className={styles.standButton}
-                        onClick={() => holdReturns(false)}
-                        disabled={!canHold}
-                    >
-                        Stand
-                    </button>
-                )}
-                {(phase === 'round_over' || phase === 'entering_casino') && (
-                    <button
-                        className={styles.nextRoundButton}
-                        onClick={phase === 'entering_casino' ? dealFirstHand : () => nextRound()}
-                        style={phase === 'round_over' && totalScore < targetScore && handsRemaining <= 0 ? { color: '#ff4444', borderColor: '#ff4444' } : {}}
-                    >
-                        {phase === 'entering_casino' ? 'Deal' : (
-                            totalScore >= targetScore ? 'Next Casino' : 
-                            (handsRemaining <= 0 ? 'Game Over' : 'Deal')
-                        )}
-                    </button>
-                )}
 
-                {phase === 'round_over' && totalScore >= targetScore && handsRemaining > 0 && (
-                    <EarlyCompletionPopup
-                        handsRemaining={handsRemaining}
-                        onComplete={completeRoundEarly}
-                        onContinue={() => nextRound(true)}
-                    />
-                )}
             </div>
-
-            <button className={styles.deckBtn} onClick={() => setShowDeck(true)}>
-                Deck
-            </button>
-
-            <button className={styles.handsBtn} onClick={() => setShowHandRankings(true)}>
-                Scores
-            </button>
-
-            <button className={styles.casinosBtn} onClick={() => setShowCasinoListing(true)}>
-                Casinos
-            </button>
-
-            <button 
-                className={styles.casinosBtn} 
-                style={{ top: 94, background: '#e67e22' }} 
-                onClick={() => setShowRelicStore(true)}
-            >
-                Store
-            </button>
-
-            {(phase === 'round_over' || phase === 'entering_casino') && (
-                <button className={styles.debugBtn} onClick={triggerDebugChips}>
-                    $$$
-                </button>
-            )}
-
-            {phase === 'playing' && !drawnCard && (
-                <>
-                    <button className={styles.debugBtn} onClick={debugWin}>
-                        Win
-                    </button>
-                    <button 
-                        className={styles.debugBtn} 
-                        style={{ top: 94 }} // Positioned below Win (top 20 + 64 height + 10 margin)
-                        onClick={() => {
-                            setShowDeck(true);
-                            setIsSelectingDebugCard(true);
-                        }}
-                    >
-                        Draw
-                    </button>
-                </>
-            )}
-
-            {phase === 'playing' && drawnCard && (
-                <button className={styles.debugBtn} onClick={debugUndo}>
-                    Undo
-                </button>
-            )}
 
             {showDeck && (
                 <DeckView
