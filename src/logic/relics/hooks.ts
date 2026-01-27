@@ -16,8 +16,8 @@ const getRankCounts = (cards: Card[]) => {
 
 
 // Generic Group Finder
-const getStandardScore = (cards: Card[], baseChips: number, baseMult: number, isRun: boolean, relicState?: any) => {
-    const cardChips = cards.reduce((s, c) => s + RANK_VALUES[c.rank], 0);
+const getStandardScore = (cards: Card[], baseChips: number, baseMult: number, isRun: boolean, relicState?: any, chipCards: boolean = false) => {
+    const cardChips = chipCards ? cards.reduce((s, c) => s + RANK_VALUES[c.rank], 0) : 0;
     let finalChips = cardChips + baseChips;
     let finalMult = baseMult;
 
@@ -143,7 +143,7 @@ const findBestGroup = (cards: Card[], type: 'rank' | 'flush' | 'straight', fixed
     return candidates[0];
 };
 
-const evaluateStandardRelic = (score: HandScore, context: HandContext, type: 'rank' | 'flush' | 'straight', fixedLen: number, relicState?: any) => {
+const evaluateStandardRelic = (score: HandScore, context: HandContext, type: 'rank' | 'flush' | 'straight', fixedLen: number, relicState?: any, config?: any) => {
     const bestGroup = findBestGroup(context.handCards, type, fixedLen);
     if (bestGroup) {
          // get definition from context? Or relicState?
@@ -186,8 +186,9 @@ const evaluateStandardRelic = (score: HandScore, context: HandContext, type: 'ra
          const base = PROPS[id] || {c: 0, m: 0};
          const baseChips = relicState?.base_chips !== undefined ? relicState.base_chips : base.c;
          const baseMult = relicState?.base_mult !== undefined ? relicState.base_mult : base.m;
+         const chipCards = config?.handType?.chipCards || false;
          
-         const { chips, mult } = getStandardScore(bestGroup, baseChips, baseMult, isRun, relicState);
+         const { chips, mult } = getStandardScore(bestGroup, baseChips, baseMult, isRun, relicState, chipCards);
          
          const newCriteria = [...score.criteria, {
              id: id as any,
@@ -211,7 +212,7 @@ export const Hooks = {
         getDealsPerCasino: (val: number, _context: GameContext, relicState: any) => val + relicState.extra_draws
     },
     royalty_face_cards: {
-        onHandCompletion: async (context: HandCompletionContext, relicState: any) => {
+        onHandCompletion: async (context: HandCompletionContext, relicState: any, _config: any) => {
             const faceCards = context.handCards.filter(isFaceCard);
             if (faceCards.length >= 2) {
                 await context.highlightRelic('royalty', {
@@ -240,7 +241,7 @@ export const Hooks = {
         getDealerStopValue: (_val: number, _context: GameContext, relicState: any) => relicState.stop_value
     },
     flusher_bonus: {
-        onEvaluateHandScore: (score: HandScore, _context: HandContext, relicState: any) => {
+        onEvaluateHandScore: (score: HandScore, _context: HandContext, relicState: any, _config: any) => {
             let hasFlush = false;
             const updatedCriteria = score.criteria.map(c => {
                 if (c.id === 'flush') {
@@ -259,14 +260,14 @@ export const Hooks = {
 
             return { ...score, criteria: updatedCriteria, totalChips, totalMultiplier, finalScore: Math.floor(totalChips * totalMultiplier) };
         },
-        onScoreRow: async (context: ScoreRowContext) => {
+        onScoreRow: async (context: ScoreRowContext, _relicState: any, _config: any) => {
             if (context.criterionId === 'flush') {
                 await context.highlightRelic('flusher', { preDelay: 600 });
             }
         }
     },
     one_armed_win_bonus: {
-        onRoundCompletion: async (context: RoundCompletionContext, relicState: any) => {
+        onRoundCompletion: async (context: RoundCompletionContext, relicState: any, _config: any) => {
             if (context.wins === 1) {
                 const currentMult = context.runningSummary.mult;
                 const valToAdd = currentMult > 0 ? currentMult * (relicState.factor - 1) : 1;
@@ -278,7 +279,7 @@ export const Hooks = {
         }
     },
     high_roller_win_all: {
-        onRoundCompletion: async (context: RoundCompletionContext, relicState: any) => {
+        onRoundCompletion: async (context: RoundCompletionContext, relicState: any, _config: any) => {
              if (context.wins === 3) {
                  await context.highlightRelic('high_roller', {
                      trigger: () => context.modifyRunningSummary(relicState.amount, 0)
@@ -290,9 +291,10 @@ export const Hooks = {
     // Scoring Category
 
     viginti_relic: {
-        onEvaluateHandScore: withPriority(-10, (score: HandScore, context: HandContext) => {
+        onEvaluateHandScore: withPriority(-10, (score: HandScore, context: HandContext, _relicState: any, config: any) => {
+            const chipCards = config?.handType?.chipCards || false;
             if (context.blackjackValue === 21) {
-                const cardChips = context.handCards.reduce((s, c) => s + RANK_VALUES[c.rank], 0);
+                const cardChips = chipCards ? context.handCards.reduce((s, c) => s + RANK_VALUES[c.rank], 0) : 0;
                 const newCriteria = [...score.criteria, {
                     id: 'viginti' as any,
                     name: 'Viginti',
@@ -305,7 +307,7 @@ export const Hooks = {
                 const totalMult = newCriteria.reduce((s, c) => s + c.multiplier, 0);
                 return { ...score, criteria: newCriteria, totalChips, totalMultiplier: totalMult, finalScore: Math.floor(totalChips * totalMult) };
             } else if (context.isWin) {
-                const cardChips = context.handCards.reduce((s, c) => s + RANK_VALUES[c.rank], 0);
+                const cardChips = chipCards ? context.handCards.reduce((s, c) => s + RANK_VALUES[c.rank], 0) : 0;
                 const newCriteria = [...score.criteria, {
                     id: 'win' as any,
                     name: 'Win',
@@ -322,10 +324,11 @@ export const Hooks = {
         })
     },
     double_down_relic: {
-        onEvaluateHandScore: (score: HandScore, context: HandContext) => {
+        onEvaluateHandScore: (score: HandScore, context: HandContext, _relicState: any, config: any) => {
             if (context.isDoubled) {
+                const chipCards = config?.handType?.chipCards || false;
                 const ddCard = context.handCards.find(c => c.origin === 'double_down');
-                const cardChips = ddCard ? RANK_VALUES[ddCard.rank] : 0;
+                const cardChips = (chipCards && ddCard) ? RANK_VALUES[ddCard.rank] : 0;
                 const newCriteria = [...score.criteria, {
                     id: 'double_down' as any,
                     name: 'Double Down',
@@ -345,46 +348,46 @@ export const Hooks = {
 
     // Standardized Helper Logic
     rank_pair: {
-        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => 
-            evaluateStandardRelic(score, context, 'rank', 2, relicState)
+        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any, config: any) => 
+            evaluateStandardRelic(score, context, 'rank', 2, relicState, config)
     },
     rank_triple: {
-        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => 
-            evaluateStandardRelic(score, context, 'rank', 3, relicState)
+        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any, config: any) => 
+            evaluateStandardRelic(score, context, 'rank', 3, relicState, config)
     },
     rank_run: {
-        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => 
-            evaluateStandardRelic(score, context, 'rank', 0, relicState)
+        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any, config: any) => 
+            evaluateStandardRelic(score, context, 'rank', 0, relicState, config)
     },
     flush_pair: {
-        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => 
-            evaluateStandardRelic(score, context, 'flush', 2, relicState)
+        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any, config: any) => 
+            evaluateStandardRelic(score, context, 'flush', 2, relicState, config)
     },
     flush_triple: {
-        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => 
-            evaluateStandardRelic(score, context, 'flush', 3, relicState)
+        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any, config: any) => 
+            evaluateStandardRelic(score, context, 'flush', 3, relicState, config)
     },
     flush_run: {
-        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => 
-            evaluateStandardRelic(score, context, 'flush', 0, relicState)
+        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any, config: any) => 
+            evaluateStandardRelic(score, context, 'flush', 0, relicState, config)
     },
     straight_pair: {
-        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => 
-            evaluateStandardRelic(score, context, 'straight', 2, relicState)
+        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any, config: any) => 
+            evaluateStandardRelic(score, context, 'straight', 2, relicState, config)
     },
     straight_triple: {
-        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => 
-            evaluateStandardRelic(score, context, 'straight', 3, relicState)
+        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any, config: any) => 
+            evaluateStandardRelic(score, context, 'straight', 3, relicState, config)
     },
     straight_run: {
-        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => 
-            evaluateStandardRelic(score, context, 'straight', 0, relicState)
+        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any, config: any) => 
+            evaluateStandardRelic(score, context, 'straight', 0, relicState, config)
     },
 
 
     // Face / Bonus Chips / Mult Modifiers
     lucky_coin_pair_chips: {
-        onEvaluateHandScore: (score: HandScore, _context: HandContext, relicState: any) => {
+        onEvaluateHandScore: (score: HandScore, _context: HandContext, relicState: any, _config: any) => {
             let changed = false;
             const updatedCriteria = score.criteria.map(c => {
                 if (c.id === 'pair') {
@@ -400,7 +403,7 @@ export const Hooks = {
         }
     },
     rabbit_foot_pair_mult: {
-        onEvaluateHandScore: (score: HandScore, _context: HandContext, relicState: any) => {
+        onEvaluateHandScore: (score: HandScore, _context: HandContext, relicState: any, _config: any) => {
             let changed = false;
             const updatedCriteria = score.criteria.map(c => {
                 if (c.id === 'pair') {
@@ -416,7 +419,7 @@ export const Hooks = {
         }
     },
     bent_clip_three_kind: {
-        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => {
+        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any, _config: any) => {
             const counts = getRankCounts(context.handCards);
             const hasThree = Object.values(counts).some(c => c >= 3);
             if (hasThree) {
@@ -436,7 +439,7 @@ export const Hooks = {
         }
     },
     horseshoe_straight_mult: {
-        onEvaluateHandScore: (score: HandScore, _context: HandContext, relicState: any) => {
+        onEvaluateHandScore: (score: HandScore, _context: HandContext, relicState: any, _config: any) => {
             let changed = false;
             const updatedCriteria = score.criteria.map(c => {
                 if (c.id === 'straight') {
@@ -452,7 +455,7 @@ export const Hooks = {
         }
     },
     red_string_straight_chips: {
-        onEvaluateHandScore: (score: HandScore, _context: HandContext, relicState: any) => {
+        onEvaluateHandScore: (score: HandScore, _context: HandContext, relicState: any, _config: any) => {
             let changed = false;
             const updatedCriteria = score.criteria.map(c => {
                 if (c.id === 'straight') {
@@ -468,7 +471,7 @@ export const Hooks = {
         }
     },
     jade_charm_straight_mult: {
-        onEvaluateHandScore: (score: HandScore, _context: HandContext, relicState: any) => {
+        onEvaluateHandScore: (score: HandScore, _context: HandContext, relicState: any, _config: any) => {
             let changed = false;
             const updatedCriteria = score.criteria.map(c => {
                 if (c.id === 'straight') {
@@ -484,7 +487,7 @@ export const Hooks = {
         }
     },
     wishbone_flush_mult: {
-        onEvaluateHandScore: (score: HandScore, _context: HandContext, relicState: any) => {
+        onEvaluateHandScore: (score: HandScore, _context: HandContext, relicState: any, _config: any) => {
             let changed = false;
             const updatedCriteria = score.criteria.map(c => {
                 if (c.id === 'flush') {
@@ -500,7 +503,7 @@ export const Hooks = {
         }
     },
     ladybug_flush_chips: {
-        onEvaluateHandScore: (score: HandScore, _context: HandContext, relicState: any) => {
+        onEvaluateHandScore: (score: HandScore, _context: HandContext, relicState: any, _config: any) => {
             let changed = false;
             const updatedCriteria = score.criteria.map(c => {
                 if (c.id === 'flush') {
@@ -516,7 +519,7 @@ export const Hooks = {
         }
     },
     dice_pair_flush_mult: {
-        onEvaluateHandScore: (score: HandScore, _context: HandContext, relicState: any) => {
+        onEvaluateHandScore: (score: HandScore, _context: HandContext, relicState: any, _config: any) => {
             let changed = false;
             const updatedCriteria = score.criteria.map(c => {
                 if (c.id === 'flush') {
@@ -535,7 +538,7 @@ export const Hooks = {
     // Suites
     // Using a factory like helper for these could be better, but staying explicit for now per instruction "reference named hook"
     old_receipt_diamonds: {
-        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => {
+        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any, _config: any) => {
             const count = context.handCards.filter(c => c.suit === 'diamonds').length;
             if (count > 0) {
                 const newCriteria = [...score.criteria, {
@@ -554,7 +557,7 @@ export const Hooks = {
         }
     },
     lucky_rock_hearts: {
-        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => {
+        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any, _config: any) => {
             const count = context.handCards.filter(c => c.suit === 'hearts').length;
             if (count > 0) {
                 const newCriteria = [...score.criteria, {
@@ -573,7 +576,7 @@ export const Hooks = {
         }
     },
     burnt_match_clubs: {
-        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => {
+        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any, _config: any) => {
             const count = context.handCards.filter(c => c.suit === 'clubs').length;
             if (count > 0) {
                 const newCriteria = [...score.criteria, {
@@ -592,7 +595,7 @@ export const Hooks = {
         }
     },
     lost_key_spades: {
-        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => {
+        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any, _config: any) => {
             const count = context.handCards.filter(c => c.suit === 'spades').length;
             if (count > 0) {
                 const newCriteria = [...score.criteria, {
@@ -613,7 +616,7 @@ export const Hooks = {
 
     // Hands
     pocket_rock_single_card: {
-        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => {
+        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any, _config: any) => {
             if (context.handCards.length === 1) {
                 const newCriteria = [...score.criteria, {
                     id: 'pocket_rock' as any,
@@ -631,7 +634,7 @@ export const Hooks = {
         }
     },
     feather_same_hand_size: {
-        onRoundCompletion: async (context: RoundCompletionContext, relicState: any) => {
+        onRoundCompletion: async (context: RoundCompletionContext, relicState: any, _config: any) => {
             const hands = context.playerHands || [];
             if (hands.length === 0) return;
             const len = hands[0].cards.length;
@@ -645,7 +648,7 @@ export const Hooks = {
         }
     },
     odd_sock_two_cards: {
-        onRoundCompletion: async (context: RoundCompletionContext, relicState: any) => {
+        onRoundCompletion: async (context: RoundCompletionContext, relicState: any, _config: any) => {
             const hands = context.playerHands || [];
             const allTwo = hands.length > 0 && hands.every((h: any) => h.cards.length === 2);
             
@@ -659,7 +662,7 @@ export const Hooks = {
 
     // Specific Cards
     star_bead_nines: {
-        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => {
+        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any, _config: any) => {
             const count = context.handCards.filter(c => c.rank === '9').length;
             if (count > 0) {
                  const newCriteria = [...score.criteria, {
@@ -678,7 +681,7 @@ export const Hooks = {
         }
     },
     heart_button_ten_four: {
-        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => {
+        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any, _config: any) => {
             const count = context.handCards.filter(c => c.rank === '10' || c.rank === '4').length;
             if (count > 0) {
                 const newCriteria = [...score.criteria, {
@@ -689,15 +692,15 @@ export const Hooks = {
                      multiplier: count * relicState.bonus_mult,
                      cardIds: []
                  }];
-                 const totalChips = newCriteria.reduce((s, c) => s + c.chips, 0);
-                 const totalMult = newCriteria.reduce((s, c) => s + c.multiplier, 0);
+                 const totalChips = newCriteria.reduce((sum, crit) => sum + crit.chips, 0);
+                 const totalMult = newCriteria.reduce((sum, crit) => sum + crit.multiplier, 0);
                  return { ...score, criteria: newCriteria, totalChips, totalMultiplier: totalMult, finalScore: Math.floor(totalChips * totalMult) };
             }
             return score;
         }
     },
     lucky_acorn_kings: {
-        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => {
+        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any, _config: any) => {
             const count = context.handCards.filter(c => c.rank === 'K').length;
             if (count > 0) {
                  const newCriteria = [...score.criteria, {
@@ -708,8 +711,8 @@ export const Hooks = {
                      multiplier: count * relicState.bonus_mult,
                      cardIds: []
                  }];
-                 const totalChips = newCriteria.reduce((s, c) => s + c.chips, 0);
-                 const totalMult = newCriteria.reduce((s, c) => s + c.multiplier, 0);
+                 const totalChips = newCriteria.reduce((sum, crit) => sum + crit.chips, 0);
+                 const totalMult = newCriteria.reduce((sum, crit) => sum + crit.multiplier, 0);
                  return { ...score, criteria: newCriteria, totalChips, totalMultiplier: totalMult, finalScore: Math.floor(totalChips * totalMult) };
             }
             return score;
@@ -718,7 +721,7 @@ export const Hooks = {
 
     // Global
     faded_tag_bonus: {
-        onRoundCompletion: async (context: RoundCompletionContext, relicState: any) => {
+        onRoundCompletion: async (context: RoundCompletionContext, relicState: any, _config: any) => {
              if (relicState.amount > 0) {
                  await context.highlightRelic('faded_tag', {
                      trigger: () => {
@@ -731,21 +734,21 @@ export const Hooks = {
          }
     },
     mini_shoe_bonus_chips: {
-        onRoundCompletion: async (context: RoundCompletionContext, relicState: any) => {
+        onRoundCompletion: async (context: RoundCompletionContext, relicState: any, _config: any) => {
             await context.highlightRelic('mini_shoe', {
                  trigger: () => context.modifyRunningSummary(relicState.bonus_chips, 0)
             });
         }
     },
     robe_slippers_bonus_mult: {
-        onRoundCompletion: async (context: RoundCompletionContext, relicState: any) => {
+        onRoundCompletion: async (context: RoundCompletionContext, relicState: any, _config: any) => {
             await context.highlightRelic('robe_slippers', {
                  trigger: () => context.modifyRunningSummary(0, relicState.bonus_mult)
             });
         }
     },
     key_ring_final_draw: {
-        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => {
+        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any, _config: any) => {
             if (context.handsRemaining === 0) {
                  const newCriteria = [...score.criteria, {
                      id: 'key_ring' as any,
@@ -755,8 +758,8 @@ export const Hooks = {
                      multiplier: relicState.bonus_mult,
                      cardIds: []
                  }];
-                 const totalChips = newCriteria.reduce((s, c) => s + c.chips, 0);
-                 const totalMult = newCriteria.reduce((s, c) => s + c.multiplier, 0);
+                 const totalChips = newCriteria.reduce((sum, crit) => sum + crit.chips, 0);
+                 const totalMult = newCriteria.reduce((sum, crit) => sum + crit.multiplier, 0);
                  return { ...score, criteria: newCriteria, totalChips, totalMultiplier: totalMult, finalScore: Math.floor(totalChips * totalMult) };
             }
             return score;

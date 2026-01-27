@@ -33,7 +33,7 @@ interface GameState {
     dealer: DealerHand;
     playerHands: PlayerHand[];
     drawnCard: Card | null;
-    phase: 'init' | 'entering_casino' | 'playing' | 'scoring' | 'round_over' | 'game_over';
+    phase: 'init' | 'entering_casino' | 'playing' | 'scoring' | 'round_over' | 'game_over' | 'gift_shop';
     round: number;
     interactionMode: 'default' | 'double_down_select';
     totalScore: number;
@@ -51,6 +51,9 @@ interface GameState {
     discardPile: Card[];
     inventory: RelicInstance[];
     activeRelicId: string | null;
+
+    shopItems: { id: string, type: 'Charm' | 'Angle' }[];
+    selectedShopItemId: string | null;
 
     isInitialDeal: boolean;
     isShaking: boolean; // For >300 score celebration
@@ -70,6 +73,8 @@ interface GameState {
     assignCard: (handIndex: number) => void;
     holdReturns: (forceDealerBust?: boolean) => Promise<void>; // Async for pacing
     nextRound: (forceContinue?: boolean) => void;
+    selectShopItem: (itemId: string) => void; 
+    confirmShopSelection: (itemId?: string) => void;
     completeRoundEarly: () => void;
     startChipCollection: () => Promise<void>;
     chipCollectionComplete: () => void;
@@ -115,6 +120,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     discardPile: [],
     inventory: [],
     activeRelicId: null,
+    shopItems: [],
+    selectedShopItemId: null,
     isInitialDeal: true,
     isShaking: false,
     allWinnersEnlarged: false,
@@ -135,25 +142,9 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     triggerDebugChips: () => {
         const { targetScore, incrementScore } = get();
-        const amount = Math.ceil(targetScore / 3) * 2;
-        
-        // Count up over 500ms
-        const steps = 10;
-        const tick = 50;
-        const perStep = Math.floor(amount / steps);
-        let count = 0;
-        
-        const interval = setInterval(() => {
-            if (count < steps - 1) {
-                incrementScore(perStep);
-                count++;
-            } else {
-                const remaining = amount - (perStep * (steps - 1));
-                incrementScore(remaining);
-                clearInterval(interval);
-                get().chipCollectionComplete();
-            }
-        }, tick);
+        const amount = Math.ceil(targetScore / 3);
+        incrementScore(amount);
+        get().chipCollectionComplete();
     },
 
     updateRunningSummary: (chips, mult) => {
@@ -215,7 +206,9 @@ export const useGameStore = create<GameState>((set, get) => ({
             runningSummary: null,
             roundSummary: null,
             allWinnersEnlarged: false,
-            dealerVisible: true
+            dealerVisible: true,
+            shopItems: [],
+            selectedShopItemId: null
         });
     },
 
@@ -713,6 +706,87 @@ export const useGameStore = create<GameState>((set, get) => ({
         get().nextRound();
     },
 
+
+
+    selectShopItem: (itemId: string) => {
+        set({ selectedShopItemId: itemId });
+    },
+
+    confirmShopSelection: (itemId?: string) => {
+        const { shopItems, inventory, selectedShopItemId } = get();
+        
+        // Determine which ID to use: explicit argument takes precedence over selected state
+        const idToConfirm = itemId || selectedShopItemId;
+        
+        let newInventory = [...inventory];
+        
+        if (idToConfirm) {
+            const selectedItem = shopItems.find(i => i.id === idToConfirm);
+            if (selectedItem) {
+                // Add to inventory
+                const baseRelic = RelicManager.getRelicConfig(selectedItem.id);
+                if (baseRelic) {
+                    const newInstance: RelicInstance = {
+                        id: selectedItem.id,
+                        state: { ...(baseRelic.properties || {}) }
+                    };
+                    newInventory.push(newInstance);
+                }
+            }
+        }
+        
+        // Clear shop and proceed to next casino setup
+        set({ 
+            inventory: newInventory, 
+            shopItems: [],
+            selectedShopItemId: null
+        });
+
+        // Trigger the actual Casino Transition now
+        const { round, totalScore, targetScore, comps, handsRemaining } = get();
+        
+        const newRound = round + 1;
+        const newTotalScore = totalScore - targetScore; // Carry over surplus score
+
+        // Comps increase logic
+        const currentHandsRemaining = handsRemaining;
+        const newComps = (comps || 0) + (currentHandsRemaining * 5);
+
+        let newTargetScore = targetScore;
+        // Set target based on casino number
+        newTargetScore = calculateTargetScore(newRound);
+
+        const fullDeck = shuffleDeck(createStandardDeck()); // Always a fresh 52 cards for new casino
+
+        const emptyHands: PlayerHand[] = Array.from({ length: INITIAL_HAND_COUNT }, (_, i) => ({
+            id: i,
+            cards: [],
+            isHeld: false,
+            isBust: false,
+            blackjackValue: 0
+        }));
+
+        set({
+            deck: fullDeck,
+            playerHands: emptyHands,
+            dealer: { cards: [], isRevealed: false, blackjackValue: 0 },
+            phase: 'entering_casino', // Go to entry screen
+            round: newRound,
+            targetScore: newTargetScore,
+            totalScore: newTotalScore,
+            dealsTaken: 0,
+            handsRemaining: RelicManager.executeValueHook('getDealsPerCasino', BASE_DEALS_PER_CASINO, { inventory: newInventory }),
+            comps: newComps,
+            discardPile: [],
+            dealerMessage: null,
+            runningSummary: null,
+            roundSummary: null,
+            allWinnersEnlarged: false,
+            dealerVisible: true,
+            // inventory updated above
+        });
+    },
+
     nextRound: (forceContinue = false) => {
         const currentState = get();
         const { deck, dealer, playerHands, totalScore, targetScore, round, comps, handsRemaining } = currentState;
@@ -726,52 +800,38 @@ export const useGameStore = create<GameState>((set, get) => ({
         }
 
         if (hasReachedTarget && !forceContinue) {
-            // Advance to next casino
-            const newRound = round + 1;
-            const newTotalScore = totalScore - targetScore; // Carry over surplus score
-
-            // Comps increase logic
-            const currentHandsRemaining = currentState.handsRemaining;
-            const newComps = (comps || 0) + (currentHandsRemaining * 5);
-
-            let newTargetScore = targetScore;
-            // Set target based on casino number
-            newTargetScore = calculateTargetScore(newRound);
-
-            const fullDeck = shuffleDeck(createStandardDeck()); // Always a fresh 52 cards for new casino
-
-            const emptyHands: PlayerHand[] = Array.from({ length: INITIAL_HAND_COUNT }, (_, i) => ({
-                id: i,
-                cards: [],
-                isHeld: false,
-                isBust: false,
-                blackjackValue: 0
-            }));
-
-            // Reward: 1 Random Scoring Relic
-            const currentInv = get().inventory;
-            const reward = getRandomScoringRelics(1, currentInv, ['viginti']);
-            const newInventory = [...currentInv, ...reward];
-
+            // GO TO GIFT SHOP PHASE
+            // Generate 4 Charms, 2 Angles
+            
+            // Helper to get random items
+            const getRandomItems = (count: number, category: string, excludeIds: string[]) => {
+                 const allItems = RelicManager.getAllRelics().filter(r => r.categories.includes(category) && !excludeIds.includes(r.id));
+                 // Also filter out things already in inventory if unique? Assuming unique for now.
+                 const curIds = get().inventory.map(i => i.id);
+                 const available = allItems.filter(r => !curIds.includes(r.id));
+                 
+                 const picked = [];
+                 const pool = [...available];
+                 for(let i=0; i<count; i++) {
+                     if(pool.length === 0) break;
+                     const idx = Math.floor(Math.random() * pool.length);
+                     picked.push(pool.splice(idx, 1)[0]);
+                 }
+                 return picked.map(p => ({ id: p.id, type: category as 'Charm' | 'Angle' }));
+            };
+            
+            const currentIds = get().inventory.map(i => i.id);
+            const charms = getRandomItems(4, 'Charm', currentIds);
+            const angles = getRandomItems(2, 'Angle', currentIds);
+            
             set({
-                deck: fullDeck,
-                playerHands: emptyHands,
-                dealer: { cards: [], isRevealed: false, blackjackValue: 0 },
-                phase: 'entering_casino', // Go to entry screen
-                round: newRound,
-                targetScore: newTargetScore,
-                totalScore: newTotalScore,
-                dealsTaken: 0,
-                handsRemaining: RelicManager.executeValueHook('getDealsPerCasino', BASE_DEALS_PER_CASINO, { inventory: get().inventory }),
-                comps: newComps,
-                discardPile: [],
-                dealerMessage: null,
-                runningSummary: null,
-                roundSummary: null,
-                allWinnersEnlarged: false,
-                dealerVisible: true,
-                inventory: newInventory
+                shopItems: [...charms, ...angles],
+                phase: 'gift_shop',
+                // dealerVisible: false? Maybe? User said "Sign slides down where dealer hand usually is".
+                // We'll handle visual hiding in the component or set dealerVisible to false.
+                dealerVisible: false
             });
+            // We do NOT reset the round yet. That happens in selectShopItem.
             return;
         }
 

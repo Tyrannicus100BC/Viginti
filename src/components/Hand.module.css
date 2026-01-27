@@ -183,6 +183,16 @@
     white-space: nowrap;
 }
 
+.doubleDownOverlay {
+    color: #3498db;
+    text-shadow: 0 0 10px #2980b9;
+    font-size: 1.5rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    white-space: nowrap;
+}
+
 /* Scoring List Area */
 .scoringList {
     position: absolute;
@@ -338,6 +348,11 @@
 .scoreValue.isLoss {
     color: #aa4444;
     text-shadow: 0 0 10px #aa0000;
+}
+
+.scoreValue.isDoubled {
+    color: #3498db;
+    text-shadow: 0 0 10px #2980b9;
 }
 
 .scoreValue.pulse {

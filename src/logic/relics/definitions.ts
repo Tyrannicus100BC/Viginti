@@ -8,8 +8,8 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Viginti',
         categories: ['Angle', 'Win', 'HandType'],
-        description: 'Winning a hand earns {win.score}\nExactly 21 earns {viginti.score}',
-        handType: { id: 'viginti', name: 'Viginti', chips: 50, mult: 1, order: 0 },
+        description: 'Winning hands earn {win.score}\nExactly 21 earn {viginti.score}',
+        handType: { id: 'viginti', name: 'Viginti', chips: 50, mult: 1, order: 0},
         extraHandTypes: {
             'win': { id: 'win', name: 'Win', chips: 10, mult: 1, order: 1 },
             'viginti': { id: 'viginti', name: 'Viginti', chips: 50, mult: 1, order: 0 }
@@ -20,7 +20,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Rank Pair Chips',
         categories: ['Angle', 'Rank', 'HandType', 'Chips'],
-        description: 'Highest [Rank Pair] earns Cards + <$${base_chips}>',
+        description: 'Highest [Rank Pair] earns <Cards> + <$${base_chips}>',
         handType: { id: 'rank_pair_chips', name: 'Rank Pair', chips: 0, mult: 0, order: 2, chipCards: true },
         hooks: Hooks.rank_pair,
         properties: { base_chips: 40, base_mult: 1 }
@@ -36,7 +36,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Rank Triple Chips',
         categories: ['Angle', 'Rank', 'HandType', 'Chips'],
-        description: 'Highest [Rank Triple] earns Cards + <$${base_chips}>',
+        description: 'Highest [Rank Triple] earns <Cards> + <$${base_chips}>',
         handType: { id: 'rank_triple_chips', name: 'Rank Triple', chips: 0, mult: 0, order: 3, chipCards: true },
         hooks: Hooks.rank_triple,
         properties: { base_chips: 60, base_mult: 1 }
@@ -52,7 +52,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Rank Run Chips',
         categories: ['Angle', 'Rank', 'HandType', 'Chips'],
-        description: 'Longest [Rank Run] earns Cards + <$${per_card_chips} / additional card>',
+        description: 'Longest [Rank Run] earns <Cards> + <$${per_card_chips} / additional card>',
         handType: { id: 'rank_run_chips', name: 'Rank Run', chips: 0, mult: 0, order: 4, chipCards: true },
         hooks: Hooks.rank_run,
         properties: { base_chips: 0, base_mult: 1, per_card_chips: 15, per_card_mult: 0 }
@@ -70,7 +70,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Flush Pair Chips',
         categories: ['Angle', 'Flush', 'HandType', 'Chips'],
-        description: 'Highest [Flush Pair] earns Cards + <$${base_chips}>',
+        description: 'Highest [Flush Pair] earns <Cards> + <$${base_chips}>',
         handType: { id: 'flush_pair_chips', name: 'Flush Pair', chips: 0, mult: 0, order: 5, chipCards: true },
         hooks: Hooks.flush_pair,
         properties: { base_chips: 40, base_mult: 1 }
@@ -86,7 +86,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Flush Triple Chips',
         categories: ['Angle', 'Flush', 'HandType', 'Chips'],
-        description: 'Highest [Flush Triple] earns Cards + <$${base_chips}>',
+        description: 'Highest [Flush Triple] earns <Cards> + <$${base_chips}>',
         handType: { id: 'flush_triple_chips', name: 'Flush Triple', chips: 0, mult: 0, order: 6, chipCards: true },
         hooks: Hooks.flush_triple,
         properties: { base_chips: 60, base_mult: 1 }
@@ -102,7 +102,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Flush Run Chips',
         categories: ['Angle', 'Flush', 'HandType', 'Chips'],
-        description: 'Longest [Flush Run] earns Cards + <$${per_card_chips} / additional card>',
+        description: 'Longest [Flush Run] earns <Cards> + <$${per_card_chips} / additional card>',
         handType: { id: 'flush_run_chips', name: 'Flush Run', chips: 0, mult: 0, order: 7, chipCards: true },
         hooks: Hooks.flush_run,
         properties: { base_chips: 0, base_mult: 1, per_card_chips: 15, per_card_mult: 0 }
@@ -120,7 +120,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Straight Pair Chips',
         categories: ['Angle', 'Straight', 'HandType', 'Chips'],
-        description: 'Highest [Straight Pair] earns Cards + <$${base_chips}>',
+        description: 'Highest [Straight Pair] earns <Cards> + <$${base_chips}>',
         handType: { id: 'straight_pair_chips', name: 'Straight Pair', chips: 0, mult: 0, order: 8, chipCards: true },
         hooks: Hooks.straight_pair,
         properties: { base_chips: 40, base_mult: 1 }
@@ -136,7 +136,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Straight Triple Chips',
         categories: ['Angle', 'Straight', 'HandType', 'Chips'],
-        description: 'Highest [Straight Triple] earns Cards + <$${base_chips}>',
+        description: 'Highest [Straight Triple] earns <Cards> + <$${base_chips}>',
         handType: { id: 'straight_triple_chips', name: 'Straight Triple', chips: 0, mult: 0, order: 9, chipCards: true },
         hooks: Hooks.straight_triple,
         properties: { base_chips: 60, base_mult: 1 }
@@ -152,7 +152,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Straight Run Chips',
         categories: ['Angle', 'Straight', 'HandType', 'Chips'],
-        description: 'Longest [Straight Run] earns Cards + <$${per_card_chips} / additional card>',
+        description: 'Longest [Straight Run] earns <Cards> + <$${per_card_chips} / additional card>',
         handType: { id: 'straight_run_chips', name: 'Straight Run', chips: 0, mult: 0, order: 10, chipCards: true },
         hooks: Hooks.straight_run,
         properties: { base_chips: 0, base_mult: 1, per_card_chips: 15, per_card_mult: 0 }

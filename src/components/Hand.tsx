@@ -21,7 +21,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
   const triggerScoringRow = useGameStore(state => state.triggerScoringRow);
   // Determine if we should show overlay (bust or result revealed)
   const isViginti = hand.blackjackValue === 21;
-  const showOverlay = (hand.isBust || isViginti || (hand.finalScore !== undefined && hand.resultRevealed)) && hand.cards.length > 0;
+  const showOverlay = (hand.isBust || isViginti || hand.isDoubled || (hand.finalScore !== undefined && hand.resultRevealed)) && hand.cards.length > 0;
 
   // Is this a winning hand that needs scoring animation?
   const isWin = !!(hand.finalScore && hand.resultRevealed);
@@ -424,7 +424,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
                   isViginti && !hand.isBust ? styles.isViginti :
                     isWin ? styles.isWin :
                       (!isWin && hand.resultRevealed && !hand.isBust && !isViginti) ? styles.isLoss : ''
-                  }`}>
+                }`}>
                 {displayScore}
               </div>
             </div>

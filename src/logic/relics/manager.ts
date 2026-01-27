@@ -52,7 +52,7 @@ export class RelicManager {
         let currentValue = initialValue;
 
         // Collect all applicable hooks
-        const activeHooks: { instance: any; priority: number; handler: Function }[] = [];
+        const activeHooks: { instance: any; priority: number; handler: Function; config: RelicConfig }[] = [];
 
         inventory.forEach(instance => {
             const config = RELIC_REGISTRY[instance.id];
@@ -65,7 +65,8 @@ export class RelicManager {
             activeHooks.push({
                 instance: instance,
                 priority: normalized.priority,
-                handler: normalized.handler
+                handler: normalized.handler,
+                config: config
             });
         });
 
@@ -76,7 +77,7 @@ export class RelicManager {
         for (const hook of activeHooks) {
              try {
                 // Pass relic state as the last argument
-                currentValue = hook.handler(currentValue, context, hook.instance.state);
+                currentValue = hook.handler(currentValue, context, hook.instance.state, hook.config);
              } catch (e) {
                  console.error(`Error in relic hook ${hookName} for relic ${hook.instance.id}:`, e);
              }
@@ -93,7 +94,7 @@ export class RelicManager {
         const { inventory } = context;
 
         // Collect all applicable hooks
-        const activeHooks: { instance: any; priority: number; handler: Function }[] = [];
+        const activeHooks: { instance: any; priority: number; handler: Function; config: RelicConfig }[] = [];
 
         inventory.forEach(instance => {
             const config = RELIC_REGISTRY[instance.id];
@@ -105,7 +106,8 @@ export class RelicManager {
             activeHooks.push({
                 instance: instance,
                 priority: normalized.priority,
-                handler: normalized.handler
+                handler: normalized.handler,
+                config: config
             });
         });
 
@@ -113,7 +115,7 @@ export class RelicManager {
 
         for (const hook of activeHooks) {
             try {
-                await hook.handler(context, hook.instance.state);
+                await hook.handler(context, hook.instance.state, hook.config);
             } catch (e) {
                 console.error(`Error in interrupt relic hook ${hookName} for relic ${hook.instance.id}:`, e);
             }

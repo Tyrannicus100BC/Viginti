@@ -161,11 +161,13 @@ export const RelicInventory: React.FC<RelicInventoryProps> = ({ enabledCategorie
                         displayValues={sortedInventory[hoveredIndex].state}
                         hideIcon={true}
                         isRightAligned={true}
+                        layout="horizontal"
+                        direction="rtl"
                         style={{
                             position: 'absolute',
-                            top: tooltipPos.top - 13, // Offset by padding + border to overlay icon/title
+                            top: tooltipPos.top - 11, // Offset: 10px padding + 1px border
                             left: 'auto',
-                            right: -13, // align right edge with item's right edge (offset by padding)
+                            right: -21, // Offset: 20px padding + 1px border
                             pointerEvents: 'none',
                             zIndex: 50
                         }}
@@ -287,10 +289,12 @@ export const RelicInventory: React.FC<RelicInventoryProps> = ({ enabledCategorie
                     relic={RelicManager.getRelicConfig(visibleInventory[hoveredIndex].id)!}
                     displayValues={visibleInventory[hoveredIndex].state}
                     hideIcon={true}
+                    layout="horizontal"
+                    direction="ltr"
                     style={{
                         position: 'absolute',
-                        top: tooltipPos.top - 13, // Offset by tooltip padding (12px) + border (1px)
-                        left: tooltipPos.left - 13, // Offset by tooltip padding (12px) + border (1px)
+                        top: tooltipPos.top - 11, // Offset: 10px padding + 1px border
+                        left: tooltipPos.left - 21, // Offset: 20px padding + 1px border
                         pointerEvents: 'none',
                         zIndex: 50 // Between items (1) and hovered-top (100)
                     }}

@@ -57,9 +57,22 @@
         min-width 0.8s cubic-bezier(0.22, 1, 0.36, 1);
     min-width: 80px;
     white-space: nowrap;
+    min-width: 80px;
+    white-space: nowrap;
     width: auto;
     flex: 0 0 auto;
     /* Prevent stats from stretching */
+}
+
+.noTransition {
+    transition: none !important;
+}
+
+.headerPlaceholder {
+    flex: 1;
+    height: 60px;
+    margin: 0 12px;
+    visibility: hidden; /* occupies space but is invisible */
 }
 
 /* Add spacing between stats using margin instead of gap */
@@ -602,8 +615,9 @@
     top: 20px;
     left: 50%;
     transform: translateX(-50%);
-    width: 800px;
+    width: 840px;
     max-width: 100%;
+    padding: 0 20px;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -616,10 +630,12 @@
 }
 
 .header {
-    position: relative;
+    position: absolute; /* Changed from relative to absolute for smooth transitions */
     top: 0;
-    flex: 1;
-    margin: 0 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: calc(100% - 170px); /* Fit between buttons (60px*2 + gaps) */
+    
     height: 60px;
     background: #1e1e1e;
     backdrop-filter: blur(10px);
@@ -630,14 +646,16 @@
     align-items: center;
     padding: 0 20px;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    transition: all 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .headerCentered {
     /* Overlay mode styles */
-    position: absolute; /* Relative to topNavContainer */
-    left: 50%;
-    transform: translate(-50%, -50%);
+    /* Position stays absolute */
+    /* top is handled by inline style */
+   
+    /* left: 50% stays same */
+    transform: translate(-50%, -50%); /* Center vertically on target */
     width: 650px;
     height: 150px;
     padding: 30px 60px;
@@ -860,7 +878,7 @@
     pointer-events: none;
     display: flex;
     justify-content: space-between;
-    z-index: 50;
+    z-index: 100;
 }
 
 .sidebar {
@@ -872,7 +890,7 @@
     width: 220px; /* Reduced width to avoid overlapping dealer area */
     align-items: center;
     pointer-events: none; /* Allow clicks through to board */
-    z-index: 50;
+    z-index: 100;
     align-self: flex-start; /* Only take header/relic height */
 }
 
@@ -885,7 +903,7 @@
     width: 220px;
     align-items: center;
     pointer-events: none; /* Allow clicks through to board */
-    z-index: 50;
+    z-index: 100;
     align-self: flex-start; /* Only take header/relic height */
 }
 

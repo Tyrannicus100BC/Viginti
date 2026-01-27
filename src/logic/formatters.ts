@@ -1,14 +1,14 @@
 
-export function formatHandChips(chips: number, chipCards: boolean = false): string {
+export function formatHandChips(chips: number, chipCards: boolean = false, useMarkdown: boolean = false): string {
     if (chipCards) {
         if (chips > 0) {
-            return `Cards + $${chips}`;
+            return `${useMarkdown ? '<Cards>' : 'Cards'} + $${chips}`;
         } else {
-            return 'Cards';
+            return useMarkdown ? '<Cards>' : 'Cards';
         }
     } else {
         if (chips > 0) {
-            return `+$${chips}`;
+            return `$${chips}`;
         }
         return ''; // Or should it be $0? Usually if it's 0 it might not be shown, or dealt with elsewhere.
     }
@@ -25,8 +25,8 @@ export function formatHandMult(mult: number): string {
     return `x${val}`; 
 }
 
-export function formatHandScore(chips: number, mult: number, chipCards: boolean = false, separator: string = ' and '): string {
-    const chipStr = formatHandChips(chips, chipCards);
+export function formatHandScore(chips: number, mult: number, chipCards: boolean = false, separator: string = '\u00a0\u00a0', useMarkdown: boolean = false): string {
+    const chipStr = formatHandChips(chips, chipCards, useMarkdown);
     const multStr = formatHandMult(mult);
 
     if (chipStr && multStr) {

@@ -11,19 +11,30 @@ interface RelicTooltipProps {
     className?: string;
     hideIcon?: boolean;
     isRightAligned?: boolean;
+    layout?: 'vertical' | 'horizontal';
+    direction?: 'ltr' | 'rtl';
 }
 
-export const RelicTooltip: React.FC<RelicTooltipProps> = ({ relic, displayValues, style, className, hideIcon, isRightAligned }) => {
+export const RelicTooltip: React.FC<RelicTooltipProps> = ({ 
+    relic, 
+    displayValues, 
+    style, 
+    className, 
+    hideIcon, 
+    isRightAligned,
+    layout = 'vertical',
+    direction = 'ltr' 
+}) => {
     const formatDescription = (text: string, values?: Record<string, any>) => {
         const hand = relic.handType;
         const context: any = {
             ...values,
             hand: hand ? {
                 ...hand,
-                chips: hand.chips !== undefined ? formatHandChips(hand.chips, hand.chipCards) : undefined,
+                chips: hand.chips !== undefined ? formatHandChips(hand.chips, hand.chipCards, true) : undefined,
                 mult: hand.mult !== undefined ? formatHandMult(hand.mult) : undefined,
                 score: hand.chips !== undefined && hand.mult !== undefined 
-                    ? formatHandScore(hand.chips, hand.mult, hand.chipCards) 
+                    ? formatHandScore(hand.chips, hand.mult, hand.chipCards, undefined, true) 
                     : undefined
             } : undefined
         };
@@ -32,10 +43,10 @@ export const RelicTooltip: React.FC<RelicTooltipProps> = ({ relic, displayValues
             Object.entries(relic.extraHandTypes).forEach(([key, ht]) => {
                 context[key] = {
                     ...ht,
-                    chips: ht.chips !== undefined ? formatHandChips(ht.chips, ht.chipCards) : undefined,
+                    chips: ht.chips !== undefined ? formatHandChips(ht.chips, ht.chipCards, true) : undefined,
                     mult: ht.mult !== undefined ? formatHandMult(ht.mult) : undefined,
                     score: ht.chips !== undefined && ht.mult !== undefined 
-                        ? formatHandScore(ht.chips, ht.mult, ht.chipCards) 
+                        ? formatHandScore(ht.chips, ht.mult, ht.chipCards, undefined, true) 
                         : undefined
                 };
             });
@@ -60,9 +71,8 @@ export const RelicTooltip: React.FC<RelicTooltipProps> = ({ relic, displayValues
         // 2. {...} (curly braced text for mult/yellow highlighting)
         // 3. [...] (bracketed text for hand highlighting)
         // 4. x followed by digits (multipliers)
-        // 5. Cards (optionally followed by + and $amount)
-        // 6. $ or + followed by digits, or digits followed by "chips" (chips values)
-        const parts = text.split(/(<[^>]+>|\{[^}]+\}|\[.*?\]|x\d+(?:\.\d+)?|Cards(?:\s*\+\s*[\$\+]{0,2}\d+)?|[\$\+]{1,2}\d+(?:\s*chips?)?|\d+\s*chips?)/gi);
+        // 5. $ or + followed by digits, or digits followed by "chips" (chips values)
+        const parts = text.split(/(<[^>]+>|\{[^}]+\}|\[.*?\]|x\d+(?:\.\d+)?|[\$\+]{1,2}\d+(?:\s*chips?)?|\d+\s*chips?)/gi);
         
         return parts.map((part, i) => {
             if (part.startsWith('<') && part.endsWith('>')) {
@@ -78,22 +88,44 @@ export const RelicTooltip: React.FC<RelicTooltipProps> = ({ relic, displayValues
                 return <span key={i} className={styles.multValue}>{part}</span>;
             }
             if (
-                (/^[\$\+\d]/i.test(part.trim()) && (part.trim().startsWith('$') || part.trim().startsWith('+') || part.toLowerCase().includes('chips'))) ||
-                part.toLowerCase().trim().startsWith('cards')
+                /^[\$\+\d]/i.test(part.trim()) && (part.trim().startsWith('$') || part.trim().startsWith('+') || part.toLowerCase().includes('chips'))
             ) {
                 return <span key={i} className={styles.chipsValue}>{part}</span>;
+            }
+            if (part.includes('\n')) {
+                return (
+                    <React.Fragment key={i}>
+                        {part.split('\n').map((line, j, lines) => (
+                            <React.Fragment key={j}>
+                                {line}
+                                {j < lines.length - 1 && <br />}
+                            </React.Fragment>
+                        ))}
+                    </React.Fragment>
+                );
             }
             return part;
         });
     };
 
+    const isHorizontal = layout === 'horizontal';
+    const isRtl = direction === 'rtl';
+
     return (
-        <div className={`${styles.container} ${className || ''}`} style={style}>
+        <div 
+            className={`${styles.container} ${isHorizontal ? styles.containerHorizontal : ''} ${className || ''}`} 
+            style={{
+                ...style,
+                flexDirection: isHorizontal ? (isRtl ? 'row-reverse' : 'row') : 'column',
+                gap: isHorizontal ? 0 : 8
+            }}
+        >
+            {/* Header: Icon and Title */}
             <div 
-                className={styles.header}
+                className={`${styles.header} ${isHorizontal ? styles.headerHorizontal : ''}`}
                 style={{
                     flexDirection: isRightAligned ? 'row-reverse' : 'row',
-                    textAlign: isRightAligned ? 'right' : 'left'
+                    textAlign: (isRightAligned && !isHorizontal) ? 'right' : 'left',
                 }}
             >
                 <div 
@@ -111,14 +143,22 @@ export const RelicTooltip: React.FC<RelicTooltipProps> = ({ relic, displayValues
                         </div>
                     )}
                 </div>
-                <div className={styles.title} style={{ textAlign: isRightAligned ? 'right' : 'left' }}>
+                <div className={styles.title} style={{ textAlign: (isRightAligned && !isHorizontal) ? 'right' : 'left' }}>
                     {relic.handType?.name || relic.name}
                 </div>
             </div>
-            <div className={styles.content}>
+
+            {/* Vertical Divider (Horizontal Mode Only) */}
+            {isHorizontal && <div className={styles.divider} />}
+
+            {/* Content: Description */}
+            <div className={`${styles.content} ${isHorizontal ? styles.contentHorizontal : ''}`}>
                 <div 
                     className={styles.description}
-                    style={{ textAlign: isRightAligned ? 'right' : 'left' }}
+                    style={{ 
+                        textAlign: isHorizontal ? (isRtl ? 'right' : 'left') : ((isRightAligned) ? 'right' : 'left'),
+                        paddingTop: isHorizontal ? 0 : 4
+                    }}
                 >
                     {renderDescription(relic.description)}
                 </div>

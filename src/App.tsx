@@ -9,12 +9,13 @@ import { PhysicsPot } from './components/PhysicsPot';
 import { TitlePhysics } from './components/TitlePhysics';
 import titleStyles from './components/TitlePhysics.module.css';
 import { CasinoListingView } from './components/CasinoListingView';
-import { EarlyCompletionPopup } from './components/EarlyCompletionPopup';
 import { GamblerSelect } from './components/GamblerSelect';
 
 import { CompsWindow } from './components/CompsWindow';
 import { RelicInventory } from './components/RelicInventory';
+
 import { RelicStore } from './components/RelicStore';
+import { GiftShop } from './components/GiftShop';
 import type { PlayerHand } from './types';
 import { useLayout } from './components/ResponsiveLayout';
 import { CasinosButton, DeckButton } from './components/HeaderButtons';
@@ -55,7 +56,6 @@ export default function App() {
 
         setAnimationSpeed,
         triggerDebugChips,
-        completeRoundEarly,
         roundSummary,
         // showFinalScore removed
         // continueFromFinalScore removed
@@ -72,10 +72,11 @@ export default function App() {
         dealerVisible,
         inventory,
         debugEnabled,
-        toggleDebug
+        toggleDebug,
+        confirmShopSelection
     } = useGameStore();
 
-    const { scale, viewportWidth, viewportHeight } = useLayout();
+    const { viewportWidth, viewportHeight } = useLayout();
 
     const hasDoubleDownRelic = inventory.some(r => r.id === 'double_down');
 
@@ -93,7 +94,6 @@ export default function App() {
 
     const drawAreaRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
-    const [drawAreaCenter, setDrawAreaCenter] = useState({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
 
     const [selectedGamblerId, setSelectedGamblerId] = useState(() => localStorage.getItem('viginti_gambler') || 'default');
 
@@ -101,27 +101,7 @@ export default function App() {
         localStorage.setItem('viginti_gambler', selectedGamblerId);
     }, [selectedGamblerId]);
 
-    React.useEffect(() => {
-        const updateCenter = () => {
-            if (drawAreaRef.current) {
-                const rect = drawAreaRef.current.getBoundingClientRect();
-                setDrawAreaCenter({
-                    x: (rect.left + rect.width / 2) / scale,
-                    y: (rect.top + rect.height / 2) / scale
-                });
-            }
-        };
-        updateCenter();
-        // Resize handled by ResponsiveLayout triggering re-render/context update
-        // But we still need to listen if scale changes, which triggers re-render
-        // window.removeEventListener('resize', updateCenter); // Not needed as we depend on scale/phase
-        
-        // Also update when phase changes as layout might shift
-        const timer = setTimeout(updateCenter, 100);
-        return () => {
-            clearTimeout(timer);
-        };
-    }, [phase, playerHands.length, scale]);
+
 
     const [displayRound, setDisplayRound] = useState(round);
     const [displayTarget, setDisplayTarget] = useState(targetScore);
@@ -138,7 +118,17 @@ export default function App() {
     const confettiFiredRef = useRef(false);
 
     const [showSelectionUI, setShowSelectionUI] = useState(false);
+    const [hasSettledFirstOverlay, setHasSettledFirstOverlay] = useState(false);
 
+    // Watch for phase change to handle initial overlay transition
+    useEffect(() => {
+        if (phase === 'entering_casino' && round === 1) {
+            const timer = setTimeout(() => setHasSettledFirstOverlay(true), 100);
+            return () => clearTimeout(timer);
+        } else if (phase === 'init') {
+            setHasSettledFirstOverlay(false);
+        }
+    }, [phase, round]);
 
     // Watch for drawn card to delay selection UI
     useEffect(() => {
@@ -271,6 +261,8 @@ export default function App() {
     const canHold = phase === 'playing' && !drawnCard && !dealer.isRevealed && !isInitialDeal && interactionMode === 'default' && !areAllHandsUnplayable;
     const isDrawAreaVisible = phase === 'playing' && !dealer.isRevealed && !isInitialDeal;
 
+    const areHandsVisible = phase !== 'gift_shop';
+
     // Reset debug button state when draw area reappears
     React.useEffect(() => {
         if (isDrawAreaVisible) {
@@ -370,11 +362,7 @@ export default function App() {
         if (canDraw) {
             handleDraw();
         } else if (phase === 'round_over') {
-            // Only auto-advance if we don't have the early completion choice
-            const canCompleteEarly = totalScore >= targetScore && handsRemaining > 0;
-            if (!canCompleteEarly) {
-                nextRound();
-            }
+            nextRound();
         } else if (phase === 'entering_casino') {
             // Allow global click to start dealing 
             dealFirstHand();
@@ -409,9 +397,11 @@ export default function App() {
             <div className={styles.topNavContainer}>
                 <CasinosButton onClick={() => setShowCasinoListing(true)} />
                 
+                <div className={styles.headerPlaceholder} />
+
                 <header
-                    className={`${styles.header} ${isOverlayMode ? styles.headerCentered : ''}`}
-                    style={isOverlayMode ? { top: drawAreaCenter.y - 20 } : {}}
+                    className={`${styles.header} ${isOverlayMode ? styles.headerCentered : ''} ${(isOverlayMode && round === 1 && !hasSettledFirstOverlay) ? styles.noTransition : ''}`}
+                    style={isOverlayMode ? { top: 460 } : {}}
                 >
                     <div className={styles.stat}>
                         <span className={styles.statLabel}>Casino</span>
@@ -427,10 +417,14 @@ export default function App() {
                         <span className={styles.statLabel}>Winnings</span>
                         <span
                             id="total-score-display"
-                            key={totalScore}
-                            className={`${styles.statValue} ${scoreAnimate ? styles.statValueAnimate : ''} ${(phase === 'round_over' || phase === 'entering_casino') ? styles.statValueClickable : ''}`}
-                            onClick={(phase === 'round_over' || phase === 'entering_casino') ? triggerDebugChips : undefined}
-                            title={(phase === 'round_over' || phase === 'entering_casino') ? "Add Debug Chips" : undefined}
+                            className={`${styles.statValue} ${scoreAnimate ? styles.statValueAnimate : ''} ${(debugEnabled && (phase === 'round_over' || phase === 'entering_casino')) ? styles.statValueClickable : ''}`}
+                            onClick={(e) => {
+                                if (debugEnabled && (phase === 'round_over' || phase === 'entering_casino')) {
+                                    e.stopPropagation();
+                                    triggerDebugChips();
+                                }
+                            }}
+                            title={(debugEnabled && (phase === 'round_over' || phase === 'entering_casino')) ? "Add Debug Chips" : undefined}
                         >
                             {"$" + totalScore.toLocaleString()}
                         </span>
@@ -672,7 +666,7 @@ export default function App() {
                         </div>
                     </div>
 
-                    <div className={styles.playerZone}>
+                    <div className={styles.playerZone} style={{ opacity: areHandsVisible ? 1 : 0, transition: 'opacity 0.5s', pointerEvents: areHandsVisible ? 'auto' : 'none' }}>
                         <div className={styles.playerHandsContainer}>
                             {playerHands.map((hand, idx) => {
                                 const canSelectHand = (showSelectionUI && !!drawnCard) || interactionMode === 'double_down_select';
@@ -716,7 +710,7 @@ export default function App() {
                     </div>
 
                     <div className={styles.actionButtonContainer}>
-{((phase === 'playing' && !isInitialDeal) || phase === 'scoring') ? (
+                        {((phase === 'playing' && !isInitialDeal) || phase === 'scoring') ? (
                             <button
                                 className={styles.standButton}
                                 onClick={(e) => {
@@ -738,22 +732,25 @@ export default function App() {
                                 style={phase === 'round_over' && totalScore < targetScore && handsRemaining <= 0 ? { color: '#ff4444', borderColor: '#ff4444' } : {}}
                             >
                                 {phase === 'entering_casino' || (phase === 'playing' && isInitialDeal) ? 'Deal' : (
-                                    totalScore >= targetScore ? 'Next Casino' : 
+                                    totalScore >= targetScore ? 'Gift Shop' : 
                                     (handsRemaining <= 0 ? 'Game Over' : 'Deal')
                                 )}
+                            </button>
+                        ) : (phase === 'gift_shop') ? (
+                             <button
+                                className={styles.nextRoundButton}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    confirmShopSelection();
+                                }}
+                            >
+                                Next Casino
                             </button>
                         ) : (
                             <div className={styles.actionPlaceholder} />
                         )}
                     </div>
 
-                    {phase === 'round_over' && totalScore >= targetScore && handsRemaining > 0 && (
-                        <EarlyCompletionPopup
-                            handsRemaining={handsRemaining}
-                            onComplete={completeRoundEarly}
-                            onContinue={() => nextRound(true)}
-                        />
-                    )}
                 </div>
                 </div>
 
@@ -783,6 +780,8 @@ export default function App() {
                     onClose={() => setShowCasinoListing(false)}
                 />
             )}
+
+            {phase === 'gift_shop' && <GiftShop />}
 
             {showCompsWindow && (
                 <CompsWindow

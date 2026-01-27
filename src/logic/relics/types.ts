@@ -99,16 +99,16 @@ export function withPriority<T>(priority: number, handler: T): PrioritizedHook<T
 // Values can be either the function directly (default priority 0) or a PrioritizedHook
 export type RelicHooks = {
     // Value Hooks (Sync, expected to return modified value)
-    getDealsPerCasino?: ValueHook<(value: number, context: GameContext, relicState: any) => number>;
-    getDealerStopValue?: ValueHook<(value: number, context: GameContext, relicState: any) => number>;
-    getCardValue?: ValueHook<(value: number, context: CardValueContext, relicState: any) => number>;
-    adjustBlackjackScore?: ValueHook<(value: number, context: { handCards: Card[] }, relicState: any) => number>;
-    onEvaluateHandScore?: ValueHook<(score: HandScore, context: HandContext, relicState: any) => HandScore>;
+    getDealsPerCasino?: ValueHook<(value: number, context: GameContext, relicState: any, config: RelicConfig) => number>;
+    getDealerStopValue?: ValueHook<(value: number, context: GameContext, relicState: any, config: RelicConfig) => number>;
+    getCardValue?: ValueHook<(value: number, context: CardValueContext, relicState: any, config: RelicConfig) => number>;
+    adjustBlackjackScore?: ValueHook<(value: number, context: { handCards: Card[] }, relicState: any, config: RelicConfig) => number>;
+    onEvaluateHandScore?: ValueHook<(score: HandScore, context: HandContext, relicState: any, config: RelicConfig) => HandScore>;
     
     // Interrupt Hooks (Async, can pause flow)
-    onScoreRow?: ValueHook<(context: ScoreRowContext, relicState: any) => Promise<void>>;
-    onHandCompletion?: ValueHook<(context: HandCompletionContext, relicState: any) => Promise<void>>;
-    onRoundCompletion?: ValueHook<(context: RoundCompletionContext, relicState: any) => Promise<void>>;
+    onScoreRow?: ValueHook<(context: ScoreRowContext, relicState: any, config: RelicConfig) => Promise<void>>;
+    onHandCompletion?: ValueHook<(context: HandCompletionContext, relicState: any, config: RelicConfig) => Promise<void>>;
+    onRoundCompletion?: ValueHook<(context: RoundCompletionContext, relicState: any, config: RelicConfig) => Promise<void>>;
 }
 
 export type ValueHook<T> = T | PrioritizedHook<T>;
