@@ -250,6 +250,14 @@
     transition: none !important;
 }
 
+
+/* Reset for Discarding: Force face up, no rotation, no opacity issues. */
+.animReset {
+    transform: rotateY(0deg) !important;
+    animation: none !important;
+    opacity: 1 !important;
+}
+
 /* Static states */
 .isFlipped {
     transform: rotateY(180deg);

@@ -1,5 +1,5 @@
 
-import { withPriority, type RoundCompletionContext, type HandCompletionContext, type ScoreRowContext, type HandContext, type GameContext } from './types';
+import { withPriority, type RoundCompletionContext, type HandCompletionContext, type ScoreRowContext, type HandContext, type GameContext, type HandBustContext } from './types';
 import type { Card, HandScore } from '../../types';
 import { findMatches, POKER_ORDER, SCORING_RULES, RANK_VALUES } from '../rules';
 
@@ -16,15 +16,16 @@ const getRankCounts = (cards: Card[]) => {
 
 
 // Generic Group Finder
-const getStandardScore = (cards: Card[], baseChips: number, baseMult: number, isRun: boolean, relicState?: any, chipCards: boolean = false) => {
+// Generic Group Finder
+const getStandardScore = (cards: Card[], baseChips: number, baseMult: number, isRun: boolean, runParams?: { chipRun?: number, multRun?: number }, chipCards: boolean = false) => {
     const cardChips = chipCards ? cards.reduce((s, c) => s + RANK_VALUES[c.rank], 0) : 0;
     let finalChips = cardChips + baseChips;
     let finalMult = baseMult;
 
-    if (isRun && relicState && cards.length > 1) {
+    if (isRun && runParams && cards.length > 1) {
         const extras = cards.length - 1;
-        finalChips += extras * (relicState.per_card_chips || 0);
-        finalMult += extras * (relicState.per_card_mult || 0);
+        finalChips += extras * (runParams.chipRun || 0);
+        finalMult += extras * (runParams.multRun || 0);
     }
     
     return { chips: finalChips, mult: finalMult };
@@ -146,49 +147,20 @@ const findBestGroup = (cards: Card[], type: 'rank' | 'flush' | 'straight', fixed
 const evaluateStandardRelic = (score: HandScore, context: HandContext, type: 'rank' | 'flush' | 'straight', fixedLen: number, relicState?: any, config?: any) => {
     const bestGroup = findBestGroup(context.handCards, type, fixedLen);
     if (bestGroup) {
-         // get definition from context? Or relicState?
-         // We don't have easy access to the definition 'chips'/'mult' directly from here unless we hardcode or look up.
-         // But `RELIC_DEFINITIONS` has it. However `evaluateStandardRelic` is generic.
-         // We can fallback to fetching from `relicState` if we passed it, but `definitions` defined static values in `handType`.
-         // Wait, `handType` in specific definitions:
-         // Rank Pair: chips 10, mult 2.
-         // These are APPLIED by the system automatically if we return a criteria match?
-         // No, `onEvaluateHandScore` calculates the score.
-         // The `handType` prop in definition is metadata, likely used for UI or defaults.
-         // I should probably look up the RELIC_DEFINITIONS or pass the values.
-         // Standard: 
-         // Rank Pair: 10, 2
-         // Rank Triple: 20, 3
-         // Rank Run: 0, 0 (calc dynamic)
-         
-         // HARDCODED MAP for simplicity as per Plan
-         const PROPS: Record<string, {c: number, m: number}> = {
-             'rank_pair': {c: 10, m: 2},
-             'rank_triple': {c: 20, m: 3},
-             'rank_run': {c: 0, m: 0},
-             'flush_pair': {c: 10, m: 2},
-             'flush_triple': {c: 5, m: 3},
-             'flush_run': {c: 0, m: 0},
-             'straight_pair': {c: 10, m: 2},
-             'straight_triple': {c: 20, m: 3},
-             'straight_run': {c: 0, m: 0},
-         };
-         
-         // specific ID?
-         // We need to know which relic we are.
-         // The caller knows.
-         // Let's assume caller calls with specific ID or I infer from type+len
-         
          const isRun = fixedLen === 0;
          let id = `${type}_${isRun ? 'run' : (fixedLen === 2 ? 'pair' : 'triple')}`;
          
-         // Use relicState properties if available, otherwise fallback to hardcoded defaults (legacy support)
-         const base = PROPS[id] || {c: 0, m: 0};
-         const baseChips = relicState?.base_chips !== undefined ? relicState.base_chips : base.c;
-         const baseMult = relicState?.base_mult !== undefined ? relicState.base_mult : base.m;
+         // Use handType definition as source of truth for base values
+         const baseChips = config?.handType?.chips ?? 0;
+         const baseMult = config?.handType?.mult ?? 0;
          const chipCards = config?.handType?.chipCards || false;
          
-         const { chips, mult } = getStandardScore(bestGroup, baseChips, baseMult, isRun, relicState, chipCards);
+         const runParams = isRun ? {
+             chipRun: config?.handType?.chipRun,
+             multRun: config?.handType?.multRun
+         } : undefined;
+
+         const { chips, mult } = getStandardScore(bestGroup, baseChips, baseMult, isRun, runParams, chipCards);
          
          const newCriteria = [...score.criteria, {
              id: id as any,
@@ -205,6 +177,103 @@ const evaluateStandardRelic = (score: HandScore, context: HandContext, type: 'ra
     }
     return score;
 }
+
+const createCategoryBonusHook = (categoryPrefix: string, type: 'mult' | 'chips') => ({
+    onEvaluateHandScore: (score: HandScore, _context: HandContext, relicState: any, _config: any) => {
+        let changed = false;
+        const updatedCriteria = score.criteria.map(c => {
+            const isMatch = (
+                c.id === categoryPrefix || 
+                c.id.startsWith(categoryPrefix + '_') || 
+                (categoryPrefix === 'rank' && (c.id === 'pair' || c.id === 'three_kind'))
+            );
+
+            if (isMatch) {
+                changed = true;
+                const val = type === 'mult' ? relicState.bonus_mult : relicState.bonus_chips;
+                if (type === 'mult') {
+                    const newMult = c.multiplier + val;
+                    const updatedMatches = c.matches?.map(m => ({ ...m, multiplier: m.multiplier + val }));
+                    return { ...c, multiplier: newMult, matches: updatedMatches };
+                } else {
+                    const newChips = c.chips + val;
+                    return { ...c, chips: newChips };
+                }
+            }
+            return c;
+        });
+
+        if (!changed) return score;
+
+        const totalChips = updatedCriteria.reduce((sum, crit) => sum + crit.chips, 0);
+        const totalMultiplier = updatedCriteria.reduce((sum, crit) => sum + crit.multiplier, 0);
+
+        return { ...score, criteria: updatedCriteria, totalChips, totalMultiplier: totalMultiplier, finalScore: Math.floor(totalChips * totalMultiplier) };
+    },
+    onScoreRow: async (context: ScoreRowContext, _relicState: any, config: any) => {
+        const isMatch = (
+            context.criterionId === categoryPrefix || 
+            context.criterionId.startsWith(categoryPrefix + '_') || 
+            (categoryPrefix === 'rank' && (context.criterionId === 'pair' || context.criterionId === 'three_kind'))
+        );
+
+        if (isMatch) {
+            const relicId = config?.id || `${categoryPrefix}_${type}`;
+            await context.highlightRelic(relicId, { preDelay: 600 });
+        }
+    }
+});
+
+const createSuitBonusHook = (suit: string) => ({
+    onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any, config: any) => {
+        const relicId = config?.id;
+        let changed = false;
+        const updatedCriteria = score.criteria.map(c => {
+            const isChipCards = /^(rank|flush|straight|double_down)/.test(c.id);
+
+            if (isChipCards && c.cardIds && c.cardIds.length > 0) {
+                 const cards = context.handCards.filter(card => c.cardIds.includes(card.id));
+                 const suitCount = cards.filter(card => card.suit.toLowerCase() === suit.toLowerCase()).length;
+                 
+                 if (suitCount > 0) {
+                     changed = true;
+                     const bonus = suitCount * relicState.bonus_chips;
+                     
+                     const cAny = c as any;
+                     const boostedBy = cAny.boostedBy || [];
+                     if (relicId && !boostedBy.includes(relicId)) {
+                        return { 
+                             ...c, 
+                             chips: c.chips + bonus,
+                             boostedBy: [...boostedBy, relicId]
+                        } as any;
+                     }
+                     
+                     return { ...c, chips: c.chips + bonus };
+                 }
+            }
+            return c;
+        });
+
+        if (!changed) return score;
+        const totalChips = updatedCriteria.reduce((s, c) => s + c.chips, 0);
+        const totalMult = updatedCriteria.reduce((s, c) => s + c.multiplier, 0);
+        return { ...score, criteria: updatedCriteria, totalChips, totalMultiplier: totalMult, finalScore: Math.floor(totalChips * totalMult) };
+    },
+    
+    onScoreRow: async (context: ScoreRowContext, _relicState: any, config: any) => {
+        const relicId = config?.id;
+        if (!relicId) return;
+        const crit = context.score.criteria.find(c => c.id === context.criterionId) as any;
+        if (crit && crit.boostedBy && crit.boostedBy.includes(relicId)) {
+            // Highlight!
+            // The user wants: "default chip value ... first, then ... highlight and ... increase"
+            // Since the value is already increased in the score, we can't easily show "default first".
+            // But we can highlight to show WHY it is high.
+            await context.highlightRelic(relicId, { preDelay: 200 }); 
+        }
+    }
+});
 
 export const Hooks = {
     // JMarr Category
@@ -240,32 +309,16 @@ export const Hooks = {
     idiot_dealer_stop: {
         getDealerStopValue: (_val: number, _context: GameContext, relicState: any) => relicState.stop_value
     },
-    flusher_bonus: {
-        onEvaluateHandScore: (score: HandScore, _context: HandContext, relicState: any, _config: any) => {
-            let hasFlush = false;
-            const updatedCriteria = score.criteria.map(c => {
-                if (c.id === 'flush') {
-                    hasFlush = true;
-                    const newMult = c.multiplier + relicState.bonus_mult;
-                    const updatedMatches = c.matches?.map(m => ({ ...m, multiplier: m.multiplier + relicState.bonus_mult }));
-                    return { ...c, multiplier: newMult, matches: updatedMatches };
-                }
-                return c;
-            });
+    flusher_bonus: createCategoryBonusHook('flush', 'mult'),
+    flusher_chips: createCategoryBonusHook('flush', 'chips'),
+    
+    // Rank Bonuses
+    rank_mult: createCategoryBonusHook('rank', 'mult'),
+    rank_chips: createCategoryBonusHook('rank', 'chips'),
 
-            if (!hasFlush) return score;
-
-            const totalChips = updatedCriteria.reduce((sum, crit) => sum + crit.chips, 0);
-            const totalMultiplier = updatedCriteria.reduce((sum, crit) => sum + crit.multiplier, 0);
-
-            return { ...score, criteria: updatedCriteria, totalChips, totalMultiplier, finalScore: Math.floor(totalChips * totalMultiplier) };
-        },
-        onScoreRow: async (context: ScoreRowContext, _relicState: any, _config: any) => {
-            if (context.criterionId === 'flush') {
-                await context.highlightRelic('flusher', { preDelay: 600 });
-            }
-        }
-    },
+    // Straight Bonuses
+    straight_mult: createCategoryBonusHook('straight', 'mult'),
+    straight_chips: createCategoryBonusHook('straight', 'chips'),
     one_armed_win_bonus: {
         onRoundCompletion: async (context: RoundCompletionContext, relicState: any, _config: any) => {
             if (context.wins === 1) {
@@ -537,102 +590,13 @@ export const Hooks = {
 
     // Suites
     // Using a factory like helper for these could be better, but staying explicit for now per instruction "reference named hook"
-    old_receipt_diamonds: {
-        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any, _config: any) => {
-            const count = context.handCards.filter(c => c.suit === 'diamonds').length;
-            if (count > 0) {
-                const newCriteria = [...score.criteria, {
-                    id: 'diamonds_bonus' as any,
-                    name: 'Old Receipt',
-                    count: count,
-                    chips: 0,
-                    multiplier: count * relicState.bonus_mult,
-                    cardIds: []
-                }];
-                const totalChips = newCriteria.reduce((s, c) => s + c.chips, 0);
-                const totalMult = newCriteria.reduce((s, c) => s + c.multiplier, 0);
-                return { ...score, criteria: newCriteria, totalChips, totalMultiplier: totalMult, finalScore: Math.floor(totalChips * totalMult) };
-            }
-            return score;
-        }
-    },
-    lucky_rock_hearts: {
-        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any, _config: any) => {
-            const count = context.handCards.filter(c => c.suit === 'hearts').length;
-            if (count > 0) {
-                const newCriteria = [...score.criteria, {
-                    id: 'hearts_bonus' as any,
-                    name: 'Lucky Rock',
-                    count: count,
-                    chips: 0,
-                    multiplier: count * relicState.bonus_mult,
-                    cardIds: []
-                }];
-                const totalChips = newCriteria.reduce((s, c) => s + c.chips, 0);
-                const totalMult = newCriteria.reduce((s, c) => s + c.multiplier, 0);
-                return { ...score, criteria: newCriteria, totalChips, totalMultiplier: totalMult, finalScore: Math.floor(totalChips * totalMult) };
-            }
-            return score;
-        }
-    },
-    burnt_match_clubs: {
-        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any, _config: any) => {
-            const count = context.handCards.filter(c => c.suit === 'clubs').length;
-            if (count > 0) {
-                const newCriteria = [...score.criteria, {
-                    id: 'clubs_bonus' as any,
-                    name: 'Burnt Match',
-                    count: count,
-                    chips: 0,
-                    multiplier: count * relicState.bonus_mult,
-                    cardIds: []
-                }];
-                const totalChips = newCriteria.reduce((s, c) => s + c.chips, 0);
-                const totalMult = newCriteria.reduce((s, c) => s + c.multiplier, 0);
-                return { ...score, criteria: newCriteria, totalChips, totalMultiplier: totalMult, finalScore: Math.floor(totalChips * totalMult) };
-            }
-            return score;
-        }
-    },
-    lost_key_spades: {
-        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any, _config: any) => {
-            const count = context.handCards.filter(c => c.suit === 'spades').length;
-            if (count > 0) {
-                const newCriteria = [...score.criteria, {
-                    id: 'spades_bonus' as any,
-                    name: 'Lost Key',
-                    count: count,
-                    chips: 0,
-                    multiplier: count * relicState.bonus_mult,
-                    cardIds: []
-                }];
-                const totalChips = newCriteria.reduce((s, c) => s + c.chips, 0);
-                const totalMult = newCriteria.reduce((s, c) => s + c.multiplier, 0);
-                return { ...score, criteria: newCriteria, totalChips, totalMultiplier: totalMult, finalScore: Math.floor(totalChips * totalMult) };
-            }
-            return score;
-        }
-    },
+    old_receipt_diamonds: createSuitBonusHook('diamonds'),
+    lucky_rock_hearts: createSuitBonusHook('hearts'),
+    burnt_match_clubs: createSuitBonusHook('clubs'),
+    lost_key_spades: createSuitBonusHook('spades'),
+
 
     // Hands
-    pocket_rock_single_card: {
-        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any, _config: any) => {
-            if (context.handCards.length === 1) {
-                const newCriteria = [...score.criteria, {
-                    id: 'pocket_rock' as any,
-                    name: 'Pocket Rock',
-                    count: 1,
-                    chips: relicState.bonus_chips,
-                    multiplier: 0,
-                    cardIds: []
-                }];
-                const totalChips = newCriteria.reduce((s, c) => s + c.chips, 0);
-                const totalMult = newCriteria.reduce((s, c) => s + c.multiplier, 0);
-                return { ...score, criteria: newCriteria, totalChips, totalMultiplier: totalMult, finalScore: Math.floor(totalChips * totalMult) };
-            }
-            return score;
-        }
-    },
     feather_same_hand_size: {
         onRoundCompletion: async (context: RoundCompletionContext, relicState: any, _config: any) => {
             const hands = context.playerHands || [];
@@ -763,6 +727,41 @@ export const Hooks = {
                  return { ...score, criteria: newCriteria, totalChips, totalMultiplier: totalMult, finalScore: Math.floor(totalChips * totalMult) };
             }
             return score;
+        }
+    },
+
+    // Draw / Place Logic
+    cloning_machine_draw: {
+        getDrawCount: (val: number, _context: GameContext, relicState: any) => val + relicState.extra_draws
+    },
+    redemption_bust_bonus: {
+        onHandBust: async (_context: HandBustContext, relicState: any, _config: any) => {
+            relicState.pending_bonus = true;
+        },
+        getDrawCount: (val: number, context: GameContext, relicState: any) => {
+            // Check pending bonus
+            if (relicState.pending_bonus) {
+                if (!context.dryRun) {
+                    // Reset active bonus from previous turn if any (though logic handles this by default)
+                    relicState.active_bonus = true;
+                    relicState.pending_bonus = false;
+                }
+                return val + relicState.extra_draw;
+            }
+             // Logic: active_bonus should be reset on new draw? 
+             // Actually, if we just set active_bonus = true, we need to know when to turn it off?
+             // The current implementation turned it off at start of draw.
+             // Revised logic:
+             if (!context.dryRun) {
+                 relicState.active_bonus = false; // Clear old active
+             }
+            return val;
+        },
+        getPlaceCount: (val: number, _context: GameContext, relicState: any) => {
+            if (relicState.active_bonus) {
+                return val + relicState.extra_place;
+            }
+            return val;
         }
     }
 }

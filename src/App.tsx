@@ -45,7 +45,9 @@ export default function App() {
 
         dealerMessage,
         dealerMessageExiting,
-        drawnCard,
+        drawnCards,
+        selectedDrawIndex,
+        selectDrawnCard,
         discardPile,
 
         startGame,
@@ -56,7 +58,10 @@ export default function App() {
 
         setAnimationSpeed,
         triggerDebugChips,
+        modifiers,
+        inventory,
         roundSummary,
+        getProjectedDrawCount,
         // showFinalScore removed
         // continueFromFinalScore removed
 
@@ -70,7 +75,6 @@ export default function App() {
         drawSpecificCard,
         allWinnersEnlarged,
         dealerVisible,
-        inventory,
         debugEnabled,
         toggleDebug,
         confirmShopSelection
@@ -132,12 +136,64 @@ export default function App() {
 
     // Watch for drawn card to delay selection UI
     useEffect(() => {
-        if (drawnCard) {
+        if (drawnCards.some(c => c !== null)) {
             setShowSelectionUI(true);
         } else {
             setShowSelectionUI(false);
         }
-    }, [!!drawnCard]);
+    }, [drawnCards]);
+
+    // Track discarded cards for animation
+    const [discardingCards, setDiscardingCards] = useState<{ card: any, offset: number, index: number }[]>([]);
+    const prevDrawnCards = useRef<any[]>([]);
+    const prevSelectedDrawIndex = useRef<number | null>(null);
+
+    useEffect(() => {
+        // If cards were cleared (length 0) and we had cards before (length > 0)
+        if (drawnCards.length === 0 && prevDrawnCards.current.length > 0) {
+            // Determine which cards were NOT placed
+            // Logic: The card at selectedDrawIndex was placed (or 0 if single). Rest are discards.
+            const selectedIdx = prevSelectedDrawIndex.current ?? 0;
+            
+            // Filter out the selected card, keep others for animation
+            // prevDrawnCards might contain nulls if sequential placement happened
+            const discards = prevDrawnCards.current
+                .map((card, idx) => ({ card, idx }))
+                .filter(({ card, idx }) => card !== null && idx !== selectedIdx);
+
+            if (discards.length > 0) {
+                 // Calculate offsets for these cards based on original count
+                 const count = prevDrawnCards.current.length; // Use previous count
+                 const spacing = 120;
+                 // Need to re-calculate offset logic matching the render loop
+                 const cardsToAnimate = discards.map(({ card, idx }) => {
+                     const offset = (idx - (count - 1) / 2) * spacing;
+                     return { card, offset, index: idx };
+                 });
+                 
+                 setDiscardingCards(cardsToAnimate);
+
+                 // Clear after animation
+                 setTimeout(() => {
+                     setDiscardingCards([]);
+                 }, 500);
+            }
+        }
+        
+        prevDrawnCards.current = drawnCards;
+        prevSelectedDrawIndex.current = selectedDrawIndex;
+    }, [drawnCards, selectedDrawIndex]);
+
+    // Visual Draw Count Logic
+    const [visualDrawCount, setVisualDrawCount] = useState(1);
+
+    // Update projected count when drawnCards is empty
+    useEffect(() => {
+        if (drawnCards.length === 0) {
+            const count = getProjectedDrawCount();
+            setVisualDrawCount(prev => prev !== count ? count : prev);
+        }
+    }, [drawnCards.length, getProjectedDrawCount, JSON.stringify(modifiers), inventory.map(i => i.id).join(',')]);
 
     // Watch for Total Winnings appearance to fire confetti
     useEffect(() => {
@@ -161,7 +217,7 @@ export default function App() {
                 });
             }
         }
-    }, [isCollectingChips, phase, !!runningSummary, !!roundSummary]);
+    }, [isCollectingChips, phase, !!runningSummary, roundSummary]);
 
     React.useEffect(() => {
         if (totalScore > prevTotalScore.current) {
@@ -250,16 +306,18 @@ export default function App() {
     const handleHandClick = (index: number) => {
         if (interactionMode === 'double_down_select') {
             confirmDoubleDown(index);
-        } else if (drawnCard) {
+        } else if (drawnCards.length > 0) {
             assignCard(index);
         }
     };
 
     const areAllHandsUnplayable = playerHands.every(h => h.isBust || h.isHeld || h.blackjackValue === 21);
-    const canDraw = phase === 'playing' && !drawnCard && !dealer.isRevealed && !isInitialDeal && interactionMode === 'default' && !areAllHandsUnplayable;
-    const canDoubleDown = phase === 'playing' && !drawnCard && !dealer.isRevealed && !isInitialDeal && !areAllHandsUnplayable; // Can start flow
-    const canHold = phase === 'playing' && !drawnCard && !dealer.isRevealed && !isInitialDeal && interactionMode === 'default' && !areAllHandsUnplayable;
-    const isDrawAreaVisible = phase === 'playing' && !dealer.isRevealed && !isInitialDeal;
+    const isDrawAreaClear = drawnCards.length === 0 || drawnCards.every(c => c === null);
+    
+    const canDraw = phase === 'playing' && isDrawAreaClear && !dealer.isRevealed && !isInitialDeal && interactionMode === 'default' && !areAllHandsUnplayable;
+    const canDoubleDown = phase === 'playing' && isDrawAreaClear && !dealer.isRevealed && !isInitialDeal && !areAllHandsUnplayable; // Can start flow
+    const canHold = phase === 'playing' && isDrawAreaClear && !dealer.isRevealed && !isInitialDeal && interactionMode === 'default' && !areAllHandsUnplayable;
+    const isDrawAreaVisible = phase === 'playing' && !dealer.isRevealed && !isInitialDeal && interactionMode !== 'double_down_select';
 
     const areHandsVisible = phase !== 'gift_shop';
 
@@ -273,7 +331,7 @@ export default function App() {
     const activeCards = [
         ...dealer.cards.filter((_, idx) => idx !== 0 || dealer.isRevealed),
         ...playerHands.flatMap(h => h.cards),
-        ...(drawnCard ? [drawnCard] : []),
+        ...drawnCards,
         ...discardPile
     ];
 
@@ -609,12 +667,12 @@ export default function App() {
                                  transform: 'translateX(-50%)',
                                  zIndex: 10
                              }}>
-                                  {drawnCard && (
+                                  {drawnCards.some(c => c !== null) && (
                                      <button className={styles.subtleDebugBtn} onClick={debugUndo}>
                                          Undo
                                      </button>
                                  )}
-                                  {!drawnCard && (
+                                  {drawnCards.every(c => c === null) && (
                                      <button 
                                          className={styles.subtleDebugBtn}
                                          onClick={() => {
@@ -628,30 +686,103 @@ export default function App() {
                              </div>
                          )}
 
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                <div
-                                    className={`${styles.drawnCardSpot} ${!drawnCard && canDraw ? styles.hitSpot : ''} ${!isDrawAreaVisible ? styles.hiddenSpot : ''}`}
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (canDraw) handleDraw();
-                                    }}
-                                >
-                                    {/* Card is conditionally rendered on top */}
-                                    {drawnCard && (
-                                        <PlayingCard
-                                            card={drawnCard}
-                                            isDrawn
-                                            origin={drawnCard.origin}
-                                        />
-                                    )}
-                                    {/* HIT text is always rendered but fades in/out */}
-                                    <span className={`${styles.hitText} ${canDraw ? styles.textVisible : ''}`}>HIT</span>
-                                </div>
-                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', width: '100%', height: '140px' }}>
+                                {/* Render dynamic draw spots */}
+                                {Array.from({ length: Math.max(drawnCards.length, visualDrawCount) }).map((_, idx) => {
+                                    // Calculate Offset
+                                    const count = Math.max(drawnCards.length, visualDrawCount);
+                                    const spacing = 120;
+                                    const offset = (idx - (count - 1) / 2) * spacing;
+                                    
+                                    const card = drawnCards[idx];
+                                    const isSelected = idx === selectedDrawIndex;
+                                    const showHitText = !card && canDraw;
+                                    const isMultiple = drawnCards.length > 1;
 
+                                    return (
+                                        <div
+                                            key={`draw-spot-${idx}`}
+                                            className={`
+                                                ${styles.drawnCardSpot} 
+                                                ${showHitText ? styles.hitSpot : ''} 
+                                                ${!isDrawAreaVisible ? styles.hiddenSpot : ''}
+                                                ${isSelected && isMultiple ? styles.selectedSpot : ''}
+                                            `}
+                                            style={{
+                                                position: 'absolute',
+                                                left: '50%',
+                                                top: '50%',
+                                                transform: `translate(calc(-50% + ${offset}px), -50%)`,
+                                                zIndex: isSelected ? 20 : 10 + idx,
+                                                opacity: !isDrawAreaVisible ? 0 : 1
+                                            }}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (card) {
+                                                    selectDrawnCard(idx);
+                                                } else if (canDraw) {
+                                                    handleDraw();
+                                                }
+                                            }}
+                                        >
+                                            {card ? (
+                                                <PlayingCard 
+                                                    card={card} 
+                                                    isDrawn 
+                                                    origin={card.origin}
+                                                />
+                                            ) : (
+                                                showHitText && <span className={styles.hitText} style={{opacity: 1, position: 'relative', transform: 'none', left: 'auto', top: 'auto'}}>HIT</span>
+                                            )}
+                                            
+                                            {isSelected && drawnCards.length > 1 && (
+                                                <div style={{
+                                                    position: 'absolute',
+                                                    top: -25,
+                                                    left: '50%',
+                                                    transform: 'translateX(-50%)',
+                                                    background: '#ffd700',
+                                                    color: '#000',
+                                                    padding: '2px 8px',
+                                                    borderRadius: '4px',
+                                                    fontSize: '0.7rem',
+                                                    fontWeight: 'bold',
+                                                    whiteSpace: 'nowrap',
+                                                    boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
+                                                    pointerEvents: 'none',
+                                                    opacity: 0 // Hide "SELECT" badge since the glow is enough
+                                                }}>
+                                                    SELECT
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+
+                                {/* Render discarding cards */}
+                                {discardingCards.map(({ card, offset, index }) => (
+                                    <div
+                                        key={`discard-${index}`}
+                                        className={`${styles.drawnCardSpot} ${styles.discardingCard}`}
+                                        style={{
+                                            position: 'absolute',
+                                            left: '50%',
+                                            top: '50%',
+                                            transform: `translate(calc(-50% + ${offset}px), -50%)`,
+                                            zIndex: 5
+                                        }}
+                                    >
+                                         <PlayingCard 
+                                            card={card} 
+                                            isDrawn 
+                                            origin="discard"
+                                        />
+                                    </div>
+                                ))}
+                            </div>
                             <div className={styles.infoTextContainer}>
-                                <div className={`${styles.instructions} ${showSelectionUI && drawnCard ? styles.textVisible : ''}`}>
-                                    CHOOSE A HAND
+                                <div className={`${styles.instructions} ${showSelectionUI && drawnCards.some(c => c !== null) ? styles.textVisible : ''}`}>
+                                    PLACE CARD
                                 </div>
                                 <div 
                                     className={`${styles.instructions} ${interactionMode === 'double_down_select' ? styles.textVisible : ''}`} 
@@ -669,7 +800,7 @@ export default function App() {
                     <div className={styles.playerZone} style={{ opacity: areHandsVisible ? 1 : 0, transition: 'opacity 0.5s', pointerEvents: areHandsVisible ? 'auto' : 'none' }}>
                         <div className={styles.playerHandsContainer}>
                             {playerHands.map((hand, idx) => {
-                                const canSelectHand = (showSelectionUI && !!drawnCard) || interactionMode === 'double_down_select';
+                                const canSelectHand = (showSelectionUI && drawnCards.length > 0) || interactionMode === 'double_down_select';
                                 return (
                                     <Hand
                                         key={`${hand.id}-${handsRemaining}`}

@@ -31,10 +31,17 @@ export const RelicTooltip: React.FC<RelicTooltipProps> = ({
             ...values,
             hand: hand ? {
                 ...hand,
-                chips: hand.chips !== undefined ? formatHandChips(hand.chips, hand.chipCards, true) : undefined,
-                mult: hand.mult !== undefined ? formatHandMult(hand.mult) : undefined,
+                chips: hand.chips !== undefined ? formatHandChips(hand.chips, hand.chipCards, true, hand.chipRun) : undefined,
+                mult: hand.mult !== undefined ? formatHandMult(hand.mult, hand.multRun, false) : undefined, // Raw mult usually doesn't need markdown unless explicitly requested? Actually formatHandMult returns text.
+                // Wait, formatHandMult with useMarkdown=false returns "x1 + x0.5 / additional card".
+                // If we use {hand.mult} in description, the renderer might not style it if it doesn't match regex.
+                // But usually hand.mult is used inside {x${hand.mult}}? No, usually {hand.mult} is just the number.
+                // Actually formatHandMult returns string "xN".
+                // If I change formatHandMult behavior, existing usages might look different. I should be careful.
+                // But for the NEW Angle descriptions, we rely on {hand.score}.
+                
                 score: hand.chips !== undefined && hand.mult !== undefined 
-                    ? formatHandScore(hand.chips, hand.mult, hand.chipCards, undefined, true) 
+                    ? formatHandScore(hand.chips, hand.mult, hand.chipCards, undefined, true, hand.chipRun, hand.multRun) 
                     : undefined
             } : undefined
         };
@@ -43,10 +50,10 @@ export const RelicTooltip: React.FC<RelicTooltipProps> = ({
             Object.entries(relic.extraHandTypes).forEach(([key, ht]) => {
                 context[key] = {
                     ...ht,
-                    chips: ht.chips !== undefined ? formatHandChips(ht.chips, ht.chipCards, true) : undefined,
-                    mult: ht.mult !== undefined ? formatHandMult(ht.mult) : undefined,
+                    chips: ht.chips !== undefined ? formatHandChips(ht.chips, ht.chipCards, true, ht.chipRun) : undefined,
+                    mult: ht.mult !== undefined ? formatHandMult(ht.mult, ht.multRun, false) : undefined,
                     score: ht.chips !== undefined && ht.mult !== undefined 
-                        ? formatHandScore(ht.chips, ht.mult, ht.chipCards, undefined, true) 
+                        ? formatHandScore(ht.chips, ht.mult, ht.chipCards, undefined, true, ht.chipRun, ht.multRun) 
                         : undefined
                 };
             });

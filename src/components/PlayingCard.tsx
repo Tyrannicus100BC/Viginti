@@ -8,7 +8,7 @@ interface CardProps {
   onClick?: () => void;
   className?: string; // For additional styles if needed
   isDrawn?: boolean;
-  origin?: 'deck' | 'draw_pile' | 'double_down' | 'none';
+  origin?: 'deck' | 'draw_pile' | 'double_down' | 'discard' | 'none';
   delay?: number; // seconds
   style?: React.CSSProperties;
 }
@@ -37,6 +37,8 @@ export const PlayingCard: React.FC<CardProps> = ({
       return styles.animEnterDraw;
     } else if (origin === 'double_down') {
       return styles.animDoubleDownAndFlip;
+    } else if (origin === 'discard') {
+      return styles.animReset;
     }
     return '';
   });

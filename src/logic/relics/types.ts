@@ -16,6 +16,8 @@ export type Relic = {
         mult: number;
         order: number;
         chipCards?: boolean;
+        chipRun?: number;
+        multRun?: number;
     };
     extraHandTypes?: Record<string, {
         id: ScoringCriterionId;
@@ -40,6 +42,8 @@ export type RelicDefinition = {
         mult: number;
         order: number;
         chipCards?: boolean;
+        chipRun?: number;
+        multRun?: number;
     };
     extraHandTypes?: Record<string, {
         id: ScoringCriterionId;
@@ -64,6 +68,8 @@ export type RelicConfig = Relic & {
         mult: number;      // Base Mult
         order: number;     // Sort order for UI
         chipCards?: boolean;
+        chipRun?: number;
+        multRun?: number;
     };
     extraHandTypes?: Record<string, {
         id: ScoringCriterionId;
@@ -101,6 +107,8 @@ export type RelicHooks = {
     // Value Hooks (Sync, expected to return modified value)
     getDealsPerCasino?: ValueHook<(value: number, context: GameContext, relicState: any, config: RelicConfig) => number>;
     getDealerStopValue?: ValueHook<(value: number, context: GameContext, relicState: any, config: RelicConfig) => number>;
+    getDrawCount?: ValueHook<(value: number, context: GameContext, relicState: any, config: RelicConfig) => number>;
+    getPlaceCount?: ValueHook<(value: number, context: GameContext, relicState: any, config: RelicConfig) => number>;
     getCardValue?: ValueHook<(value: number, context: CardValueContext, relicState: any, config: RelicConfig) => number>;
     adjustBlackjackScore?: ValueHook<(value: number, context: { handCards: Card[] }, relicState: any, config: RelicConfig) => number>;
     onEvaluateHandScore?: ValueHook<(score: HandScore, context: HandContext, relicState: any, config: RelicConfig) => HandScore>;
@@ -108,6 +116,7 @@ export type RelicHooks = {
     // Interrupt Hooks (Async, can pause flow)
     onScoreRow?: ValueHook<(context: ScoreRowContext, relicState: any, config: RelicConfig) => Promise<void>>;
     onHandCompletion?: ValueHook<(context: HandCompletionContext, relicState: any, config: RelicConfig) => Promise<void>>;
+    onHandBust?: ValueHook<(context: HandBustContext, relicState: any, config: RelicConfig) => Promise<void>>;
     onRoundCompletion?: ValueHook<(context: RoundCompletionContext, relicState: any, config: RelicConfig) => Promise<void>>;
 }
 
@@ -124,6 +133,7 @@ export type HighlightRelicFn = (relicId: string, options?: HighlightOptions) => 
 
 export type GameContext = {
     inventory: RelicInstance[]; // List of relic instances
+    dryRun?: boolean;
 }
 
 export type CardValueContext = GameContext & {
@@ -172,5 +182,9 @@ export type RoundContext = GameContext & {
 export type ScoreRowContext = InterruptContext & {
     criterionId: ScoringCriterionId;
     score: HandScore;
+}
+
+export type HandBustContext = InterruptContext & {
+    handId: number;
 }
 

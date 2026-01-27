@@ -25,8 +25,8 @@ export const GAMBLER_DEFINITIONS: GamblerDefinition[] = [
         getInitialRelics: () => [
 
             getRelicInstance('viginti'),
-            getRelicInstance('rank_run_chips'),
-            getRelicInstance('straight_run_chips'),
+            getRelicInstance('rank_run_mult'),
+            getRelicInstance('straight_run_mult'),
             getRelicInstance('flush_run_chips')
         ]
     },

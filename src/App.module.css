@@ -230,6 +230,31 @@
     opacity: 1;
 }
 
+.selectedSpot {
+    border: 2px solid #ffd700;
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.4), inset 0 0 10px rgba(255, 215, 0, 0.2);
+    /* No scale transform here, handled in JS or removed */
+}
+
+@keyframes discardExitWrapper {
+    0% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+    100% {
+        opacity: 0;
+        transform: translateY(50px);
+    }
+}
+
+.discardingCard {
+    animation: discardExitWrapper 0.5s ease-in forwards;
+    pointer-events: none;
+    /* Ensure no other transforms conflict */
+    /* The internal card might be flipped or not, we need to ensure it's face up? User said "don't want the card to flip". */
+    /* If the card internal state was FaceUp, it should be fine. If it was re-mounting, it might trigger entry animation? */
+}
+
 .hitSpot {
     border-color: #ffd700;
     /* Yellow when active */
@@ -878,7 +903,7 @@
     pointer-events: none;
     display: flex;
     justify-content: space-between;
-    z-index: 100;
+    z-index: 1100;
 }
 
 .sidebar {

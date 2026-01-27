@@ -32,7 +32,13 @@ interface GameState {
     deck: Card[];
     dealer: DealerHand;
     playerHands: PlayerHand[];
-    drawnCard: Card | null;
+    drawnCards: (Card | null)[];
+    selectedDrawIndex: number | null;
+    cardsPlacedThisTurn: number;
+    modifiers: {
+        drawCountMod: number;
+        placeCountMod: number;
+    };
     phase: 'init' | 'entering_casino' | 'playing' | 'scoring' | 'round_over' | 'game_over' | 'gift_shop';
     round: number;
     interactionMode: 'default' | 'double_down_select';
@@ -92,6 +98,8 @@ interface GameState {
     addRelic: (relicId: string) => void;
     removeRelic: (relicId: string) => void;
     updateRunningSummary: (chips: number, mult: number) => void;
+    selectDrawnCard: (index: number) => void;
+    getProjectedDrawCount: () => number;
 }
 
 const INITIAL_HAND_COUNT = 3;
@@ -101,7 +109,10 @@ export const useGameStore = create<GameState>((set, get) => ({
     deck: [],
     dealer: { cards: [], isRevealed: false, blackjackValue: 0 },
     playerHands: [],
-    drawnCard: null,
+    drawnCards: [],
+    selectedDrawIndex: null,
+    cardsPlacedThisTurn: 0,
+    modifiers: { drawCountMod: 0, placeCountMod: 0 },
     dealerMessage: null,
     dealerMessageExiting: false,
 
@@ -136,6 +147,14 @@ export const useGameStore = create<GameState>((set, get) => ({
             localStorage.setItem('viginti_debug', String(newValue));
             return { debugEnabled: newValue };
         });
+    },
+
+    getProjectedDrawCount: () => {
+        const { modifiers, inventory } = get();
+        let drawCount = 1 + modifiers.drawCountMod;
+        // dryRun: true prevents side effects like consuming bonuses
+        drawCount = RelicManager.executeValueHook('getDrawCount', drawCount, { inventory, dryRun: true });
+        return drawCount;
     },
 
     incrementScore: (amount) => set(state => ({ totalScore: state.totalScore + amount })),
@@ -189,7 +208,10 @@ export const useGameStore = create<GameState>((set, get) => ({
             deck,
             playerHands: emptyHands,
             dealer: { cards: [], isRevealed: false, blackjackValue: 0 },
-            drawnCard: null,
+            drawnCards: [],
+            selectedDrawIndex: null,
+            cardsPlacedThisTurn: 0,
+            modifiers: { drawCountMod: 0, placeCountMod: 0 },
             dealerMessage: null,
             dealerMessageExiting: false,
             phase: 'entering_casino', // Start in entry mode
@@ -255,7 +277,9 @@ export const useGameStore = create<GameState>((set, get) => ({
                 isRevealed: false,
                 blackjackValue: getBlackjackScore([dealerCards[1]], get().inventory)
             },
-            drawnCard: null,
+            drawnCards: [],
+            selectedDrawIndex: null,
+            cardsPlacedThisTurn: 0,
             phase: 'playing',
             isInitialDeal: true,
             // Ensure stats are preserved/set (should be set by startGame/nextRound already)
@@ -276,25 +300,54 @@ export const useGameStore = create<GameState>((set, get) => ({
         }, 1500); // Reduced delay as there are fewer cards
     },
 
-    drawCard: () => {
-        const { deck, drawnCard, phase } = get();
-        if (phase !== 'playing' || drawnCard) return;
+    drawCard: async () => {
+        const { deck, drawnCards, phase, modifiers, inventory } = get();
+        if (phase !== 'playing' || drawnCards.length > 0) return;
 
         // Cancel double down if active
         set({ interactionMode: 'default' });
 
-        const newDeck = [...deck];
-        const card = newDeck.pop();
-        if (!card) return;
+        // Calculate count
+        let drawCount = 1 + modifiers.drawCountMod;
+        // Consume draw modifier
+        set(state => ({ modifiers: { ...state.modifiers, drawCountMod: 0 } }));
+        
+        drawCount = RelicManager.executeValueHook('getDrawCount', drawCount, { inventory });
 
-        card.isFaceUp = true;
-        card.origin = 'deck';
-        set({ deck: newDeck, drawnCard: card });
+        const deckRef = [...deck];
+        const cardsToDraw: Card[] = [];
+
+        for (let i = 0; i < drawCount; i++) {
+            const card = deckRef.pop();
+            if (!card) break; // Deck empty handle?
+            
+            card.isFaceUp = true;
+            card.origin = 'deck';
+            cardsToDraw.push(card);
+            
+            set({ deck: deckRef, drawnCards: [...cardsToDraw] });
+            
+            // Animation delay betwen draws
+            if (i < drawCount - 1) {
+                await new Promise(resolve => setTimeout(resolve, 200));
+            }
+        }
+        
+        // Auto select center
+        const centerIndex = Math.floor((cardsToDraw.length - 1) / 2);
+        set({ selectedDrawIndex: Math.max(0, centerIndex) });
+    },
+
+    selectDrawnCard: (index: number) => {
+        const { drawnCards } = get();
+        if (index >= 0 && index < drawnCards.length) {
+            set({ selectedDrawIndex: index });
+        }
     },
 
     startDoubleDown: () => {
-        const { phase, drawnCard } = get();
-        if (phase !== 'playing' || drawnCard) return;
+        const { phase, drawnCards } = get();
+        if (phase !== 'playing' || drawnCards.length > 0) return;
         set({ interactionMode: 'double_down_select' });
     },
 
@@ -338,6 +391,16 @@ export const useGameStore = create<GameState>((set, get) => ({
             interactionMode: 'default'
         });
 
+        // Trigger onHandBust if applicable
+        const newHand = newHands[handIndex];
+        if (newHand.isBust && !playerHands[handIndex].isBust) {
+            RelicManager.executeInterruptHook('onHandBust', {
+                inventory: get().inventory,
+                highlightRelic: async () => {},
+                handId: newHand.id
+            }).catch(console.error);
+        }
+
         // Auto-stand if all hands are unplayable
         const allUnplayable = newHands.every(h => h.isBust || h.isHeld || h.blackjackValue === 21);
         if (allUnplayable) {
@@ -348,15 +411,17 @@ export const useGameStore = create<GameState>((set, get) => ({
     },
 
     assignCard: (handIndex) => {
-        const { playerHands, drawnCard } = get();
-        if (!drawnCard) return;
+        const { playerHands, drawnCards, selectedDrawIndex, cardsPlacedThisTurn, modifiers, inventory, discardPile } = get();
+        if (selectedDrawIndex === null || !drawnCards[selectedDrawIndex]) return;
+
+        const cardToPlace = drawnCards[selectedDrawIndex];
 
         const newHands = playerHands.map((h, idx) => {
             if (idx !== handIndex) return h;
             if (h.isBust || h.isHeld) return h;
 
             // Create a new hand object with the new card
-            const cardToAdd = { ...drawnCard, origin: 'draw_pile' as const };
+            const cardToAdd = { ...cardToPlace, origin: 'draw_pile' as const };
             const newCards = [...h.cards, cardToAdd];
 
             // Recalc Blackjack
@@ -370,14 +435,78 @@ export const useGameStore = create<GameState>((set, get) => ({
             };
         });
 
-        set({ playerHands: newHands, drawnCard: null });
+        // Trigger onHandBust if applicable
+        const newHand = newHands[handIndex];
+        // Note: assignCard modifies only one hand
+        if (newHand.isBust && !playerHands[handIndex].isBust) {
+            RelicManager.executeInterruptHook('onHandBust', {
+                inventory: get().inventory,
+                highlightRelic: async () => {},
+                handId: newHand.id
+            }).catch(console.error);
+        }
 
-        // Auto-stand if all hands are unplayable
-        const allUnplayable = newHands.every(h => h.isBust || h.isHeld || h.blackjackValue === 21);
-        if (allUnplayable) {
-            setTimeout(() => {
-                get().holdReturns();
-            }, 1000);
+        // Update sequencing state
+        const remainingDrawn = [...drawnCards];
+        remainingDrawn[selectedDrawIndex] = null; // Mark as consumed, keeping position fixed
+        const newPlacedCount = cardsPlacedThisTurn + 1;
+
+        let totalPlaceCount = 1 + modifiers.placeCountMod;
+        totalPlaceCount = RelicManager.executeValueHook('getPlaceCount', totalPlaceCount, { inventory });
+
+        // Check if we can continue placing
+        const anyPlayable = newHands.some(h => !h.isBust && !h.isHeld && h.blackjackValue !== 21);
+        const hasRemainingCards = remainingDrawn.some(c => c !== null);
+        const canPlaceMore = newPlacedCount < totalPlaceCount && hasRemainingCards && anyPlayable;
+
+        if (canPlaceMore) {
+            // Find next available card
+            // Try forward first
+            let nextIndex = -1;
+            for (let i = selectedDrawIndex + 1; i < remainingDrawn.length; i++) {
+                if (remainingDrawn[i] !== null) {
+                    nextIndex = i;
+                    break;
+                }
+            }
+            // Overwrap search
+            if (nextIndex === -1) {
+                for (let i = 0; i < selectedDrawIndex; i++) {
+                    if (remainingDrawn[i] !== null) {
+                        nextIndex = i;
+                        break;
+                    }
+                }
+            }
+
+            set({
+                playerHands: newHands,
+                drawnCards: remainingDrawn,
+                selectedDrawIndex: nextIndex !== -1 ? nextIndex : null,
+                cardsPlacedThisTurn: newPlacedCount
+            });
+        } else {
+             // Turn Sequence Complete
+             // Filter out nulls for discard pile
+             const leftovers = remainingDrawn.filter((c): c is Card => c !== null);
+             const newDiscards = [...discardPile, ...leftovers];
+
+             set({
+                playerHands: newHands,
+                drawnCards: [],
+                selectedDrawIndex: null,
+                cardsPlacedThisTurn: 0,
+                discardPile: newDiscards,
+                modifiers: { ...modifiers, placeCountMod: 0 } // Reset place mod
+             });
+
+            // Auto-stand if all hands are unplayable
+            const allUnplayable = newHands.every(h => h.isBust || h.isHeld || h.blackjackValue === 21);
+            if (allUnplayable) {
+                setTimeout(() => {
+                    get().holdReturns();
+                }, 1000);
+            }
         }
     },
 
@@ -886,7 +1015,9 @@ export const useGameStore = create<GameState>((set, get) => ({
                 isRevealed: false,
                 blackjackValue: getBlackjackScore([dealerCards[1]], get().inventory)
             },
-            drawnCard: null,
+            drawnCards: [],
+            selectedDrawIndex: null,
+            cardsPlacedThisTurn: 0,
             phase: 'playing',
             dealsTaken: newDealsTaken,
             handsRemaining: newHandsRemaining,
@@ -905,11 +1036,11 @@ export const useGameStore = create<GameState>((set, get) => ({
     },
 
     debugWin: async () => {
-        const { phase, drawnCard, holdReturns } = get();
+        const { phase, drawnCards, holdReturns } = get();
         if (phase !== 'playing') return;
         
         // If there's a drawn card, discard it first
-        if (drawnCard) {
+        if (drawnCards.length > 0) {
             get().debugUndo();
         }
 
@@ -917,21 +1048,27 @@ export const useGameStore = create<GameState>((set, get) => ({
     },
 
     debugUndo: () => {
-        const { phase, drawnCard, deck } = get();
-        if (phase !== 'playing' || !drawnCard) return;
+        const { phase, drawnCards, deck } = get();
+        if (phase !== 'playing' || drawnCards.length === 0) return;
 
-        drawnCard.isFaceUp = false;
-        drawnCard.origin = undefined;
+        const cardsToReturn = [...drawnCards].reverse();
+        cardsToReturn.forEach(c => {
+            c.isFaceUp = false;
+            c.origin = undefined;
+        });
 
         set({
-            drawnCard: null,
-            deck: [...deck, drawnCard]
+            drawnCards: [],
+            selectedDrawIndex: null,
+            cardsPlacedThisTurn: 0,
+            modifiers: { drawCountMod: 0, placeCountMod: 0 }, // Reset just in case
+            deck: [...deck, ...cardsToReturn]
         });
     },
 
     drawSpecificCard: (suit, rank) => {
-        const { deck, phase, drawnCard } = get();
-        if (phase !== 'playing' || drawnCard) return;
+        const { deck, phase, drawnCards } = get();
+        if (phase !== 'playing' || drawnCards.length > 0) return;
 
         const cardIndex = deck.findIndex(c => c.suit === suit && c.rank === rank);
         if (cardIndex === -1) return;
@@ -944,7 +1081,8 @@ export const useGameStore = create<GameState>((set, get) => ({
         
         set({
             deck: newDeck,
-            drawnCard: card,
+            drawnCards: [card],
+            selectedDrawIndex: 0,
             interactionMode: 'default'
         });
     },
