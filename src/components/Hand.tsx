@@ -46,6 +46,76 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
 
   // Reset state when hand ID changes or resets
   // Reset state when hand ID changes (new hand slot content)
+  // Visual State for Cards (syncs with hand.cards but handles exit animations)
+  // Store posIndex to lock position during discard
+  const [visualCards, setVisualCards] = useState<Array<{ card: any, isDiscarding: boolean, posIndex: number }>>([]);
+  const prevHandId = useRef(hand.id);
+
+  // Sync hand.cards to visualCards
+  useEffect(() => {
+    // If hand ID changed, hard reset (new hand slot content)
+    if (hand.id !== prevHandId.current) {
+        setVisualCards(hand.cards.map((c, i) => ({ card: c, isDiscarding: false, posIndex: i })));
+        prevHandId.current = hand.id;
+        return;
+    }
+
+    setVisualCards(prev => {
+        const nextVisuals = [...prev];
+        const currentIds = new Set(hand.cards.map(c => c.id));
+        
+        let maxPosIndex = -1;
+        prev.forEach(vc => {
+             if (vc.posIndex > maxPosIndex) maxPosIndex = vc.posIndex;
+        });
+
+        // 1. Mark removed cards as discarding
+        nextVisuals.forEach((vc, idx) => {
+            if (!currentIds.has(vc.card.id) && !vc.isDiscarding) {
+                // Was present, now removed. Mark discarding.
+                // Keep existing posIndex!
+                nextVisuals[idx] = { ...vc, isDiscarding: true };
+            }
+        });
+
+        // 2. Add new cards
+        hand.cards.forEach((c, i) => {
+            const existingIdx = nextVisuals.findIndex(vc => vc.card.id === c.id);
+            if (existingIdx === -1) {
+                // New card: append
+                // Determine posIndex. It should be the index in the NEW hand provided by props?
+                // Or sequential? 
+                // Using 'i' from hand.cards provides the target slot.
+                nextVisuals.push({ card: c, isDiscarding: false, posIndex: i });
+            } else {
+                // Ensure it's not marked discarding if it came back
+                if (nextVisuals[existingIdx].isDiscarding) {
+                     nextVisuals[existingIdx] = { ...nextVisuals[existingIdx], isDiscarding: false };
+                }
+                nextVisuals[existingIdx].card = c;
+                // Update posIndex to match current hand state (shift if needed)
+                nextVisuals[existingIdx].posIndex = i;
+            }
+        });
+        
+        return nextVisuals;
+    });
+
+  }, [hand.cards, hand.id]);
+
+  // Cleanup discarding cards
+  useEffect(() => {
+      const discardingIndices = visualCards.map((vc, i) => vc.isDiscarding ? i : -1).filter(i => i !== -1);
+      
+      if (discardingIndices.length > 0) {
+          const timer = setTimeout(() => {
+              setVisualCards(prev => prev.filter(vc => !vc.isDiscarding));
+          }, 500); // Animation duration
+          return () => clearTimeout(timer);
+      }
+  }, [visualCards]);
+
+  // Reset state when hand ID changes (new hand slot content)
   useEffect(() => {
     setDisplayScore(hand.blackjackValue);
     setVisibleItems([]);
@@ -287,16 +357,38 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
       >
         <div className={`${styles.cardsContainer} ${showOverlay ? styles.tinted : ''}`}>
           <div className={styles.cards}>
-            {hand.cards.map((card, idx) => {
+            {visualCards.map(({ card, isDiscarding, posIndex }, idx) => {
+              // const styles = require('./Hand.module.css').default; 
+              
+              // Use index relative to the FULL set for positioning continuity
               const startTxBase = (1 - hand.id) * 270;
+              
+              const total = hand.cards.length > 0 ? hand.cards.length : visualCards.length; 
+              // If emptying hand (safety net), hand.cards is 0. 
+              // We want to use the OLD total (visualCards.length) or the max posIndex?
+              // Ideally fan shape should be preserved.
+              // If hand.cards.length > 0, we use that for center? No, because duplicates exist in visual.
+              // We should use the maximum potential index to define the fan center, or 
+              // just use the visual set length if it's a discard event?
+              
+              // Correct Logic: 
+              // If discarding, we want to maintain the fan shape as if the cards were still there.
+              // 'total' should be the number of cards BEFORE deletion?
+              // The 'posIndex' tells us where it WAS.
+              // We can estimate 'total' effectively by visualCards.length which includes both kept and discarding.
+              
+              const activeTotal = visualCards.length;
+              const center = (activeTotal - 1) / 2;
+              
+              // Use posIndex for position calculation to lock it!
+              // But wait, if new cards are added, they get new posIndex.
+              // Does posIndex need to be recomputed for remaining cards?
+              // Yes, in effect 2 above, we update posIndex for kept cards.
+              
+              const rotate = (posIndex - center) * 5;
+              const translateY = Math.abs(posIndex - center) * 2;
 
-
-              const total = hand.cards.length;
-              const center = (total - 1) / 2;
-              const rotate = (idx - center) * 5;
-              const translateY = Math.abs(idx - center) * 2;
-
-              const isDoubleCard = hand.isDoubled && idx === total - 1;
+              const isDoubleCard = hand.isDoubled && idx === activeTotal - 1; // Approximation
 
               // Determine highlighting first to use in placement
               const currentCrit = activeCriteriaIdx !== null ? hand.finalScore?.criteria[activeCriteriaIdx] : null;
@@ -312,14 +404,14 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
               let wrapperRotate = rotate;
               let wrapperTranslateY = translateY;
 
-              if (isDoubleCard && idx > 0 && !shouldHighlight) {
+              if (isDoubleCard && posIndex > 0 && !shouldHighlight) {
                 // Match previous card slot to overlap ONLY IF NOT HIGHLIGHTED
-                wrapperRotate = ((idx - 1) - center) * 5;
-                wrapperTranslateY = Math.abs((idx - 1) - center) * 2;
+                wrapperRotate = ((posIndex - 1) - center) * 5;
+                wrapperTranslateY = Math.abs((posIndex - 1) - center) * 2;
               }
 
               // Animation Coordinates (Screen Space)
-              const screenDx = isDoubleCard ? (startTxBase + 120) : startTxBase;
+              const screenDx = isDoubleCard ? (startTxBase + 120) : (startTxBase + (card.animationOffset || 0));
               const screenDy = isDoubleCard ? -400 : -200;
 
               // Local Animation Coordinates (Correcting for Inner Rotation)
@@ -348,6 +440,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
                     zIndex: idx
                   } as any}
                 >
+                  <div className={isDiscarding ? styles.discardingCard : ''} style={{ width: '100%', height: '100%' }}>
                   {isDoubleCard ? (
                     <div style={{
                       transform: shouldHighlight ? 'rotate(0deg)' : 'translateY(28px) rotate(90deg)',
@@ -361,7 +454,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
                       <PlayingCard
                         card={card}
                         origin={card.origin}
-                        delay={card.origin === 'deck' ? baseDelay + (stagger ? idx * 0.5 : 0) : 0}
+                         delay={card.origin === 'deck' ? baseDelay + (stagger ? idx * 0.5 : 0) : 0}
                         style={{
                           '--start-tx': `${animTx}px`,
                           '--start-ty': `${animTy}px`
@@ -381,6 +474,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
                       suppressSpecialVisuals={hand.id === -1}
                     />
                   )}
+                  </div>
                 </div>
               );
             })}

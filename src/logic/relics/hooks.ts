@@ -6,6 +6,10 @@ import { findMatches, POKER_ORDER, SCORING_RULES, RANK_VALUES } from '../rules';
 // Helpers
 const isFaceCard = (c: Card) => ['J', 'Q', 'K'].includes(c.rank);
 
+// Wait Helper
+const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+
 const getRankCounts = (cards: Card[]) => {
     const counts: Record<string, number> = {};
     for (const c of cards) {
@@ -764,6 +768,100 @@ export const Hooks = {
                 return val + relicState.extra_place;
             }
             return val;
+        }
+    },
+    
+    // New Charms
+    safety_net_20: {
+        onRoundCompletion: async (_context: RoundCompletionContext, relicState: any, _config: any) => {
+             relicState.armed = false; // Reset per round
+        },
+        onCardPlaced: async (context: any, relicState: any, _config: any) => {
+            if (!relicState.armed && context.blackjackValue === 20) {
+                 
+                 await context.highlightRelic('safety_net_20', {
+                     trigger: async () => {
+                         // Discard hand
+                         context.modifyHand([]);
+                         relicState.armed = true;
+                     }
+                 });
+            }
+        },
+        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any, _config: any) => {
+            // If armed and the hand is a winner, add the bonus chips row
+            if (relicState.armed && context.isWin) {
+                const newCriteria = [...score.criteria, {
+                    id: 'safety_net' as any,
+                    name: 'Safety Net',
+                    count: 1,
+                    chips: relicState.bonus_chips,
+                    multiplier: 0,
+                    cardIds: []
+                }];
+                const totalChips = newCriteria.reduce((sum, crit) => sum + crit.chips, 0);
+                const totalMult = newCriteria.reduce((sum, crit) => sum + crit.multiplier, 0);
+                return { 
+                    ...score, 
+                    criteria: newCriteria, 
+                    totalChips, 
+                    totalMultiplier: totalMult, 
+                    finalScore: Math.floor(totalChips * totalMult) 
+                };
+            }
+            return score;
+        },
+        onScoreRow: async (context: ScoreRowContext, relicState: any, config: any) => {
+            // When we hit our specific row ID during the scoring sequence, highlight the relic
+            if (context.criterionId === 'safety_net') {
+                 await context.highlightRelic(config.id, {
+                     trigger: () => context.modifyRunningSummary(relicState.bonus_chips, 0)
+                 });
+            }
+        }
+    },
+    mulligan_bust: {
+         onRoundCompletion: async (_context: RoundCompletionContext, relicState: any, _config: any) => {
+             relicState.used_this_round = false;
+        },
+        onHandBust: async (context: HandBustContext, relicState: any, _config: any) => {
+            if (!relicState.used_this_round) {
+                // Wait for BUST animation is handled by caller (usually) or we can wait here?
+                // The prompt says: "wait for the BUST animation to finish playing... but then show standard activation..."
+                // Since we are in an interrupt hook, we can wait.
+
+
+                await context.highlightRelic('mulligan', {
+                    trigger: () => {
+                        // Discard last card
+                        const newCards = [...context.handCards];
+                        if (newCards.length > 0) {
+                            // Find the last card added. In our logic, new cards are appended.
+                            // However, if special was added, it might be at start.
+                            // But natural bust usually comes from draw.
+                            // Let's just pop the last one in the array, as that's visually consistent for 'hit'.
+                             newCards.pop();
+                             context.modifyHand(newCards);
+                        }
+                        relicState.used_this_round = true;
+                    }
+                });
+            }
+        }
+    },
+    spyglass_13: {
+        onRoundCompletion: async (_context: RoundCompletionContext, relicState: any, _config: any) => {
+             relicState.used_this_round = false;
+        },
+        onCardPlaced: async (context: any, relicState: any, _config: any) => {
+            if (!relicState.used_this_round && context.blackjackValue === 13) {
+                 await context.highlightRelic('spyglass', {
+                     trigger: () => {
+                         context.revealDealerHiddenCard();
+                         relicState.used_this_round = true;
+                     }
+                 });
+            }
         }
     }
 }

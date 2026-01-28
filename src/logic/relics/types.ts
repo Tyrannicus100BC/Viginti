@@ -114,6 +114,7 @@ export type RelicHooks = {
     onEvaluateHandScore?: ValueHook<(score: HandScore, context: HandContext, relicState: any, config: RelicConfig) => HandScore>;
     
     // Interrupt Hooks (Async, can pause flow)
+    onCardPlaced?: ValueHook<(context: CardPlacedContext, relicState: any, config: RelicConfig) => Promise<void>>;
     onScoreRow?: ValueHook<(context: ScoreRowContext, relicState: any, config: RelicConfig) => Promise<void>>;
     onHandCompletion?: ValueHook<(context: HandCompletionContext, relicState: any, config: RelicConfig) => Promise<void>>;
     onHandBust?: ValueHook<(context: HandBustContext, relicState: any, config: RelicConfig) => Promise<void>>;
@@ -182,9 +183,21 @@ export type RoundContext = GameContext & {
 export type ScoreRowContext = InterruptContext & {
     criterionId: ScoringCriterionId;
     score: HandScore;
+    modifyRunningSummary: (chipsToAdd: number, multToAdd: number) => void;
 }
 
 export type HandBustContext = InterruptContext & {
     handId: number;
+    handCards: Card[];
+    modifyHand: (cards: Card[]) => void;
+}
+
+export type CardPlacedContext = InterruptContext & {
+    handId: number;
+    handCards: Card[];
+    placedCard: Card;
+    blackjackValue: number;
+    modifyHand: (cards: Card[]) => void;
+    revealDealerHiddenCard: () => void;
 }
 

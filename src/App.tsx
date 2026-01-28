@@ -75,12 +75,15 @@ export default function App() {
         drawSpecificCard,
         allWinnersEnlarged,
         dealerVisible,
+        isDealerPlaying,
         debugEnabled,
         toggleDebug,
         confirmShopSelection,
         removeCard,
         enhanceCard,
-        leaveShop
+        leaveShop,
+        cardsPlacedThisTurn,
+        getProjectedPlaceCount
     } = useGameStore();
 
     const { viewportWidth, viewportHeight } = useLayout();
@@ -198,11 +201,11 @@ export default function App() {
 
     // Update projected count when drawnCards is empty
     useEffect(() => {
-        if (drawnCards.length === 0) {
+        if (drawnCards.length === 0 && discardingCards.length === 0) {
             const count = getProjectedDrawCount();
             setVisualDrawCount(prev => prev !== count ? count : prev);
         }
-    }, [drawnCards.length, getProjectedDrawCount, JSON.stringify(modifiers), inventory.map(i => i.id).join(',')]);
+    }, [drawnCards.length, discardingCards.length, getProjectedDrawCount, JSON.stringify(modifiers), inventory.map(i => i.id).join(',')]);
 
     // Watch for Total Winnings appearance to fire confetti
     useEffect(() => {
@@ -331,10 +334,10 @@ export default function App() {
     const areAllHandsUnplayable = playerHands.every(h => h.isBust || h.isHeld || h.blackjackValue === 21);
     const isDrawAreaClear = drawnCards.length === 0 || drawnCards.every(c => c === null);
     
-    const canDraw = phase === 'playing' && isDrawAreaClear && !dealer.isRevealed && !isInitialDeal && interactionMode === 'default' && !areAllHandsUnplayable;
-    const canDoubleDown = phase === 'playing' && isDrawAreaClear && !dealer.isRevealed && !isInitialDeal && !areAllHandsUnplayable; // Can start flow
-    const canHold = phase === 'playing' && isDrawAreaClear && !dealer.isRevealed && !isInitialDeal && interactionMode === 'default' && !areAllHandsUnplayable;
-    const isDrawAreaVisible = phase === 'playing' && !dealer.isRevealed && !isInitialDeal && interactionMode !== 'double_down_select';
+    const canDraw = phase === 'playing' && isDrawAreaClear && !isDealerPlaying && !isInitialDeal && interactionMode === 'default' && !areAllHandsUnplayable;
+    const canDoubleDown = phase === 'playing' && isDrawAreaClear && !isDealerPlaying && !isInitialDeal && !areAllHandsUnplayable; // Can start flow
+    const canHold = phase === 'playing' && isDrawAreaClear && !isDealerPlaying && !isInitialDeal && interactionMode === 'default' && !areAllHandsUnplayable;
+    const isDrawAreaVisible = phase === 'playing' && !isDealerPlaying && !isInitialDeal && interactionMode !== 'double_down_select';
 
     const areHandsVisible = phase !== 'gift_shop';
 
@@ -791,9 +794,11 @@ export default function App() {
                                             left: '50%',
                                             top: '50%',
                                             transform: `translate(calc(-50% + ${offset}px), -50%)`,
-                                            zIndex: 5
+                                            zIndex: 5,
+                                            // @ts-ignore
+                                            '--startX': `${offset}px`
                                         }}
-                                    >
+                                   >
                                          <PlayingCard 
                                             card={card} 
                                             isDrawn 
@@ -804,7 +809,7 @@ export default function App() {
                             </div>
                             <div className={styles.infoTextContainer}>
                                 <div className={`${styles.instructions} ${showSelectionUI && drawnCards.some(c => c !== null) ? styles.textVisible : ''}`}>
-                                    PLACE CARD
+                                    {getProjectedPlaceCount() - cardsPlacedThisTurn > 1 ? `PLACE ${getProjectedPlaceCount() - cardsPlacedThisTurn} CARDS` : 'PLACE CARD'}
                                 </div>
                                 <div 
                                     className={`${styles.instructions} ${interactionMode === 'double_down_select' ? styles.textVisible : ''}`} 

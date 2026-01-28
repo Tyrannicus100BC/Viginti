@@ -349,8 +349,29 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Second Chance',
         categories: ['Charm', 'Meta'],
-        description: 'If you Bust, next draw is +{extra_draw} cards and place +{extra_place} card',
+        description: 'If you Bust, next draw is +{extra_draw} cards and place {extra_place} card',
         properties: { extra_draw: 2, extra_place: 1, pending_bonus: false, active_bonus: false },
         hooks: Hooks.redemption_bust_bonus
     },
+    {
+        name: 'Safety Net',
+        categories: ['Charm', 'Meta'],
+        description: 'First hand of 20 is discarded and [Wins] earns $${bonus_chips}',
+        properties: { bonus_chips: 20, armed: false },
+        hooks: Hooks.safety_net_20
+    },
+    {
+        name: 'Mulligan',
+        categories: ['Charm', 'Meta'],
+        description: 'Once per round, if you Bust, discard the last card',
+        properties: { used_this_round: false },
+        hooks: Hooks.mulligan_bust
+    },
+    {
+        name: 'Spyglass',
+        categories: ['Charm', 'Meta'],
+        description: 'If a hand reaches 13, reveal the Dealer\'s hidden card',
+        properties: { used_this_round: false },
+        hooks: Hooks.spyglass_13
+    }
 ];

@@ -66,9 +66,10 @@ interface GameState {
 
     dealerMessageExiting: boolean;
     dealerMessage: string | null;
+    isDealerPlaying: boolean;
 
     debugEnabled: boolean;
-
+    
     // Actions
     startGame: (gamblerId?: string) => void;
     dealFirstHand: () => void;
@@ -76,7 +77,7 @@ interface GameState {
     startDoubleDown: () => void;
     cancelDoubleDown: () => void;
     confirmDoubleDown: (handIndex: number) => void;
-    assignCard: (handIndex: number) => void;
+    assignCard: (handIndex: number) => Promise<void>;
     holdReturns: (forceDealerBust?: boolean) => Promise<void>; // Async for pacing
     nextRound: (forceContinue?: boolean) => void;
     selectShopItem: (itemId: string) => void; 
@@ -100,9 +101,11 @@ interface GameState {
     updateRunningSummary: (chips: number, mult: number) => void;
     selectDrawnCard: (index: number) => void;
     getProjectedDrawCount: () => number;
+    getProjectedPlaceCount: () => number;
     removeCard: (cardId: string) => void;
     enhanceCard: (cardId: string, effect: { type: 'chip' | 'mult' | 'score', value: number }) => void;
     leaveShop: () => void;
+    revealDealerHiddenCard: () => void;
 }
 
 const INITIAL_HAND_COUNT = 3;
@@ -140,6 +143,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     isShaking: false,
     allWinnersEnlarged: false,
     dealerVisible: true,
+    isDealerPlaying: false,
     debugEnabled: localStorage.getItem('viginti_debug') === 'true',
     animationSpeed: 1,
     setAnimationSpeed: (speed) => set({ animationSpeed: speed }),
@@ -158,6 +162,13 @@ export const useGameStore = create<GameState>((set, get) => ({
         // dryRun: true prevents side effects like consuming bonuses
         drawCount = RelicManager.executeValueHook('getDrawCount', drawCount, { inventory, dryRun: true });
         return drawCount;
+    },
+
+    getProjectedPlaceCount: () => {
+        const { modifiers, inventory } = get();
+        let placeCount = 1 + modifiers.placeCountMod;
+        placeCount = RelicManager.executeValueHook('getPlaceCount', placeCount, { inventory, dryRun: true });
+        return placeCount;
     },
 
     incrementScore: (amount) => set(state => ({ totalScore: state.totalScore + amount })),
@@ -233,7 +244,8 @@ export const useGameStore = create<GameState>((set, get) => ({
             allWinnersEnlarged: false,
             dealerVisible: true,
             shopItems: [],
-            selectedShopItemId: null
+            selectedShopItemId: null,
+            isDealerPlaying: false
         });
     },
 
@@ -322,7 +334,8 @@ export const useGameStore = create<GameState>((set, get) => ({
             runningSummary: null,
             roundSummary: null,
             allWinnersEnlarged: false,
-            dealerVisible: true
+            dealerVisible: true,
+            isDealerPlaying: false
         });
 
         // After animations complete (Dealer cards only now)
@@ -435,8 +448,28 @@ export const useGameStore = create<GameState>((set, get) => ({
         if (newHand.isBust && !playerHands[handIndex].isBust) {
             RelicManager.executeInterruptHook('onHandBust', {
                 inventory: get().inventory,
-                highlightRelic: async () => {},
-                handId: newHand.id
+                handId: newHand.id,
+                handCards: newHand.cards,
+                highlightRelic: async (id, options) => {
+                     const { preDelay = 0, duration = 500, postDelay = 0, trigger } = options || {};
+                     await new Promise(r => setTimeout(r, preDelay));
+                     set({ activeRelicId: id });
+                     if (trigger) await trigger();
+                     await new Promise(r => setTimeout(r, duration));
+                     set({ activeRelicId: null });
+                     await new Promise(r => setTimeout(r, postDelay));
+                },
+                modifyHand: (cards) => {
+                     set(state => ({
+                         playerHands: state.playerHands.map(h => {
+                             if (h.id === newHand.id) {
+                                 const val = getBlackjackScore(cards, state.inventory);
+                                 return { ...h, cards, blackjackValue: val, isBust: val > 21 };
+                             }
+                             return h;
+                         })
+                     }));
+                }
             }).catch(console.error);
         }
 
@@ -449,7 +482,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         }
     },
 
-    assignCard: (handIndex) => {
+    assignCard: async (handIndex) => {
         const { playerHands, drawnCards, selectedDrawIndex, cardsPlacedThisTurn, modifiers, inventory, discardPile } = get();
         if (selectedDrawIndex === null || !drawnCards[selectedDrawIndex]) return;
 
@@ -459,8 +492,10 @@ export const useGameStore = create<GameState>((set, get) => ({
             if (idx !== handIndex) return h;
             if (h.isBust || h.isHeld) return h;
 
-            // Create a new hand object with the new card
-            const cardToAdd = { ...cardToPlace, origin: 'draw_pile' as const };
+            // Calculate draw offset for animation origin
+            const spacing = 120;
+            const drawOffset = (selectedDrawIndex - (drawnCards.length - 1) / 2) * spacing;
+            const cardToAdd = { ...cardToPlace, origin: 'draw_pile' as const, animationOffset: drawOffset };
             
             const isSpecial = cardToAdd.type === 'chip' || cardToAdd.type === 'mult' || cardToAdd.type === 'score';
             const newCards = isSpecial ? [cardToAdd, ...h.cards] : [...h.cards, cardToAdd];
@@ -476,16 +511,94 @@ export const useGameStore = create<GameState>((set, get) => ({
             };
         });
 
-        // Trigger onHandBust if applicable
-        const newHand = newHands[handIndex];
-        // Note: assignCard modifies only one hand
-        if (newHand.isBust && !playerHands[handIndex].isBust) {
-            RelicManager.executeInterruptHook('onHandBust', {
+        // 1. Commit initial placement
+        // Also remove from drawnCards immediately so it doesn't appear duplicated during animation
+        const initialDrawnUpdate = [...drawnCards];
+        initialDrawnUpdate[selectedDrawIndex] = null;
+        
+        set({ 
+            playerHands: newHands,
+            drawnCards: initialDrawnUpdate
+        });
+
+        // 2. Trigger onCardPlaced Hook (Async)
+        const placedHandInitial = newHands[handIndex];
+        
+        // Wait helper for animations inside hooks if needed
+        const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+        // Wait for card placement animation to complete (0.6s)
+        await wait(600);
+
+        await RelicManager.executeInterruptHook('onCardPlaced', {
+            inventory: get().inventory,
+            handId: handIndex,
+            placedCard: cardToPlace,
+            handCards: placedHandInitial.cards,
+            blackjackValue: placedHandInitial.blackjackValue,
+            highlightRelic: async (id, options) => {
+                 const { preDelay = 0, duration = 500, postDelay = 0, trigger } = options || {};
+                 await wait(preDelay);
+                 set({ activeRelicId: id });
+                 if (trigger) await trigger();
+                 await wait(duration);
+                 set({ activeRelicId: null });
+                 await wait(postDelay);
+            },
+            modifyHand: (cards) => {
+                set(state => {
+                    // Update hand with new cards
+                    const updatedHands = state.playerHands.map(h => {
+                         if (h.id === handIndex) {
+                             const newVal = getBlackjackScore(cards, state.inventory);
+                             return { ...h, cards, blackjackValue: newVal, isBust: newVal > 21 };
+                         }
+                         return h;
+                    });
+                    return { playerHands: updatedHands };
+                });
+            },
+            revealDealerHiddenCard: () => get().revealDealerHiddenCard()
+        });
+        
+        // Refresh hand state after hooks (in case modifyHand was called)
+        const finalHands = get().playerHands;
+        const finalHand = finalHands[handIndex];
+
+        // 3. Trigger onHandBust if applicable post-hook
+         if (finalHand.isBust && !playerHands[handIndex].isBust) { // Compare against ORIGINAL start of turn state? 
+            // Actually, best to just check if it IS bust now and wasn't before this assignment action started?
+            // The original `playerHands` variable holds state before `assignCard` started.
+            await RelicManager.executeInterruptHook('onHandBust', {
                 inventory: get().inventory,
-                highlightRelic: async () => {},
-                handId: newHand.id
-            }).catch(console.error);
+                handId: finalHand.id,
+                handCards: finalHand.cards,
+                highlightRelic: async (id, options) => {
+                     const { preDelay = 0, duration = 500, postDelay = 0, trigger } = options || {};
+                     await wait(preDelay);
+                     set({ activeRelicId: id });
+                     if (trigger) await trigger();
+                     await wait(duration);
+                     set({ activeRelicId: null });
+                     await wait(postDelay);
+                },
+                modifyHand: (cards) => {
+                     set(state => ({
+                         playerHands: state.playerHands.map(h => {
+                             if (h.id === finalHand.id) {
+                                 const val = getBlackjackScore(cards, state.inventory);
+                                 return { ...h, cards, blackjackValue: val, isBust: val > 21 };
+                             }
+                             return h;
+                         })
+                     }));
+                }
+            });
         }
+        
+        // Refresh again in case Bust hook modified hand (e.g. Mulligan)
+        const postBustHands = get().playerHands;
+        const postBustHand = postBustHands[handIndex];
 
         // Update sequencing state
         const remainingDrawn = [...drawnCards];
@@ -496,7 +609,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         totalPlaceCount = RelicManager.executeValueHook('getPlaceCount', totalPlaceCount, { inventory });
 
         // Check if we can continue placing
-        const anyPlayable = newHands.some(h => !h.isBust && !h.isHeld && h.blackjackValue !== 21);
+        const anyPlayable = postBustHands.some(h => !h.isBust && !h.isHeld && h.blackjackValue !== 21);
         const hasRemainingCards = remainingDrawn.some(c => c !== null);
         const canPlaceMore = newPlacedCount < totalPlaceCount && hasRemainingCards && anyPlayable;
 
@@ -521,7 +634,7 @@ export const useGameStore = create<GameState>((set, get) => ({
             }
 
             set({
-                playerHands: newHands,
+                playerHands: postBustHands,
                 drawnCards: remainingDrawn,
                 selectedDrawIndex: nextIndex !== -1 ? nextIndex : null,
                 cardsPlacedThisTurn: newPlacedCount
@@ -533,7 +646,7 @@ export const useGameStore = create<GameState>((set, get) => ({
              const newDiscards = [...discardPile, ...leftovers];
 
              set({
-                playerHands: newHands,
+                playerHands: postBustHands,
                 drawnCards: [],
                 selectedDrawIndex: null,
                 cardsPlacedThisTurn: 0,
@@ -542,7 +655,7 @@ export const useGameStore = create<GameState>((set, get) => ({
              });
 
             // Auto-stand if all hands are unplayable
-            const allUnplayable = newHands.every(h => h.isBust || h.isHeld || h.blackjackValue === 21);
+            const allUnplayable = postBustHands.every(h => h.isBust || h.isHeld || h.blackjackValue === 21);
             if (allUnplayable) {
                 setTimeout(() => {
                     get().holdReturns();
@@ -553,7 +666,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     holdReturns: async (forceDealerBust = false) => {
         // Reset speed to normal at start of sequence
-        set({ animationSpeed: 1 });
+        set({ animationSpeed: 1, isDealerPlaying: true });
 
         // Helper to wait with dynamic speed
         const wait = async (ms: number) => {
@@ -567,37 +680,42 @@ export const useGameStore = create<GameState>((set, get) => ({
             }
         };
 
-        const { dealer, deck } = get();
-
         // 1. Reveal Phase
-        const revealedCards = [...dealer.cards];
-        revealedCards[0] = { ...revealedCards[0], isFaceUp: true };
+        const { dealer, deck } = get();
         
-        // Update cards but keep old blackjackValue for the flip duration
-        set({ 
-            dealer: { 
-                ...dealer, 
-                isRevealed: true, 
-                cards: revealedCards 
-            } 
-        });
-        
-        await wait(600); // Wait for the 0.6s flip transition
-        
-        const revealVal = getBlackjackScore(revealedCards, get().inventory, true);
-        set({
-            dealer: {
-                ...get().dealer,
-                blackjackValue: revealVal
-            }
-        });
+        // Check if already revealed (e.g. by Spyglass relic)
+        let dCards = [...dealer.cards];
+        let dVal = dealer.blackjackValue;
 
-        const dDeck = [...deck];
-        let dCards = revealedCards;
-        let dVal = revealVal;
+        if (!dealer.isRevealed) {
+            const revealedCards = [...dealer.cards];
+            revealedCards[0] = { ...revealedCards[0], isFaceUp: true };
+            
+            // Update cards but keep old blackjackValue for the flip duration
+            set({ 
+                dealer: { 
+                    ...dealer, 
+                    isRevealed: true, 
+                    cards: revealedCards 
+                } 
+            });
+            
+            await wait(600); // Wait for the 0.6s flip transition
+            
+            const revealVal = getBlackjackScore(revealedCards, get().inventory, true);
+            set({
+                dealer: {
+                    ...get().dealer,
+                    blackjackValue: revealVal
+                }
+            });
+            dCards = revealedCards;
+            dVal = revealVal;
+        }
         const burnedCards: Card[] = [];
 
         // 2. Dealer Draw Loop
+        const dDeck = [...deck];
         const { inventory } = get();
         const baseStopValue = 17;
         const dealerStopValue = forceDealerBust ? 22 : RelicManager.executeValueHook('getDealerStopValue', baseStopValue, { inventory });
@@ -736,6 +854,7 @@ export const useGameStore = create<GameState>((set, get) => ({
                      inventory: get().inventory,
                      criterionId: crit.id as any,
                      score: scoreData,
+                     modifyRunningSummary: (chips, mult) => get().updateRunningSummary(chips, mult),
                      highlightRelic: async (relicId: string, options?: any) => {
                          const { preDelay = 0, duration = 250, postDelay = 0, trigger } = options || {};
                          await wait(preDelay);
@@ -1146,7 +1265,8 @@ export const useGameStore = create<GameState>((set, get) => ({
             runningSummary: null,
             roundSummary: null,
             allWinnersEnlarged: false,
-            dealerVisible: true
+            dealerVisible: true,
+            isDealerPlaying: false
         });
 
         // After animations complete
@@ -1235,6 +1355,35 @@ export const useGameStore = create<GameState>((set, get) => ({
                 handsRemaining: dealsPerCasino - state.dealsTaken
             };
         });
+    },
+
+    revealDealerHiddenCard: () => {
+        const { dealer, inventory } = get();
+        if (dealer.isRevealed) return;
+
+        const revealedCards = [...dealer.cards];
+        if (revealedCards.length > 0) {
+            revealedCards[0] = { ...revealedCards[0], isFaceUp: true };
+            
+            set({
+                dealer: {
+                    ...dealer,
+                    isRevealed: true,
+                    cards: revealedCards
+                }
+            });
+
+            // Update score after delay to match flip animation
+            setTimeout(() => {
+                const revealVal = getBlackjackScore(revealedCards, inventory, true);
+                set(state => ({
+                    dealer: {
+                        ...state.dealer,
+                        blackjackValue: revealVal
+                    }
+                }));
+            }, 600);
+        }
     },
 
     enhanceCard: (cardId, effect) => {

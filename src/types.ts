@@ -14,6 +14,7 @@ export interface Card {
     type: 'chip' | 'mult' | 'score';
     value: number;
   };
+  animationOffset?: number;
 }
 
 export interface ScoringMatch {

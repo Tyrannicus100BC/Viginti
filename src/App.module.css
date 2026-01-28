@@ -239,11 +239,11 @@
 @keyframes discardExitWrapper {
     0% {
         opacity: 1;
-        transform: translateY(0);
+        transform: translate(calc(-50% + var(--startX, 0px)), -50%);
     }
     100% {
         opacity: 0;
-        transform: translateY(50px);
+        transform: translate(calc(-50% + var(--startX, 0px)), calc(-50% + 50px));
     }
 }
 

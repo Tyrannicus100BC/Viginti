@@ -66,7 +66,7 @@ export const RelicInventory: React.FC<RelicInventoryProps> = ({ enabledCategorie
                     const config = RelicManager.getRelicConfig(instance.id);
                     if (!config) return null;
                     
-                    const isActive = activeRelicId === instance.id;
+                    const isActive = activeRelicId === instance.id || instance.state?.armed;
                     const isHovered = hoveredIndex === index;
 
                     return (
@@ -102,23 +102,23 @@ export const RelicInventory: React.FC<RelicInventoryProps> = ({ enabledCategorie
                             {/* Name Label (Left of Icon) */}
                             <div style={{
                                 marginRight: 10,
-                                color: isActive ? '#f1c40f' : '#ecf0f1',
+                                color: isActive ? '#f1c40f' : (instance.state?.used_this_round ? '#4a5568' : '#ecf0f1'),
                                 fontWeight: 'bold',
                                 fontSize: '0.9rem',
                                 whiteSpace: 'nowrap',
-                                textShadow: '0 1px 2px rgba(0,0,0,0.8)',
+                                textShadow: instance.state?.used_this_round ? 'none' : '0 1px 2px rgba(0,0,0,0.8)',
                                 textAlign: 'left' 
                             }}>
                                 {config.handType?.name || config.name}
                             </div>
 
-                             {/* Icon Circle */}
+                            {/* Icon Circle */}
                             <div style={{
                                 width: 40,
                                 height: 40,
                                 borderRadius: '50%',
-                                background: isActive ? '#f1c40f' : '#2c3e50',
-                                border: isActive ? '3px solid #f39c12' : '3px solid rgba(255, 215, 0, 0.6)', 
+                                background: isActive ? '#f1c40f' : (instance.state?.used_this_round ? '#151e26' : '#2c3e50'),
+                                border: isActive ? '3px solid #f39c12' : (instance.state?.used_this_round ? '3px solid #2c3e50' : '3px solid rgba(255, 215, 0, 0.6)'), 
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
@@ -135,7 +135,7 @@ export const RelicInventory: React.FC<RelicInventoryProps> = ({ enabledCategorie
                                             width: '85%', 
                                             height: '85%', 
                                             objectFit: 'contain',
-                                            filter: isActive ? 'brightness(1.2) drop-shadow(0 0 5px rgba(255,255,255,0.5))' : 'none'
+                                            filter: isActive ? 'brightness(1.2) drop-shadow(0 0 5px rgba(255,255,255,0.5))' : (instance.state?.used_this_round ? 'brightness(0.5) grayscale(0.8)' : 'none')
                                         }} 
                                     />
                                 ) : (
@@ -194,7 +194,7 @@ export const RelicInventory: React.FC<RelicInventoryProps> = ({ enabledCategorie
                 const config = RelicManager.getRelicConfig(instance.id);
                 if (!config) return null;
 
-                const isActive = activeRelicId === instance.id;
+                const isActive = activeRelicId === instance.id || instance.state?.armed;
                 const isHovered = hoveredIndex === index;
 
                 return (
@@ -228,13 +228,12 @@ export const RelicInventory: React.FC<RelicInventoryProps> = ({ enabledCategorie
                             paddingRight: 8 // Reduced space
                         }}
                     >
-                        {/* Icon Circle */}
                         <div style={{
                             width: 40,
                             height: 40,
                             borderRadius: '50%',
-                            background: isActive ? '#f1c40f' : '#2c3e50',
-                            border: isActive ? '3px solid #f39c12' : '3px solid rgba(255, 215, 0, 0.6)', 
+                            background: isActive ? '#f1c40f' : (instance.state?.used_this_round ? '#151e26' : '#2c3e50'),
+                            border: isActive ? '3px solid #f39c12' : (instance.state?.used_this_round ? '3px solid #2c3e50' : '3px solid rgba(255, 215, 0, 0.6)'), 
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
@@ -251,7 +250,7 @@ export const RelicInventory: React.FC<RelicInventoryProps> = ({ enabledCategorie
                                         width: '85%', 
                                         height: '85%', 
                                         objectFit: 'contain',
-                                        filter: isActive ? 'brightness(1.2) drop-shadow(0 0 5px rgba(255,255,255,0.5))' : 'none'
+                                        filter: isActive ? 'brightness(1.2) drop-shadow(0 0 5px rgba(255,255,255,0.5))' : (instance.state?.used_this_round ? 'brightness(0.5) grayscale(0.8)' : 'none')
                                     }} 
                                  />
                              ) : (
@@ -270,11 +269,11 @@ export const RelicInventory: React.FC<RelicInventoryProps> = ({ enabledCategorie
                         {/* Name Label */}
                         <div style={{
                             marginLeft: 10,
-                            color: isActive ? '#f1c40f' : '#ecf0f1',
+                            color: isActive ? '#f1c40f' : (instance.state?.used_this_round ? '#4a5568' : '#ecf0f1'),
                             fontWeight: 'bold',
                             fontSize: '0.9rem',
                             whiteSpace: 'nowrap',
-                            textShadow: '0 1px 2px rgba(0,0,0,0.8)'
+                            textShadow: instance.state?.used_this_round ? 'none' : '0 1px 2px rgba(0,0,0,0.8)'
                         }}>
                             {config.name}
                         </div>
