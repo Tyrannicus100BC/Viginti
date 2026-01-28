@@ -1,6 +1,6 @@
 
 import type { GamblerDefinition } from './types';
-import { createStandardDeck, createCard, SUITS, RANKS, createChipCard, createMultCard, createScoreCard } from '../deck';
+import { createStandardDeck, createCard } from '../deck';
 import { RelicManager } from '../relics/manager'; // We need this to get default properties
 import type { RelicInstance } from '../relics/types';
 
@@ -25,6 +25,7 @@ export const GAMBLER_DEFINITIONS: GamblerDefinition[] = [
         getInitialRelics: () => [
 
             getRelicInstance('viginti'),
+            getRelicInstance('double_down'),
             getRelicInstance('rank_run_mult'),
             getRelicInstance('straight_run_mult'),
             getRelicInstance('flush_run_chips')
@@ -51,8 +52,8 @@ export const GAMBLER_DEFINITIONS: GamblerDefinition[] = [
         name: 'The Wildcard',
         description: 'Chaos incarnate. A distorted deck heavy on high cards in black suits and low red cards. Starts with 8 random Special Cards.',
         getInitialDeck: () => {
-            const deck = [];
-            
+            const deck: import('../../types').Card[] = [];
+
             // Spades & Clubs: 3x A, K, Q, J. No numbered (2-10).
             (['spades', 'clubs'] as const).forEach(suit => {
                 const targets = ['A', 'K', 'Q', 'J'] as const;
@@ -73,7 +74,7 @@ export const GAMBLER_DEFINITIONS: GamblerDefinition[] = [
 
             // Apply 8 random Special Effects directly to cards in the deck
             const specialTypes = ['chip', 'mult', 'score'] as const;
-            
+
             // Randomly select 8 unique indices
             const indices = Array.from({ length: deck.length }, (_, i) => i);
             for (let i = indices.length - 1; i > 0; i--) {
@@ -84,10 +85,10 @@ export const GAMBLER_DEFINITIONS: GamblerDefinition[] = [
             for (let i = 0; i < 8; i++) {
                 if (i >= deck.length) break;
                 const targetIndex = indices[i];
-                
-                const type = getRandomItem(specialTypes);
+
+                const type = getRandomItem([...specialTypes]);
                 const value = Math.floor(Math.random() * 5) + 1;
-                
+
                 deck[targetIndex].specialEffect = {
                     type,
                     value
@@ -101,11 +102,11 @@ export const GAMBLER_DEFINITIONS: GamblerDefinition[] = [
             const flushFilter = allRelics
                 .filter(r => r.categories.includes('Angle') && r.categories.includes('Flush'))
                 .map(r => r.id);
-            
+
             // Pick 3 unique
             const shuffled = [...flushFilter].sort(() => Math.random() - 0.5);
             const selected = shuffled.slice(0, 3);
-            
+
             return selected.map(id => getRelicInstance(id));
         }
     },
@@ -121,9 +122,9 @@ export const GAMBLER_DEFINITIONS: GamblerDefinition[] = [
 
                 getRelicInstance('viginti')
             ];
-            
+
             const allRelics = RelicManager.getAllRelics();
-            
+
             const getRandomAngle = (category: string) => {
                 const pool = allRelics
                     .filter(r => r.categories.includes('Angle') && r.categories.includes(category))
@@ -138,7 +139,7 @@ export const GAMBLER_DEFINITIONS: GamblerDefinition[] = [
             if (rankAngle) fixed.push(getRelicInstance(rankAngle));
             if (flushAngle) fixed.push(getRelicInstance(flushAngle));
             if (straightAngle) fixed.push(getRelicInstance(straightAngle));
-            
+
             return fixed;
         }
     }
