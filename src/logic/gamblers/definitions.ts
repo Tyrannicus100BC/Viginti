@@ -71,19 +71,27 @@ export const GAMBLER_DEFINITIONS: GamblerDefinition[] = [
                 });
             });
 
-            // Start with 8 random Special Cards (Chip, Mult, Score) with values 1-5
-            const specialTypes = ['chip', 'mult', 'score'];
+            // Apply 8 random Special Effects directly to cards in the deck
+            const specialTypes = ['chip', 'mult', 'score'] as const;
+            
+            // Randomly select 8 unique indices
+            const indices = Array.from({ length: deck.length }, (_, i) => i);
+            for (let i = indices.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [indices[i], indices[j]] = [indices[j], indices[i]];
+            }
+
             for (let i = 0; i < 8; i++) {
+                if (i >= deck.length) break;
+                const targetIndex = indices[i];
+                
                 const type = getRandomItem(specialTypes);
                 const value = Math.floor(Math.random() * 5) + 1;
                 
-                if (type === 'chip') {
-                    deck.push(createChipCard(value));
-                } else if (type === 'mult') {
-                    deck.push(createMultCard(value));
-                } else {
-                    deck.push(createScoreCard(value));
-                }
+                deck[targetIndex].specialEffect = {
+                    type,
+                    value
+                };
             }
 
             return deck;

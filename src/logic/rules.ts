@@ -29,14 +29,20 @@ export const SCORING_RULES: Record<ScoringCriterionId, ScoringRule> = {
   'special_cards': { id: 'special_cards', name: 'Special Cards', chips: 0, mult: 0 },
 };
 
-export function getBaseBlackjackScore(cards: Card[]): number {
+export function getBaseBlackjackScore(cards: Card[], ignoreSpecialEffects: boolean = false): number {
   let score = 0;
   let aces = 0;
 
   for (const card of cards) {
+    if (!ignoreSpecialEffects && card.specialEffect?.type === 'score') {
+        score -= card.specialEffect.value;
+    }
+
     if (card.type === 'chip' || card.type === 'mult') continue;
     if (card.type === 'score') {
-        score -= (card.chips || 0); // Score cards reduce score
+        if (!ignoreSpecialEffects) {
+            score -= (card.chips || 0); // Score cards reduce score
+        }
         continue;
     }
 

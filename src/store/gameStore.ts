@@ -101,6 +101,7 @@ interface GameState {
     selectDrawnCard: (index: number) => void;
     getProjectedDrawCount: () => number;
     removeCard: (cardId: string) => void;
+    enhanceCard: (cardId: string, effect: { type: 'chip' | 'mult' | 'score', value: number }) => void;
     leaveShop: () => void;
 }
 
@@ -304,7 +305,7 @@ export const useGameStore = create<GameState>((set, get) => ({
             dealer: {
                 cards: dealerCards,
                 isRevealed: false,
-                blackjackValue: dealerCards.length > 1 ? getBlackjackScore([dealerCards[1]], get().inventory) : 0
+                blackjackValue: dealerCards.length > 1 ? getBlackjackScore([dealerCards[1]], get().inventory, true) : 0
             },
             discardPile: [...get().discardPile, ...burnedCards],
             drawnCards: [],
@@ -325,9 +326,10 @@ export const useGameStore = create<GameState>((set, get) => ({
         });
 
         // After animations complete (Dealer cards only now)
+        const delay = get().debugEnabled ? 0 : 1500;
         setTimeout(() => {
             set({ isInitialDeal: false });
-        }, 1500); // Reduced delay as there are fewer cards
+        }, delay);
     },
 
     drawCard: async () => {
@@ -582,7 +584,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         
         await wait(600); // Wait for the 0.6s flip transition
         
-        const revealVal = getBlackjackScore(revealedCards, get().inventory);
+        const revealVal = getBlackjackScore(revealedCards, get().inventory, true);
         set({
             dealer: {
                 ...get().dealer,
@@ -612,7 +614,7 @@ export const useGameStore = create<GameState>((set, get) => ({
             c.isFaceUp = true;
             c.origin = 'deck';
             const nextCards = [...dCards, c];
-            const nextVal = getBlackjackScore(nextCards, get().inventory);
+            const nextVal = getBlackjackScore(nextCards, get().inventory, true);
 
             // Show card being dealt (face down -> flip) but keep old score
             set({
@@ -1018,46 +1020,60 @@ export const useGameStore = create<GameState>((set, get) => ({
             const fullDeck = createStandardDeck(); // Base standard cards
             const shopCards = [];
 
-            // Helper for special cards
-            const createSpecialCard = (idSuffix: string) => {
-                const types = ['chip', 'mult', 'score'] as const;
-                const type = types[Math.floor(Math.random() * types.length)];
-                const val = Math.floor(Math.random() * 5) + 1;
-                return {
-                    id: `shop_special_${idSuffix}`,
-                    type: 'Card' as const,
-                    chips: type === 'chip' || type === 'score' ? val : undefined,
-                    mult: type === 'mult' ? val : undefined,
-                    card: {
-                         id: `shop_special_card_${idSuffix}`,
-                         suit: 'spades', // Dummy
-                         rank: 'A', // Dummy
-                         type,
-                         chips: type === 'chip' || type === 'score' ? val : undefined,
-                         mult: type === 'mult' ? val : undefined,
-                         isFaceUp: true
-                    }
-                };
+            // Helper for selecting random special effect
+            const getRandomSpecialEffect = () => {
+                 const options = [
+                     // Mult: 1, 2, 3
+                     { type: 'mult' as const, value: 1 },
+                     { type: 'mult' as const, value: 2 },
+                     { type: 'mult' as const, value: 3 },
+                     // Score: -1, -2, -3, -4 (represented as positive reduction)
+                     { type: 'score' as const, value: 1 },
+                     { type: 'score' as const, value: 2 },
+                     { type: 'score' as const, value: 3 },
+                     { type: 'score' as const, value: 4 },
+                     // Chips: 5, 10, 20, 50
+                     { type: 'chip' as const, value: 5 },
+                     { type: 'chip' as const, value: 10 },
+                     { type: 'chip' as const, value: 20 },
+                     { type: 'chip' as const, value: 50 },
+                 ];
+                 return options[Math.floor(Math.random() * options.length)];
             };
 
-            // 1. Forced Special Cards
-            shopCards.push(createSpecialCard('forced_1'));
-            shopCards.push(createSpecialCard('forced_2'));
+            // 1. Forced Regular Card with Score Reduction Effect
+            {
+                const idx = Math.floor(Math.random() * fullDeck.length);
+                const card = fullDeck.splice(idx, 1)[0];
+                card.isFaceUp = true;
+                
+                // Force Score Effect (-1 to -4)
+                const val = Math.floor(Math.random() * 4) + 1;
+                card.specialEffect = { type: 'score', value: val };
 
-            // 2. 4 Random Cards (15% chance special)
-            for (let i = 0; i < 4; i++) {
-                if (Math.random() < 0.15) {
-                    shopCards.push(createSpecialCard(`rand_${i}`));
-                } else {
-                    const idx = Math.floor(Math.random() * fullDeck.length);
-                    const card = fullDeck.splice(idx, 1)[0];
-                    card.isFaceUp = true;
-                    shopCards.push({
-                        id: `shop_card_${card.rank}_${card.suit}`,
-                        type: 'Card' as const,
-                        card: card
-                    });
+                shopCards.push({
+                    id: `shop_card_forced_${card.rank}_${card.suit}`,
+                    type: 'Card' as const,
+                    card: card
+                });
+            }
+
+            // 2. 5 Random Cards (20% chance Special Effect on Regular Card)
+            for (let i = 0; i < 5; i++) {
+                const idx = Math.floor(Math.random() * fullDeck.length);
+                const card = fullDeck.splice(idx, 1)[0];
+                card.isFaceUp = true;
+
+                if (Math.random() < 0.20) {
+                     // Apply Special Effect
+                     card.specialEffect = getRandomSpecialEffect();
                 }
+
+                shopCards.push({
+                    id: `shop_card_${card.rank}_${card.suit}_${i}`,
+                    type: 'Card' as const,
+                    card: card
+                });
             }
 
             set({
@@ -1219,5 +1235,15 @@ export const useGameStore = create<GameState>((set, get) => ({
                 handsRemaining: dealsPerCasino - state.dealsTaken
             };
         });
+    },
+
+    enhanceCard: (cardId, effect) => {
+        set(state => ({
+            deck: state.deck.map(c => 
+                c.id === cardId 
+                    ? { ...c, specialEffect: effect }
+                    : c
+            )
+        }));
     }
 }));

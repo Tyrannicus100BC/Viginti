@@ -7,8 +7,8 @@ export { POKER_ORDER, SCORING_RULES, findMatches, RANK_VALUES } from './rules';
 import type { ScoringRule } from './rules';
 export type { ScoringRule };
 
-export function getBlackjackScore(cards: Card[], inventory: RelicInstance[] = []): number {
-  let score = getBaseBlackjackScore(cards);
+export function getBlackjackScore(cards: Card[], inventory: RelicInstance[] = [], ignoreSpecialEffects: boolean = false): number {
+  let score = getBaseBlackjackScore(cards, ignoreSpecialEffects);
 
   // Relic: Adjust Blackjack Score (e.g. Joker)
   score = RelicManager.executeValueHook('adjustBlackjackScore', score, { 
@@ -38,6 +38,17 @@ export function evaluateHandScore(cards: Card[], isWin: boolean, isDoubled: bool
       const specialCardIds: string[] = [];
 
       for (const card of cards) {
+          // Check for inline special effects
+          if (card.specialEffect) {
+              if (card.specialEffect.type === 'chip') {
+                  specialChips += card.specialEffect.value;
+                  specialCardIds.push(card.id);
+              } else if (card.specialEffect.type === 'mult') {
+                  specialMult += card.specialEffect.value;
+                  specialCardIds.push(card.id);
+              }
+          }
+
           if (card.type === 'chip') {
               specialChips += (card.chips || 0);
               specialCardIds.push(card.id);

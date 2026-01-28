@@ -79,6 +79,7 @@ export default function App() {
         toggleDebug,
         confirmShopSelection,
         removeCard,
+        enhanceCard,
         leaveShop
     } = useGameStore();
 
@@ -88,6 +89,7 @@ export default function App() {
 
     const [showDeck, setShowDeck] = useState(false);
     const [isRemovingCards, setIsRemovingCards] = useState(false);
+    const [isEnhancingCards, setIsEnhancingCards] = useState(false);
     const [isSelectingDebugCard, setIsSelectingDebugCard] = useState(false);
     // showHandRankings removed
     const [showCasinoListing, setShowCasinoListing] = useState(false);
@@ -130,12 +132,16 @@ export default function App() {
     // Watch for phase change to handle initial overlay transition
     useEffect(() => {
         if (phase === 'entering_casino' && round === 1) {
+            if (debugEnabled) {
+                setHasSettledFirstOverlay(true);
+                return;
+            }
             const timer = setTimeout(() => setHasSettledFirstOverlay(true), 100);
             return () => clearTimeout(timer);
         } else if (phase === 'init') {
             setHasSettledFirstOverlay(false);
         }
-    }, [phase, round]);
+    }, [phase, round, debugEnabled]);
 
     // Watch for drawn card to delay selection UI
     useEffect(() => {
@@ -246,6 +252,14 @@ export default function App() {
     // Handle value updates for Casino and Target
     React.useEffect(() => {
         if (phase === 'entering_casino') {
+            if (debugEnabled) {
+                setOverlayComplete(true);
+                setDisplayRound(round);
+                setDisplayTarget(targetScore);
+                setDisplayComps(comps);
+                return;
+            }
+
             setOverlayComplete(false);
 
             // Wait for HUD to arrive at center (0.8s transition)
@@ -284,13 +298,13 @@ export default function App() {
             setDisplayTarget(targetScore);
             setDisplayComps(comps);
         }
-    }, [phase, round, targetScore, comps]);
+    }, [phase, round, targetScore, comps, debugEnabled]);
 
     // Synchronize display values immediately when starting a new run (Round 1) 
     // to avoid showing old run values or starting from the top of the screen.
     if (phase === 'entering_casino' && round === 1) {
         if (!runInitializedRef.current) {
-            setOverlayComplete(false);
+            setOverlayComplete(debugEnabled);
             setDisplayRound(1);
             setDisplayTarget(targetScore);
             setDisplayComps(5);
@@ -900,13 +914,16 @@ export default function App() {
                 <DeckView
                     remainingDeck={[...deck, ...((!dealer.isRevealed && dealer.cards.length > 0) ? [dealer.cards[0]] : [])]}
                     activeCards={activeCards}
+
                     onClose={() => {
                         setShowDeck(false);
                         setIsRemovingCards(false);
                         setIsSelectingDebugCard(false);
+                        setIsEnhancingCards(false);
                     }}
-                    mode={isRemovingCards ? 'remove' : 'view'}
+                    mode={isRemovingCards ? 'remove' : isEnhancingCards ? 'enhance' : 'view'}
                     onRemoveCard={isRemovingCards ? (id) => removeCard(id) : undefined}
+                    onEnhanceCard={isEnhancingCards ? (id, effect) => enhanceCard(id, effect) : undefined}
                     onSelectCard={isSelectingDebugCard ? (cardId) => {
                         drawSpecificCard(cardId);
                         setIsSelectingDebugCard(false);
@@ -923,10 +940,16 @@ export default function App() {
                 />
             )}
 
-            {phase === 'gift_shop' && <GiftShop onOpenDeckRemoval={() => {
-                setIsRemovingCards(true);
-                setShowDeck(true);
-            }} />}
+            {phase === 'gift_shop' && <GiftShop 
+                onOpenDeckRemoval={() => {
+                    setIsRemovingCards(true);
+                    setShowDeck(true);
+                }} 
+                onOpenEnhanceCards={() => {
+                    setIsEnhancingCards(true);
+                    setShowDeck(true);
+                }}
+            />}
 
             {showCompsWindow && (
                 <CompsWindow

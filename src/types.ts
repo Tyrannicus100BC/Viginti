@@ -10,6 +10,10 @@ export interface Card {
   type?: 'standard' | 'chip' | 'mult' | 'score';
   chips?: number;
   mult?: number;
+  specialEffect?: {
+    type: 'chip' | 'mult' | 'score';
+    value: number;
+  };
 }
 
 export interface ScoringMatch {

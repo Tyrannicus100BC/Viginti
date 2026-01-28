@@ -366,6 +366,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
                           '--start-tx': `${animTx}px`,
                           '--start-ty': `${animTy}px`
                         } as React.CSSProperties}
+                        suppressSpecialVisuals={hand.id === -1}
                       />
                     </div>
                   ) : (
@@ -377,6 +378,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
                         '--start-tx': `${screenDx}px`,
                         '--start-ty': `${screenDy}px`
                       } as React.CSSProperties}
+                      suppressSpecialVisuals={hand.id === -1}
                     />
                   )}
                 </div>

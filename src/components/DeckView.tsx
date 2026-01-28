@@ -7,8 +7,9 @@ interface DeckViewProps {
   activeCards: CardType[];
   onClose: () => void;
   onSelectCard?: (cardId: string) => void;
-  mode?: 'view' | 'remove';
+  mode?: 'view' | 'remove' | 'enhance';
   onRemoveCard?: (cardId: string) => void;
+  onEnhanceCard?: (cardId: string, effect: { type: 'chip' | 'mult' | 'score', value: number }) => void;
 }
 
 const SUITS_MAP: Record<string, string> = {
@@ -21,7 +22,9 @@ const SUITS_MAP: Record<string, string> = {
 const SUIT_ORDER: Suit[] = ['hearts', 'diamonds', 'clubs', 'spades'];
 const RANK_ORDER: Rank[] = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
 
-export const DeckView: React.FC<DeckViewProps> = ({ remainingDeck, activeCards, onClose, onSelectCard, mode = 'view', onRemoveCard }) => {
+export const DeckView: React.FC<DeckViewProps> = ({ remainingDeck, activeCards, onClose, onSelectCard, mode = 'view', onRemoveCard, onEnhanceCard }) => {
+    
+    const [selectedEnhancement, setSelectedEnhancement] = React.useState<{ type: 'chip' | 'mult' | 'score', value: number } | null>(null);
     
     // Combine all cards with status
     const allCards = React.useMemo(() => {
@@ -70,12 +73,12 @@ export const DeckView: React.FC<DeckViewProps> = ({ remainingDeck, activeCards, 
             content = `x${card.mult}`;
         } else if (card.type === 'score') {
             style = { color: '#c084fc', WebkitTextStroke: '2px #6b21a8', paintOrder: 'stroke fill' } as React.CSSProperties;
-            content = `-${card.chips}`;
+            content = `${card.chips}`;
         } else if (card.suit === 'hearts' || card.suit === 'diamonds') {
             style = { color: '#e74c3c' };
         }
 
-        const isSelectable = (onSelectCard && !isDealt) || (mode === 'remove' && !isDealt);
+        const isSelectable = (onSelectCard && !isDealt) || (mode === 'remove' && !isDealt) || (mode === 'enhance' && !isDealt && selectedEnhancement);
 
         return (
             <div 
@@ -85,6 +88,8 @@ export const DeckView: React.FC<DeckViewProps> = ({ remainingDeck, activeCards, 
                 onClick={() => {
                     if (mode === 'remove' && !isDealt) {
                         onRemoveCard?.(card.id);
+                    } else if (mode === 'enhance' && !isDealt && selectedEnhancement) {
+                        onEnhanceCard?.(card.id, selectedEnhancement);
                     } else if (onSelectCard && !isDealt) {
                         onSelectCard(card.id);
                         onClose();
@@ -94,6 +99,21 @@ export const DeckView: React.FC<DeckViewProps> = ({ remainingDeck, activeCards, 
                 <div className={styles.miniCardContent}>
                     <span>{content}</span>
                 </div>
+                
+                {/* Special Effect Indicator for Standard Cards */}
+                {card.specialEffect && (
+                    <div className={styles.specialIndicator}
+                         style={
+                           card.specialEffect.type === 'chip' ? { color: '#4ade80', borderColor: '#166534' } as React.CSSProperties :
+                           card.specialEffect.type === 'mult' ? { color: '#facc15', borderColor: '#854d0e' } as React.CSSProperties :
+                           card.specialEffect.type === 'score' ? { color: '#c084fc', borderColor: '#6b21a8' } as React.CSSProperties :
+                           undefined
+                         }
+                    >
+                        {card.specialEffect.value}
+                    </div>
+                )}
+
                 {mode === 'remove' && !isDealt && (
                     <div className={styles.removeOverlay}>
                         <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
@@ -108,7 +128,11 @@ export const DeckView: React.FC<DeckViewProps> = ({ remainingDeck, activeCards, 
     return (
         <div className={styles.overlay} onClick={onClose}>
             <div className={styles.modal} onClick={e => e.stopPropagation()}>
-                <h2 className={styles.title}>{mode === 'remove' ? 'Remove Cards' : (onSelectCard ? 'Select a Card' : 'Deck Details')}</h2>
+                <h2 className={styles.title}>
+                    {mode === 'remove' ? 'Remove Cards' : 
+                     mode === 'enhance' ? 'Enhance Cards' :
+                     onSelectCard ? 'Select a Card' : 'Deck Details'}
+                </h2>
                 
                 <div className={styles.scrollContent}>
                     <div className={styles.unifiedGrid}>
@@ -143,6 +167,62 @@ export const DeckView: React.FC<DeckViewProps> = ({ remainingDeck, activeCards, 
                         })()}
                     </div>
                 </div>
+
+                {mode === 'enhance' && (
+                    <div className={styles.enhancementPanel}>
+                         {/* Score Modifiers */}
+                        <div className={styles.effectRow}>
+                            <div className={styles.effectLabel}>Score</div>
+                            {[-1, -2, -3, -4].map(val => (
+                                <button
+                                    key={`score-${val}`}
+                                    className={`${styles.effectButton} ${selectedEnhancement?.type === 'score' && selectedEnhancement.value === Math.abs(val) ? styles.selected : ''}`}
+                                    onClick={() => setSelectedEnhancement({ type: 'score', value: Math.abs(val) })} // Store positive value, logic handles sign usually? 
+                                    // Wait, the request says "-1, -2...". The card property usually stores positive logic but display negative? 
+                                    // Let's check how special cards are stored. 
+                                    // Previous code: content = `-${card.chips}` for score type.
+                                    // So value should be positive in storage if the display handles the negative sign?
+                                    // Or does checking type === 'score' imply subtraction?
+                                    // In `calculateScore`, Score cards usually SUBTRACT.
+                                    // Let's check `types.ts` or usage.
+                                    // In `DeckView`, `content = -${card.chips}`. So `chips` property is positive.
+                                    // I'll store absolute value.
+                                >
+                                    {val}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Multipliers */}
+                        <div className={styles.effectRow}>
+                            <div className={styles.effectLabel}>Mult</div>
+                            {[1, 2, 3, 4].map(val => (
+                                <button
+                                    key={`mult-${val}`}
+                                    className={`${styles.effectButton} ${selectedEnhancement?.type === 'mult' && selectedEnhancement.value === val ? styles.selected : ''}`}
+                                    onClick={() => setSelectedEnhancement({ type: 'mult', value: val })}
+                                >
+                                    x{val}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Chips */}
+                        <div className={styles.effectRow}>
+                            <div className={styles.effectLabel}>Chips</div>
+                            {[5, 10, 20, 50].map(val => (
+                                <button
+                                    key={`chip-${val}`}
+                                    className={`${styles.effectButton} ${selectedEnhancement?.type === 'chip' && selectedEnhancement.value === val ? styles.selected : ''}`}
+                                    onClick={() => setSelectedEnhancement({ type: 'chip', value: val })}
+                                >
+                                    ${val}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 <button className="close-x-btn" onClick={onClose}>×</button>
             </div>
         </div>

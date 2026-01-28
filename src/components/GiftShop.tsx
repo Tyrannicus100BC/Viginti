@@ -11,9 +11,10 @@ import { PlayingCard } from './PlayingCard';
 
 interface GiftShopProps {
     onOpenDeckRemoval: () => void;
+    onOpenEnhanceCards: () => void;
 }
 
-export const GiftShop: React.FC<GiftShopProps> = ({ onOpenDeckRemoval }) => {
+export const GiftShop: React.FC<GiftShopProps> = ({ onOpenDeckRemoval, onOpenEnhanceCards }) => {
     const { shopItems, selectedShopItemId, confirmShopSelection } = useGameStore();
 
     const signRef = useRef<HTMLDivElement>(null);
@@ -365,7 +366,14 @@ export const GiftShop: React.FC<GiftShopProps> = ({ onOpenDeckRemoval }) => {
                             </div>
                         ))}
                     </div>
-                    {/* Trash Button - Full width, bottom */}
+                    {/* Buttons - Full width, bottom */}
+                    <button 
+                        className={styles.shopEnhanceButton}
+                        onClick={onOpenEnhanceCards}
+                        style={{ marginBottom: 10 }}
+                    >
+                        ENHANCE CARDS
+                    </button>
                     <button 
                         className={styles.shopTrashButton}
                         onClick={onOpenDeckRemoval}

@@ -137,6 +137,28 @@
     box-shadow: 0 6px 12px rgba(0,0,0,0.4);
 }
 
+.shopEnhanceButton {
+    width: 100%;
+    background: #2980b9;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 15px;
+    font-size: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+}
+
+.shopEnhanceButton:hover {
+    background: #3498db;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(0,0,0,0.4);
+}
+
 .rightShelf {
     flex: 1;
     display: flex;
