@@ -21,68 +21,42 @@ const RANK_ORDER: Rank[] = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', '
 
 export const DeckView: React.FC<DeckViewProps> = ({ remainingDeck, activeCards, onClose, onSelectCard }) => {
     
-    // Calculate counts for all cards
-    const cardCounts = React.useMemo(() => {
-        const counts = new Map<string, { total: number, dealt: number }>();
-        const getKey = (s: Suit, r: Rank) => `${s}-${r}`;
+    // Combine all cards with status
+    const allCards = React.useMemo(() => {
+        const remaining = remainingDeck.map(c => ({ ...c, isDealt: false }));
+        const active = activeCards.map(c => ({ ...c, isDealt: true }));
+        return [...remaining, ...active];
+    }, [remainingDeck, activeCards]);
 
-        // Count dealt cards from activeCards
-        activeCards.forEach(c => {
-            const key = getKey(c.suit, c.rank);
-            const current = counts.get(key) || { total: 0, dealt: 0 };
-            counts.set(key, { total: current.total + 1, dealt: current.dealt + 1 });
-        });
+    const getSuitCards = (suit: Suit) => {
+        return allCards
+            .filter(c => c.suit === suit)
+            .sort((a, b) => {
+                 const rankA = RANK_ORDER.indexOf(a.rank);
+                 const rankB = RANK_ORDER.indexOf(b.rank);
+                 return rankB - rankA; // Ascending index -> Descending sort (A=12, 2=0)
+            });
+    };
 
-        // Add remaining cards from deck (including hidden ones passed in)
-        remainingDeck.forEach(c => {
-            const key = getKey(c.suit, c.rank);
-            const current = counts.get(key) || { total: 0, dealt: 0 };
-            counts.set(key, { ...current, total: current.total + 1 });
-        });
+    const renderCard = (card: CardType & { isDealt: boolean }, index: number) => {
+        const isDealt = card.isDealt;
+        // Heart/Diamond red, others black/dark-gray
+        const color = (card.suit === 'hearts' || card.suit === 'diamonds') ? '#e74c3c' : '#2c3e50';
         
-        return counts;
-    }, [activeCards, remainingDeck]);
-
-    const renderCard = (suit: Suit, rank: Rank) => {
-        const key = `${suit}-${rank}`;
-        const data = cardCounts.get(key);
-        
-        // If card doesn't exist in the universe at all, show empty slot
-        if (!data || data.total === 0) {
-            return <div key={key} className={styles.emptySlot} />;
-        }
-
-        const { total, dealt } = data;
-        const remaining = total - dealt;
-        const isFullyDealt = remaining === 0;
-        const color = (suit === 'hearts' || suit === 'diamonds') ? '#e74c3c' : '#2c3e50';
-        
-        // Render pips: Remaining (solid) first, then Dealt (hollow)
-        const pips = [];
-        for (let i = 0; i < remaining; i++) {
-            pips.push(<div key={`r-${i}`} className={`${styles.pip} ${styles.pipRemaining}`} />);
-        }
-        for (let i = 0; i < dealt; i++) {
-            pips.push(<div key={`d-${i}`} className={`${styles.pip} ${styles.pipDealt}`} />);
-        }
-
         return (
             <div 
-                key={key} 
-                className={`${styles.miniCard} ${isFullyDealt ? styles.inactive : ''} ${onSelectCard && !isFullyDealt ? styles.selectable : ''}`}
-                style={{ color: isFullyDealt ? undefined : color }}
+                key={`${card.id}-${index}`}
+                className={`${styles.miniCard} ${isDealt ? styles.dealt : ''} ${onSelectCard && !isDealt ? styles.selectable : ''}`}
+                style={{ color }}
                 onClick={() => {
-                    if (onSelectCard && !isFullyDealt) {
-                        onSelectCard(suit, rank);
+                    if (onSelectCard && !isDealt) {
+                        onSelectCard(card.suit, card.rank);
                         onClose();
                     }
                 }}
             >
                 <div className={styles.miniCardContent}>
-                    <span>{rank}{SUITS_MAP[suit]}</span>
-                    <div className={styles.pipsContainer}>
-                        {pips}
-                    </div>
+                    <span>{card.rank}{SUITS_MAP[card.suit]}</span>
                 </div>
             </div>
         );
@@ -95,14 +69,20 @@ export const DeckView: React.FC<DeckViewProps> = ({ remainingDeck, activeCards, 
                 
                 <div className={styles.scrollContent}>
                     <div className={styles.unifiedGrid}>
-                        {SUIT_ORDER.map(suit => (
-                            <div key={suit} className={styles.suitRow}>
-                                <div className={styles.suitLabel}>{SUITS_MAP[suit]}</div>
-                                <div className={styles.rankList}>
-                                    {RANK_ORDER.map(rank => renderCard(suit, rank))}
+                        {SUIT_ORDER.map(suit => {
+                            const suitCards = getSuitCards(suit);
+                            if (suitCards.length === 0) return null; // Optional: hide empty suits? Or keep for consistency. Keeping consistent layout is usually better, but "uniquely visualized" might imply only what exists. I'll render the row but it might be empty.
+                            // Actually, let's always render the row so the structure is visible.
+                            
+                            return (
+                                <div key={suit} className={styles.suitRow}>
+                                    <div className={styles.suitLabel}>{SUITS_MAP[suit]}</div>
+                                    <div className={styles.cardList}>
+                                        {suitCards.map((card, i) => renderCard(card, i))}
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 </div>
                 <button className="close-x-btn" onClick={onClose}>×</button>
