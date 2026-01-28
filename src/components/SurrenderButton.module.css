@@ -1,0 +1,154 @@
+.container {
+    position: absolute;
+    left: 125px;
+    /* Symmetric to DoubleDown right: 125px */
+    top: -205px;
+    width: 120px;
+    height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transform: translateX(-50%);
+    /* Mirror the 50% translation */
+    z-index: 50;
+    pointer-events: none;
+}
+
+.button {
+    width: 90px;
+    height: 90px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.6);
+    border: 2px dashed #444;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: default;
+    transition: all 0.3s ease;
+    pointer-events: auto;
+    position: relative;
+    z-index: 2;
+    overflow: hidden;
+}
+
+.text {
+    color: #444;
+    font-weight: bold;
+    font-size: 0.8rem;
+    text-align: center;
+    z-index: 5;
+    line-height: 1.1;
+    transition: color 0.3s ease;
+}
+
+/* Active State */
+.active {
+    border-color: #4444ff;
+    cursor: pointer;
+    box-shadow: 0 0 15px rgba(68, 68, 255, 0.2);
+}
+
+.active .text {
+    color: #4444ff;
+}
+
+/* Selected/Smoldering Mode (Ice/Void theme) */
+.smoldering {
+    background: radial-gradient(circle, #000030 0%, #00001a 100%);
+    border: 2px solid #4444ff;
+    box-shadow: 0 0 25px rgba(0, 50, 255, 0.6);
+    animation: smolderPulse 2s infinite;
+}
+
+.smoldering .text {
+    color: #00ffff;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+}
+
+@keyframes smolderPulse {
+    0% {
+        box-shadow: 0 0 20px rgba(0, 50, 255, 0.4);
+        border-color: #4444ff;
+    }
+
+    50% {
+        box-shadow: 0 0 40px rgba(0, 80, 255, 0.8);
+        border-color: #0088ff;
+    }
+
+    100% {
+        box-shadow: 0 0 20px rgba(0, 50, 255, 0.4);
+        border-color: #4444ff;
+    }
+}
+
+/* Fire Effect Overlay (Replaced with Ice/Energy logic) */
+.fireOverlay {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(0deg, rgba(0, 50, 255, 0.4) 0%, rgba(0, 100, 255, 0.1) 50%, transparent 100%);
+    filter: blur(4px);
+    animation: fireFlicker 0.1s infinite alternate;
+    pointer-events: none;
+    z-index: 1;
+}
+
+@keyframes fireFlicker {
+    0% {
+        opacity: 0.5;
+        transform: scaleY(1);
+    }
+
+    100% {
+        opacity: 0.8;
+        transform: scaleY(1.1);
+    }
+}
+
+/* Charge Circle SVG */
+.chargeSvg {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-90deg);
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.chargeSegment {
+    fill: none;
+    stroke: #333;
+    stroke-width: 6;
+    transition: stroke 0.3s ease, filter 0.3s ease;
+}
+
+.filled {
+    stroke: #4444ff;
+    filter: drop-shadow(0 0 4px rgba(68, 68, 255, 0.5));
+}
+
+.fullCharge .filled {
+    stroke: #0000ff;
+    filter: drop-shadow(0 0 8px rgba(0, 0, 255, 0.8));
+    animation: chargePulse 1s infinite alternate;
+}
+
+@keyframes chargePulse {
+    from {
+        stroke: #4444ff;
+    }
+
+    to {
+        stroke: #8888ff;
+    }
+}
+
+.confirmText {
+    font-size: 0.9rem;
+    letter-spacing: 1px;
+}

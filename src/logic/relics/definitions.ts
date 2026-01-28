@@ -9,7 +9,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
         name: 'Viginti',
         categories: ['Angle', 'Win', 'HandType'],
         description: 'Winning hands earn {win.score}\nExactly 21 earn {viginti.score}',
-        handType: { id: 'viginti', name: 'Viginti', chips: 50, mult: 1, order: 0},
+        handType: { id: 'viginti', name: 'Viginti', chips: 50, mult: 1, order: 0 },
         extraHandTypes: {
             'win': { id: 'win', name: 'Win', chips: 10, mult: 1, order: 1 },
             'viginti': { id: 'viginti', name: 'Viginti', chips: 50, mult: 1, order: 0 }
@@ -144,7 +144,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
         description: 'Longest [Straight Run] earns {hand.score}',
         handType: { id: 'straight_run_mult', name: 'Straight Run', chips: 0, mult: 0, order: 10.1, multRun: 0.5 },
         hooks: Hooks.straight_run
-    },    
+    },
     // Actions
     {
         name: 'Double Down',
@@ -153,15 +153,15 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
         handType: { id: 'double_down', name: 'Double Down', chips: 0, mult: 2, order: 1.5 },
         hooks: Hooks.double_down_relic
     },
-    
+
     // Charms
-    
+
     // Flushes
     {
         name: 'Flusher',
         categories: ['Charm', 'Flush'],
         description: '[Flushes] earn an extra x${bonus_mult}',
-        properties: { bonus_mult: 1 },
+        properties: { bonus_mult: 0.5 },
         hooks: Hooks.flusher_bonus
     },
     {
@@ -176,7 +176,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
         name: 'Badge',
         categories: ['Charm', 'Rank'],
         description: '[Rank] hands earn an extra x${bonus_mult}',
-        properties: { bonus_mult: 1 },
+        properties: { bonus_mult: 0.5 },
         hooks: Hooks.rank_mult
     },
     {
@@ -191,7 +191,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
         name: 'Ruler',
         categories: ['Charm', 'Straight'],
         description: '[Straights] earn an extra x${bonus_mult}',
-        properties: { bonus_mult: 1 },
+        properties: { bonus_mult: 0.5 },
         hooks: Hooks.straight_mult
     },
     {
@@ -235,7 +235,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
         name: 'Star Bead',
         categories: ['Charm', 'Cards'],
         description: 'Each [9] earns an extra x${bonus_mult}',
-        properties: { bonus_mult: 1 },
+        properties: { bonus_mult: 0.5 },
         hooks: Hooks.star_bead_nines
     },
     {
@@ -249,7 +249,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
         name: 'Lucky Acorn',
         categories: ['Charm', 'Cards'],
         description: 'Each [King] earns an extra x${bonus_mult}',
-        properties: { bonus_mult: 1 },
+        properties: { bonus_mult: 0.5 },
         hooks: Hooks.lucky_acorn_kings
     },
     {
@@ -321,14 +321,14 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
         name: 'Robe and Slippers Set',
         categories: ['Charm', 'Global'],
         description: 'Earn an extra x${bonus_mult}',
-        properties: { bonus_mult: 1 },
+        properties: { bonus_mult: 0.5 },
         hooks: Hooks.robe_slippers_bonus_mult
     },
     {
         name: 'Key Ring',
         categories: ['Charm', 'Global'],
         description: 'On final draw, earn x${bonus_mult}',
-        properties: { bonus_mult: 3 },
+        properties: { bonus_mult: 0.5 },
         hooks: Hooks.key_ring_final_draw
     },
     // Meta

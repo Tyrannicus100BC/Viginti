@@ -1,278 +1,280 @@
-.giftShopContainer {
+.container {
     position: absolute;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    pointer-events: none;
+    background: rgba(0, 0, 0, 0.95);
+    /* Slightly darker for better contrast */
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: space-between;
-    z-index: 50;
-    overflow: hidden;
+    justify-content: center;
+    z-index: 100;
+    animation: fadeIn 0.3s ease-out;
 }
 
-.signContainer {
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+.title {
+    font-size: 3rem;
+    color: #ffd700;
+    margin-bottom: 40px;
+    /* Removed heavy text-shadow to reduce blur artifacting during composite layer updates */
+    text-shadow: 0 0 5px rgba(255, 215, 0, 0.5);
+    font-family: 'Playfair Display', serif;
+    letter-spacing: 2px;
+    z-index: 5;
+    position: relative;
+    /* Ensure title is on its own layer to prevent repaint from card transforms */
+    transform: translateZ(0);
+    will-change: transform;
+}
+
+.introOverlay {
     position: absolute;
     top: 0;
     left: 0;
-    /* Transformation will be handled by JS/Physics */
-    background: #2a2a2a;
-    border: 4px double #ffd700;
-    border-radius: 20px; /* Rounded corners */
-    padding: 10px 40px;
-    box-shadow: 0 0 20px rgba(255, 215, 0, 0.2);
-    /* animation: slideDown ... removed */
-    pointer-events: auto;
-    /* Ensure it's centered for physics calc origin usually, but we'll absolute position it */
-    transform-origin: 50% 50%;
-    will-change: transform;
-    z-index: 45; /* Above rope (40) */
-}
-
-.signText {
-    font-family: 'Playfair Display', serif;
-    font-size: 3rem;
-    color: transparent; /* Hollow */
-    -webkit-text-stroke: 2px #ffd700; /* Outline */
-    text-transform: uppercase;
-    letter-spacing: 4px;
-    text-shadow: 
-        0 0 5px rgba(255, 215, 0, 0.5),
-        0 0 15px rgba(255, 215, 0, 0.2); /* Reduced neon glow */
-    font-weight: 900;
-}
-
-.shelvesContainer {
-    position: absolute;
-    bottom: 160px;
-    left: 50%;
-    transform: translateX(-50%) translateY(200%); /* Ensure explicitly offscreen */
-    width: 800px;
-    height: 500px;
-    background: #3e2723; /* Wood texture fallback */
-    border-radius: 12px;
-    box-shadow: 0 -10px 30px rgba(0,0,0,0.8);
-    border: 4px solid #5d4037;
-    padding: 30px;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 1);
+    z-index: 200;
     display: flex;
-    gap: 0; /* Removing gap to let borders touch */
-    animation: slideUp 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
-    animation-delay: 0.4s;
-    pointer-events: auto;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 1s ease-out;
 }
 
-/* Wood grain effect */
-.shelvesContainer::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background-image: repeating-linear-gradient(45deg, rgba(255,255,255,0.03) 0px, rgba(255,255,255,0.03) 2px, transparent 2px, transparent 8px);
+.fadeOut {
+    opacity: 0;
     pointer-events: none;
 }
 
-@keyframes slideDown {
-    to {
-        transform: translateX(-50%) rotate(-3deg) translateY(120px); 
-    }
+.introTextMain {
+    font-size: 3rem;
+    color: #fff;
+    font-weight: bold;
+    margin-bottom: 20px;
+    animation: slideDown 0.5s ease-out;
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
 }
 
-@keyframes slideUp {
-    to {
-        transform: translateX(-50%) translateY(0);
-    }
-}
-
-.leftShelf {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    padding: 10px;
-    border-right: 4px solid #281a16;
-    position: relative;
-    gap: 15px;
-}
-
-.charmsList {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-start;
-    gap: 20px;
-}
-
-.zoneHeader {
-    font-size: 1.2rem;
-    color: #888;
-    text-transform: uppercase;
+.compBonusHeader {
+    font-family: 'Playfair Display', serif;
     letter-spacing: 2px;
+}
+
+.bonusLine {
+    display: flex;
+    justify-content: space-between;
+    width: 300px;
+    margin: 10px 0;
+    font-size: 1.2rem;
+    animation: fadeIn 0.5s ease-out;
+}
+
+.bonusLabel {
+    color: #ccc;
+}
+
+.bonusValue {
+    color: #ffd700;
     font-weight: bold;
-    text-align: center;
-    border-bottom: 1px solid #444;
-    padding-bottom: 5px;
-    margin-bottom: 10px;
 }
 
-.shopTrashButton {
-    width: 100%;
-    background: #c0392b;
-    color: #fff;
-    border: none;
-    border-radius: 8px;
-    padding: 15px;
-    font-size: 1rem;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    font-weight: bold;
-    cursor: pointer;
-    transition: all 0.2s;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+@keyframes slideDown {
+    from {
+        transform: translateY(-20px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
 }
 
-.shopTrashButton:hover {
-    background: #e74c3c;
-    transform: translateY(-2px);
-    box-shadow: 0 6px 12px rgba(0,0,0,0.4);
-}
+/* ... */
 
-.shopEnhanceButton {
-    width: 100%;
-    background: #2980b9;
-    color: #fff;
-    border: none;
-    border-radius: 8px;
-    padding: 15px;
-    font-size: 1rem;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    font-weight: bold;
-    cursor: pointer;
-    transition: all 0.2s;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-}
-
-.shopEnhanceButton:hover {
-    background: #3498db;
-    transform: translateY(-2px);
-    box-shadow: 0 6px 12px rgba(0,0,0,0.4);
-}
-
-.rightShelf {
-    flex: 1;
+.choicesContainer {
     display: flex;
-    flex-direction: column;
-    padding-left: 30px; /* Compensate for gap removal */
+    gap: 20px;
+    /* Reduced gap for 4 items */
+    margin-bottom: 60px;
 }
 
-.anglesZone {
-    height: 50%;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-start;
-    padding: 10px;
-    border-bottom: 4px solid #281a16;
-}
-
-.anglesList {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-start;
-    gap: 20px; 
-    /* Match spacing of charmsList to align rows */
-}
-
-.cardsZone {
-    height: 50%;
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr; /* 3 columns */
-    grid-template-rows: 1fr 1fr; /* 2 rows */
-    gap: 10px;
-    padding: 10px;
-}
-
-.itemSlot {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
-
-.itemCard {
-    width: 140px;
-    height: 180px;
+.choiceCard {
+    width: 220px;
+    height: 320px;
     background: #1a1a1a;
     border: 2px solid #444;
-    border-radius: 8px;
+    border-radius: 12px;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: space-between;
-    padding: 10px;
+    padding: 20px;
     cursor: pointer;
-    transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+    transition: all 0.2s ease;
     position: relative;
-    overflow: hidden;
+    overflow: visible;
+    /* Allow tooltips */
 }
 
-.itemCard:hover {
-    transform: translateY(-5px) scale(1.05);
+.choiceCard:hover:not(.disabled) {
+    transform: translateY(-10px);
     border-color: #ffd700;
-    box-shadow: 0 0 15px rgba(255, 215, 0, 0.3);
+    box-shadow: 0 0 25px rgba(255, 215, 0, 0.2);
+    background: #222;
     z-index: 10;
 }
 
-.itemType {
-    font-size: 0.7rem;
+.choiceCard.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    filter: grayscale(1);
+}
+
+/* Specific Colors per type */
+.cardTypeCard .cardIcon {
+    color: #e74c3c;
+}
+
+.cardTypeAngle .cardIcon {
+    color: #3498db;
+}
+
+.cardTypeCharm .cardIcon {
+    color: #9b59b6;
+}
+
+.cardTitle {
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: #fff;
+    margin-top: 10px;
     text-transform: uppercase;
-    color: #888;
+    text-align: center;
+    z-index: 2;
+    /* Content above description */
+}
+
+.costContainer {
+    background: #000;
+    padding: 8px 16px;
+    border-radius: 20px;
+    border: 1px solid #333;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    z-index: 2;
+}
+
+.costValue {
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: #ffd700;
+}
+
+.leaveButton {
+    padding: 15px 40px;
+    font-size: 1.2rem;
+    background: #444;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-transform: uppercase;
+    font-weight: bold;
     letter-spacing: 1px;
-    margin-bottom: 5px;
 }
 
-.itemIcon {
-    width: 48px;
-    height: 48px;
-    object-fit: contain;
-    margin: 5px 0;
+.leaveButton:hover {
+    background: #555;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
 }
 
-.itemName {
-    font-size: 0.9rem;
-    font-weight: bold;
-    text-align: center;
-    color: #fff;
-    line-height: 1.2;
-}
-
-.itemDesc {
-    font-size: 0.7rem;
-    color: #aaa;
-    text-align: center;
-    margin-top: 5px;
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-}
-
-.charmBorder {
-    border-color: #9c27b0;
-}
-.angleBorder {
-    border-color: #2196f3;
-}
-
-.priceTag {
+.balanceDisplay {
     position: absolute;
-    top: -5px;
-    right: -25px;
-    background: #d32f2f;
-    color: #fff;
-    font-size: 0.7rem;
-    padding: 2px 25px;
-    transform: rotate(45deg);
+    top: 40px;
+    right: 40px;
+    font-size: 1.5rem;
+    color: #ffd700;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(0, 0, 0, 0.5);
+    padding: 10px 20px;
+    border-radius: 30px;
+    border: 1px solid #ffd700;
+}
+
+/* Tooltip Overlay Logic */
+.hoverOverlay {
+    position: absolute;
+    bottom: 100%;
+    /* Check if this places it above */
+    left: 50%;
+    transform: translateX(-50%);
+    width: 260px;
+    /* Slightly wider than card */
+    background: rgba(20, 20, 20, 0.95);
+    border: 1px solid #666;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 15px;
+    pointer-events: none;
+    z-index: 20;
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.6);
+    animation: fadeIn 0.2s;
+}
+
+/* Triangle indicator */
+.hoverOverlay::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -8px;
+    border-width: 8px;
+    border-style: solid;
+    border-color: #666 transparent transparent transparent;
+}
+
+
+
+/* Custom styles for tooltip content */
+.shopTooltip {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+}
+
+.tooltipTitle {
+    color: #ffd700;
     font-weight: bold;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+    text-transform: uppercase;
+    margin-bottom: 5px;
+    border-bottom: 1px solid #444;
+    padding-bottom: 3px;
+}
+
+.tooltipDesc {
+    color: #ccc;
+    font-size: 0.9rem;
+    line-height: 1.4;
+    white-space: pre-wrap;
 }

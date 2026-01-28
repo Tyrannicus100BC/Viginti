@@ -17,6 +17,8 @@ import { RelicInventory } from './components/RelicInventory';
 import { RelicStore } from './components/RelicStore';
 import { GiftShop } from './components/GiftShop';
 import { DoubleDownButton } from './components/DoubleDownButton';
+import { SurrenderButton } from './components/SurrenderButton';
+
 import type { PlayerHand } from './types';
 import { useLayout } from './components/ResponsiveLayout';
 import { CasinosButton, DeckButton } from './components/HeaderButtons';
@@ -58,7 +60,6 @@ export default function App() {
         holdReturns,
 
         setAnimationSpeed,
-        triggerDebugChips,
         modifiers,
         inventory,
         roundSummary,
@@ -85,7 +86,15 @@ export default function App() {
         doubleDownCharges,
         selectedDoubleDownHands,
         toggleDoubleDownHand,
-        executeDoubleDown
+        executeDoubleDown,
+
+        // Surrender Props
+        surrenders,
+        startSurrender,
+        cancelSurrender,
+        selectedSurrenderHand,
+        selectSurrenderHand,
+        confirmSurrender
     } = useGameStore();
 
     const { viewportWidth, viewportHeight } = useLayout();
@@ -102,7 +111,7 @@ export default function App() {
     const [showRelicStore, setShowRelicStore] = useState(false);
     const [relicStoreFilter, setRelicStoreFilter] = useState<string | undefined>(undefined);
     const [overlayComplete, setOverlayComplete] = useState(false);
-    const [scoreAnimate, setScoreAnimate] = useState(false);
+    // scoreAnimate removed
 
     const [hasClickedWin, setHasClickedWin] = useState(false);
 
@@ -120,6 +129,7 @@ export default function App() {
     const [displayRound, setDisplayRound] = useState(round);
     const [displayTarget, setDisplayTarget] = useState(targetScore);
     const [displayComps, setDisplayComps] = useState(comps);
+    const [delayedRemainingTarget, setDelayedRemainingTarget] = useState(targetScore - totalScore); // New state for delayed visual update
 
     const [handsAnimate, setHandsAnimate] = useState(false);
     const prevHandsRemaining = React.useRef(handsRemaining);
@@ -234,14 +244,34 @@ export default function App() {
     }, [isCollectingChips, phase, !!runningSummary, roundSummary]);
 
     React.useEffect(() => {
-        if (totalScore > prevTotalScore.current) {
-            setScoreAnimate(true);
-            const timer = setTimeout(() => setScoreAnimate(false), 500);
-            prevTotalScore.current = totalScore;
-            return () => clearTimeout(timer);
+        // Target Reduction Animation
+        // When totalScore changes, valid remaining decreases.
+        // We want to: 1) Trigger Animation (White/Big) 2) Wait 3) Update Display Value 4) Restore Animation
+        const actualRemaining = Math.max(0, targetScore - totalScore);
+
+        if (actualRemaining !== delayedRemainingTarget) {
+            // Trigger Expand/White
+            setTargetAnimate(true);
+
+            const timer = setTimeout(() => {
+                // Update Value
+                setDelayedRemainingTarget(actualRemaining);
+
+                // Reset Animation (small delay after value change or immediate? Request said "then subtract and have it return")
+                // Usually "subtract" happens visibly. So value changes while big.
+                // Let's hold it big for a moment? 
+                setTimeout(() => {
+                    setTargetAnimate(false);
+                }, 200); // 200ms hold after value change
+
+            }, 400); // 400ms delay before value update
+
+            return () => {
+                clearTimeout(timer);
+                setTargetAnimate(false);
+            };
         }
-        prevTotalScore.current = totalScore;
-    }, [totalScore]);
+    }, [totalScore, targetScore]);
 
     React.useEffect(() => {
         if (handsRemaining !== prevHandsRemaining.current) {
@@ -328,6 +358,8 @@ export default function App() {
     const handleHandClick = (index: number) => {
         if (interactionMode === 'double_down_select') {
             toggleDoubleDownHand(index);
+        } else if (interactionMode === 'surrender_select') {
+            selectSurrenderHand(index);
         } else if (drawnCards.length > 0) {
             assignCard(index);
         }
@@ -338,8 +370,9 @@ export default function App() {
 
     const canDraw = phase === 'playing' && isDrawAreaClear && !dealer.isRevealed && !isInitialDeal && interactionMode === 'default' && !areAllHandsUnplayable;
     const canDoubleDown = phase === 'playing' && isDrawAreaClear && !dealer.isRevealed && !isInitialDeal && !areAllHandsUnplayable; // Can start flow
+    const canSurrender = phase === 'playing' && isDrawAreaClear && !dealer.isRevealed && !isInitialDeal && !areAllHandsUnplayable;
     const canHold = phase === 'playing' && isDrawAreaClear && !dealer.isRevealed && !isInitialDeal && interactionMode === 'default' && !areAllHandsUnplayable;
-    const isDrawAreaVisible = phase === 'playing' && !dealer.isRevealed && !isInitialDeal && interactionMode !== 'double_down_select';
+    const isDrawAreaVisible = phase === 'playing' && !dealer.isRevealed && !isInitialDeal && interactionMode !== 'double_down_select' && interactionMode !== 'surrender_select';
 
     const areHandsVisible = phase !== 'gift_shop';
 
@@ -475,6 +508,7 @@ export default function App() {
             onClick={handleGlobalClick}
         >
             <div className={styles.topNavContainer}>
+
                 <CasinosButton onClick={() => setShowCasinoListing(true)} />
 
                 <div className={styles.headerPlaceholder} />
@@ -489,24 +523,8 @@ export default function App() {
                     </div>
                     <div className={styles.stat}>
                         <span className={styles.statLabel}>Target</span>
-                        <span key={displayTarget} className={`${styles.statValue} ${targetAnimate ? styles.statValueAnimate : ''}`}>
-                            {"$" + displayTarget.toLocaleString()}
-                        </span>
-                    </div>
-                    <div className={`${styles.stat} ${isOverlayMode ? styles.statHidden : ''}`}>
-                        <span className={styles.statLabel}>Winnings</span>
-                        <span
-                            id="total-score-display"
-                            className={`${styles.statValue} ${scoreAnimate ? styles.statValueAnimate : ''} ${(debugEnabled && (phase === 'round_over' || phase === 'entering_casino')) ? styles.statValueClickable : ''}`}
-                            onClick={(e) => {
-                                if (debugEnabled && (phase === 'round_over' || phase === 'entering_casino')) {
-                                    e.stopPropagation();
-                                    triggerDebugChips();
-                                }
-                            }}
-                            title={(debugEnabled && (phase === 'round_over' || phase === 'entering_casino')) ? "Add Debug Chips" : undefined}
-                        >
-                            {"$" + totalScore.toLocaleString()}
+                        <span key={displayTarget} className={`${styles.statValue} ${targetAnimate ? styles.statValueAnimate : ''}`} style={targetAnimate ? { color: '#fff', transform: 'scale(1.3)' } : {}}>
+                            {"$" + delayedRemainingTarget.toLocaleString()}
                         </span>
                     </div>
                     <div className={`${styles.stat} ${isOverlayMode ? styles.statHidden : ''}`}>
@@ -816,6 +834,12 @@ export default function App() {
                                     >
                                         Select hand to Double Down
                                     </div>
+                                    <div
+                                        className={`${styles.instructions} ${interactionMode === 'surrender_select' ? styles.textVisible : ''}`}
+                                        style={{ color: '#ff4444' }}
+                                    >
+                                        Select hand to Surrender
+                                    </div>
                                     <div className={`${styles.clickAnywhere} ${canDraw ? styles.textVisible : ''}`}>
                                         Click Anywhere
                                     </div>
@@ -826,13 +850,19 @@ export default function App() {
                         <div className={styles.playerZone} style={{ opacity: areHandsVisible ? 1 : 0, transition: 'opacity 0.5s', pointerEvents: areHandsVisible ? 'auto' : 'none' }}>
                             <div className={styles.playerHandsContainer}>
                                 {playerHands.map((hand, idx) => {
-                                    const canSelectHand = (showSelectionUI && drawnCards.length > 0) || interactionMode === 'double_down_select';
+                                    const canSelectHand = (showSelectionUI && drawnCards.length > 0) || interactionMode === 'double_down_select' || interactionMode === 'surrender_select';
                                     return (
                                         <Hand
                                             key={`${hand.id}-${handsRemaining}`}
                                             hand={hand}
                                             canSelect={canSelectHand && !hand.isBust && !hand.isHeld && hand.blackjackValue !== 21}
-                                            isSelected={selectedDoubleDownHands.includes(idx)}
+                                            isSelected={
+                                                interactionMode === 'double_down_select'
+                                                    ? selectedDoubleDownHands.includes(idx)
+                                                    : interactionMode === 'surrender_select'
+                                                        ? selectedSurrenderHand === idx
+                                                        : false
+                                            }
                                             onSelect={() => handleHandClick(idx)}
                                             baseDelay={idx === 1 ? 0 : 0.6}
                                             isScoringFocus={idx === scoringHandIndex}
@@ -856,6 +886,24 @@ export default function App() {
                                             }
                                         }}
                                         onCancel={cancelDoubleDown}
+                                    />
+                                )}
+
+                                {/* Surrender Button */}
+                                {(phase === 'playing' && !dealer.isRevealed && !isInitialDeal) && (
+                                    <SurrenderButton
+                                        surrenders={surrenders}
+                                        isActive={canSurrender}
+                                        isSelectionMode={interactionMode === 'surrender_select'}
+                                        hasSelectedHands={selectedSurrenderHand !== null}
+                                        onClick={() => {
+                                            if (interactionMode === 'surrender_select') {
+                                                confirmSurrender();
+                                            } else {
+                                                startSurrender();
+                                            }
+                                        }}
+                                        onCancel={cancelSurrender}
                                     />
                                 )}
                             </div>
@@ -884,7 +932,7 @@ export default function App() {
                                     style={phase === 'round_over' && totalScore < targetScore && handsRemaining <= 0 ? { color: '#ff4444', borderColor: '#ff4444' } : {}}
                                 >
                                     {phase === 'entering_casino' || (phase === 'playing' && isInitialDeal) ? 'Deal' : (
-                                        totalScore >= targetScore ? 'Gift Shop' :
+                                        totalScore >= targetScore ? 'Next Casino' :
                                             (handsRemaining <= 0 ? 'Game Over' : 'Deal')
                                     )}
                                 </button>
@@ -939,17 +987,9 @@ export default function App() {
                 />
             )}
 
-            {phase === 'gift_shop' && <GiftShop
-                onOpenDeckRemoval={() => {
-                    setIsRemovingCards(true);
-                    setShowDeck(true);
-                }}
-                onOpenEnhanceCards={() => {
-                    setIsEnhancingCards(true);
-                    setShowDeck(true);
-                }}
-            />}
-
+            {phase === 'gift_shop' && (
+                <GiftShop />
+            )}
             {showCompsWindow && (
                 <CompsWindow
                     onClose={() => setShowCompsWindow(false)}

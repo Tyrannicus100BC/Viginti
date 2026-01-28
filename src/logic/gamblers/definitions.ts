@@ -26,9 +26,11 @@ export const GAMBLER_DEFINITIONS: GamblerDefinition[] = [
 
             getRelicInstance('viginti'),
             getRelicInstance('double_down'),
-            getRelicInstance('rank_run_mult'),
-            getRelicInstance('straight_run_mult'),
-            getRelicInstance('flush_run_chips')
+            getRelicInstance('rank_pair_chips'),
+            // Randomly give rank run or flush run (Chips variants)
+            Math.random() > 0.5
+                ? getRelicInstance('rank_run_chips')
+                : getRelicInstance('flush_run_chips')
         ]
     },
     {
