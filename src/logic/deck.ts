@@ -15,6 +15,42 @@ export function createCard(suit: Suit, rank: Rank, isFaceUp = false): Card {
     };
 }
 
+export function createChipCard(amount: number): Card {
+    const id = `card_${globalCardIdCounter++}_chip_${amount}`;
+    return {
+        id,
+        suit: 'spades', // Placeholder, ignored by render
+        rank: 'none',
+        type: 'chip',
+        chips: amount,
+        isFaceUp: false
+    };
+}
+
+export function createMultCard(amount: number): Card {
+    const id = `card_${globalCardIdCounter++}_mult_${amount}`;
+    return {
+        id,
+        suit: 'spades', // Placeholder
+        rank: 'none',
+        type: 'mult',
+        mult: amount,
+        isFaceUp: false
+    };
+}
+
+export function createScoreCard(amount: number): Card {
+    const id = `card_${globalCardIdCounter++}_score_${amount}`;
+    return {
+        id,
+        suit: 'spades', // Placeholder
+        rank: 'none',
+        type: 'score',
+        chips: amount, // "Amount to reduce" - used by blackjack calc
+        isFaceUp: false
+    };
+}
+
 export function createStandardDeck(): Card[] {
   const deck: Card[] = [];
   // Reset counter when creating a full standard deck implies a new context, 

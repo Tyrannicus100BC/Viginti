@@ -1,13 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { RelicManager } from '../logic/relics/manager';
+import { TrashButton } from './HeaderButtons';
 import styles from './GiftShop.module.css';
 import { TransparentImage } from './TransparentImage';
 import { RelicTooltip } from './RelicTooltip';
 import Matter from 'matter-js';
 import { useLayout } from './ResponsiveLayout';
+import { PlayingCard } from './PlayingCard';
 
-export const GiftShop: React.FC = () => {
+interface GiftShopProps {
+    onOpenDeckRemoval: () => void;
+}
+
+export const GiftShop: React.FC<GiftShopProps> = ({ onOpenDeckRemoval }) => {
     const { shopItems, selectedShopItemId, confirmShopSelection } = useGameStore();
 
     const signRef = useRef<HTMLDivElement>(null);
@@ -179,41 +185,68 @@ export const GiftShop: React.FC = () => {
         };
     }, []);
 
-    // Group items: First 2 Charms + 1 Angle in Row 1, Rest in Row 2
     const charms = shopItems.filter(i => i.type === 'Charm');
     const angles = shopItems.filter(i => i.type === 'Angle');
+    const cards = shopItems.filter(i => i.type === 'Card');
 
-    // Row 1: Charm 1, Charm 2, Angle 1
-    const row1 = [
-        charms[0],
-        charms[1],
-        angles[0]
-    ].filter(Boolean);
-
-    // Row 2: Charm 3, Charm 4, Angle 2
-    const row2 = [
-        charms[2],
-        charms[3],
-        angles[1]
-    ].filter(Boolean);
+    // Check if any relic is purchased
+    const isRelicPurchased = shopItems.some(i => (i.type === 'Charm' || i.type === 'Angle') && i.purchased);
 
     const [hoveredId, setHoveredId] = useState<string | null>(null);
 
-    const renderItem = (item: { id: string, type: 'Charm' | 'Angle' }) => {
+    const renderItem = (item: { id: string, type: 'Charm' | 'Angle' | 'Card', card?: any, purchased?: boolean }) => {
+        if (item.purchased) {
+             return <div style={{ width: '100%', height: '100%' }} />; // Blank spot
+        }
+        if (item.type === 'Card' && item.card) {
+            const isHovered = hoveredId === item.id;
+            return (
+                <div 
+                    key={item.id}
+                    onClick={() => confirmShopSelection(item.id)}
+                    onMouseEnter={() => setHoveredId(item.id)}
+                    onMouseLeave={() => setHoveredId(null)}
+                    style={{
+                        transform: isHovered ? 'scale(1.1)' : 'scale(1)',
+                        transition: 'transform 0.2s ease',
+                        cursor: 'pointer',
+                        zIndex: isHovered ? 2000 : 1
+                    }}
+                >
+                    <div style={{ transform: 'scale(0.8)', transformOrigin: 'center' }}>
+                         <PlayingCard card={item.card} isFaceUp={true} />
+                    </div>
+                </div>
+            );
+        }
+
         const config = RelicManager.getRelicConfig(item.id);
         if (!config) return null;
 
         const isSelected = selectedShopItemId === item.id;
         const isHovered = hoveredId === item.id;
         const isAngle = item.type === 'Angle';
+        
+        // Disabled if another relic is bought and this one matches relic type restrictions
+        // Requirement: "all of the unchosen relics should darken"
+        // Since Charms/Angles are all "Relics", if ANY is bought, ALL others darken.
+        const isDisabled = isRelicPurchased && !item.purchased;
 
-        const borderStyle = isSelected ? '3px solid #f39c12' : '3px solid rgba(255, 215, 0, 0.6)';
+        const borderStyle = isSelected ? '3px solid #f39c12' : (isDisabled ? '3px solid #555' : '3px solid rgba(255, 215, 0, 0.6)');
 
         return (
-            <div style={{ 
-                position: 'relative',
-                zIndex: isHovered ? 2000 : (isSelected ? 10 : 1)
-            }}>
+            <div 
+                key={item.id}
+                style={{ 
+                    position: 'relative',
+                    zIndex: isHovered ? 2000 : (isSelected ? 10 : 1),
+                    width: '100%',
+                    display: 'flex',
+                    justifyContent: isAngle ? 'flex-end' : 'flex-start',
+                    opacity: 1,
+                    pointerEvents: isDisabled ? 'none' : 'auto',
+                    filter: isDisabled ? 'grayscale(1) brightness(0.4)' : 'none'
+                }}>
                 {isHovered && (
                     <RelicTooltip 
                         relic={config}
@@ -232,7 +265,6 @@ export const GiftShop: React.FC = () => {
                     />
                 )}
                 <div 
-                    key={item.id} 
                     onClick={() => confirmShopSelection(item.id)}
                     onMouseEnter={() => setHoveredId(item.id)}
                     onMouseLeave={() => setHoveredId(null)}
@@ -266,8 +298,6 @@ export const GiftShop: React.FC = () => {
                         alignItems: 'center',
                         justifyContent: 'center',
                         flexShrink: 0,
-                        marginLeft: 0, 
-                        marginRight: 0,
                         boxShadow: '0 2px 5px rgba(0,0,0,0.3)'
                     }}>
                             {config.icon ? (
@@ -325,19 +355,44 @@ export const GiftShop: React.FC = () => {
             </div>
             
             <div className={styles.shelvesContainer}>
-                <div className={styles.shelfRow}>
-                    {row1.map(item => (
-                        <div key={item.id} className={styles.itemSlot}>
-                            {renderItem(item)}
-                        </div>
-                    ))}
+                {/* Column 1: Charms */}
+                <div className={styles.leftShelf}>
+                    <div className={styles.zoneHeader}>CHARMS</div>
+                    <div className={styles.charmsList}>
+                        {charms.map(item => (
+                            <div key={item.id} className={styles.itemSlot}>
+                                {renderItem(item)}
+                            </div>
+                        ))}
+                    </div>
+                    {/* Trash Button - Full width, bottom */}
+                    <button 
+                        className={styles.shopTrashButton}
+                        onClick={onOpenDeckRemoval}
+                    >
+                        REMOVE CARDS
+                    </button>
                 </div>
-                <div className={styles.shelfRow}>
-                    {row2.map(item => (
-                        <div key={item.id} className={styles.itemSlot}>
-                            {renderItem(item)}
+
+                {/* Column 2: Angles & Cards */}
+                <div className={styles.rightShelf}>
+                    <div className={styles.anglesZone}>
+                        <div className={styles.zoneHeader}>ANGLES</div>
+                        <div className={styles.anglesList}>
+                            {angles.map(item => (
+                                <div key={item.id} className={styles.itemSlot}>
+                                    {renderItem(item)}
+                                </div>
+                            ))}
                         </div>
-                    ))}
+                    </div>
+                    <div className={styles.cardsZone}>
+                        {cards.map(item => (
+                            <div key={item.id} className={styles.itemSlot}>
+                                {renderItem(item)}
+                            </div>
+                        ))}
+                    </div>
                 </div>
             </div>
         </div>

@@ -58,7 +58,7 @@ interface GameState {
     inventory: RelicInstance[];
     activeRelicId: string | null;
 
-    shopItems: { id: string, type: 'Charm' | 'Angle' }[];
+    shopItems: { id: string, type: 'Charm' | 'Angle' | 'Card', card?: Card, purchased?: boolean }[];
     selectedShopItemId: string | null;
 
     isInitialDeal: boolean;
@@ -94,12 +94,14 @@ interface GameState {
     triggerScoringRow: (chips: number, mult: number) => void;
     debugWin: () => Promise<void>;
     debugUndo: () => void;
-    drawSpecificCard: (suit: Suit, rank: Rank) => void;
+    drawSpecificCard: (cardId: string) => void;
     addRelic: (relicId: string) => void;
     removeRelic: (relicId: string) => void;
     updateRunningSummary: (chips: number, mult: number) => void;
     selectDrawnCard: (index: number) => void;
     getProjectedDrawCount: () => number;
+    removeCard: (cardId: string) => void;
+    leaveShop: () => void;
 }
 
 const INITIAL_HAND_COUNT = 3;
@@ -234,6 +236,12 @@ export const useGameStore = create<GameState>((set, get) => ({
         });
     },
 
+    removeCard: (cardId: string) => {
+        set(state => ({
+            deck: state.deck.filter(c => c.id !== cardId)
+        }));
+    },
+
     dealFirstHand: () => {
         const { deck, round, targetScore, totalScore } = get();
 
@@ -263,11 +271,32 @@ export const useGameStore = create<GameState>((set, get) => ({
         playerHands[1].cards.push(initialPlayerCard);
         playerHands[1].blackjackValue = getBlackjackScore(playerHands[1].cards, get().inventory);
 
-        const dealerCards = [deckRef.pop()!, deckRef.pop()!];
-        dealerCards[0].isFaceUp = false;
-        dealerCards[0].origin = 'deck';
-        dealerCards[1].isFaceUp = true;
-        dealerCards[1].origin = 'deck';
+        const dealerCards: Card[] = [];
+        const burnedCards: Card[] = [];
+
+        // Helper to draw valid card for dealer
+        const drawForDealer = () => {
+            let c = deckRef.pop();
+            while (c && (c.type === 'chip' || c.type === 'mult' || c.type === 'score')) {
+                burnedCards.push(c);
+                c = deckRef.pop();
+            }
+            return c;
+        };
+
+        const d1 = drawForDealer();
+        const d2 = drawForDealer();
+        
+        if (d1) {
+             d1.isFaceUp = false;
+             d1.origin = 'deck';
+             dealerCards.push(d1);
+        }
+        if (d2) {
+            d2.isFaceUp = true;
+            d2.origin = 'deck';
+            dealerCards.push(d2);
+        }
 
         set({
             deck: deckRef,
@@ -275,8 +304,9 @@ export const useGameStore = create<GameState>((set, get) => ({
             dealer: {
                 cards: dealerCards,
                 isRevealed: false,
-                blackjackValue: getBlackjackScore([dealerCards[1]], get().inventory)
+                blackjackValue: dealerCards.length > 1 ? getBlackjackScore([dealerCards[1]], get().inventory) : 0
             },
+            discardPile: [...get().discardPile, ...burnedCards],
             drawnCards: [],
             selectedDrawIndex: null,
             cardsPlacedThisTurn: 0,
@@ -372,12 +402,19 @@ export const useGameStore = create<GameState>((set, get) => ({
             // Prevent if bust or held? UI should handle validation, but safety check:
             if (h.isBust || h.isHeld) return h;
 
-            const newCards = [...h.cards, card];
-            const val = getBlackjackScore(newCards, get().inventory);
+            // If the doubled card is special, it should technically be at the start according to the rule,
+            // but double down usually implies a 'hit' that goes to the end visually?
+            // However, consistent rule: "When a Special Card is added... it should be added as the last card (index 0) ... behind and on the left"
+            // Let's apply it consistently.
+            const isSpecial = card.type === 'chip' || card.type === 'mult' || card.type === 'score';
+            
+            const orderedCards = isSpecial ? [card, ...h.cards] : [...h.cards, card];
+
+            const val = getBlackjackScore(orderedCards, get().inventory);
 
             return {
                 ...h,
-                cards: newCards,
+                cards: orderedCards,
                 blackjackValue: val,
                 isBust: val > 21,
                 isHeld: true, // Auto stand
@@ -422,7 +459,9 @@ export const useGameStore = create<GameState>((set, get) => ({
 
             // Create a new hand object with the new card
             const cardToAdd = { ...cardToPlace, origin: 'draw_pile' as const };
-            const newCards = [...h.cards, cardToAdd];
+            
+            const isSpecial = cardToAdd.type === 'chip' || cardToAdd.type === 'mult' || cardToAdd.type === 'score';
+            const newCards = isSpecial ? [cardToAdd, ...h.cards] : [...h.cards, cardToAdd];
 
             // Recalc Blackjack
             const val = getBlackjackScore(newCards, get().inventory);
@@ -554,6 +593,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         const dDeck = [...deck];
         let dCards = revealedCards;
         let dVal = revealVal;
+        const burnedCards: Card[] = [];
 
         // 2. Dealer Draw Loop
         const { inventory } = get();
@@ -562,7 +602,12 @@ export const useGameStore = create<GameState>((set, get) => ({
         while (dVal < dealerStopValue) {
             set({ dealerMessage: "Hit!", dealerMessageExiting: false });
 
-            const c = dDeck.pop();
+            let c = dDeck.pop();
+            while (c && (c.type === 'chip' || c.type === 'mult' || c.type === 'score')) {
+                 burnedCards.push(c);
+                 c = dDeck.pop();
+            }
+
             if (!c) break;
             c.isFaceUp = true;
             c.origin = 'deck';
@@ -627,6 +672,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         set({
             dealer: { ...dealer, isRevealed: true, cards: dCards, blackjackValue: dVal },
             deck: dDeck,
+            discardPile: [...get().discardPile, ...burnedCards],
             playerHands: scoredHands,
             phase: 'scoring',
             scoringHandIndex: -1,
@@ -851,28 +897,40 @@ export const useGameStore = create<GameState>((set, get) => ({
         
         if (idToConfirm) {
             const selectedItem = shopItems.find(i => i.id === idToConfirm);
-            if (selectedItem) {
-                // Add to inventory
-                const baseRelic = RelicManager.getRelicConfig(selectedItem.id);
-                if (baseRelic) {
-                    const newInstance: RelicInstance = {
-                        id: selectedItem.id,
-                        state: { ...(baseRelic.properties || {}) }
-                    };
-                    newInventory.push(newInstance);
+            if (selectedItem && !selectedItem.purchased) {
+                if (selectedItem.type === 'Card' && selectedItem.card) {
+                    // Add card to deck
+                    set(state => ({
+                        deck: [...state.deck, selectedItem.card!]
+                    }));
+                } else {
+                    // Add to inventory
+                    const baseRelic = RelicManager.getRelicConfig(selectedItem.id);
+                    if (baseRelic) {
+                        const newInstance: RelicInstance = {
+                            id: selectedItem.id,
+                            state: { ...(baseRelic.properties || {}) }
+                        };
+                        newInventory.push(newInstance);
+                    }
                 }
+
+                // Mark as purchased instead of removing
+                set(state => ({
+                    shopItems: state.shopItems.map(i => 
+                        i.id === idToConfirm ? { ...i, purchased: true } : i
+                    ),
+                    inventory: newInventory,
+                    selectedShopItemId: null
+                }));
             }
         }
-        
-        // Clear shop and proceed to next casino setup
-        set({ 
-            inventory: newInventory, 
-            shopItems: [],
-            selectedShopItemId: null
-        });
+    },
 
+    leaveShop: () => {
+        const { inventory } = get();
         // Trigger the actual Casino Transition now
-        const { round, totalScore, targetScore, comps, handsRemaining } = get();
+        const { round, totalScore, targetScore, comps, handsRemaining, deck, discardPile } = get();
         
         const newRound = round + 1;
         const newTotalScore = totalScore - targetScore; // Carry over surplus score
@@ -885,7 +943,9 @@ export const useGameStore = create<GameState>((set, get) => ({
         // Set target based on casino number
         newTargetScore = calculateTargetScore(newRound);
 
-        const fullDeck = shuffleDeck(createStandardDeck()); // Always a fresh 52 cards for new casino
+        // Preserve and shuffle the manipulated deck
+        const combinedDeck = [...deck, ...discardPile];
+        const shuffledDeck = shuffleDeck(combinedDeck.length > 0 ? combinedDeck : createStandardDeck());
 
         const emptyHands: PlayerHand[] = Array.from({ length: INITIAL_HAND_COUNT }, (_, i) => ({
             id: i,
@@ -896,7 +956,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         }));
 
         set({
-            deck: fullDeck,
+            deck: shuffledDeck,
             playerHands: emptyHands,
             dealer: { cards: [], isRevealed: false, blackjackValue: 0 },
             phase: 'entering_casino', // Go to entry screen
@@ -904,7 +964,7 @@ export const useGameStore = create<GameState>((set, get) => ({
             targetScore: newTargetScore,
             totalScore: newTotalScore,
             dealsTaken: 0,
-            handsRemaining: RelicManager.executeValueHook('getDealsPerCasino', BASE_DEALS_PER_CASINO, { inventory: newInventory }),
+            handsRemaining: RelicManager.executeValueHook('getDealsPerCasino', BASE_DEALS_PER_CASINO, { inventory }),
             comps: newComps,
             discardPile: [],
             dealerMessage: null,
@@ -912,7 +972,8 @@ export const useGameStore = create<GameState>((set, get) => ({
             roundSummary: null,
             allWinnersEnlarged: false,
             dealerVisible: true,
-            // inventory updated above
+            shopItems: [],
+            selectedShopItemId: null
         });
     },
 
@@ -953,14 +1014,57 @@ export const useGameStore = create<GameState>((set, get) => ({
             const charms = getRandomItems(4, 'Charm', currentIds);
             const angles = getRandomItems(2, 'Angle', currentIds);
             
+            // Generate 6 cards for shop
+            const fullDeck = createStandardDeck(); // Base standard cards
+            const shopCards = [];
+
+            // Helper for special cards
+            const createSpecialCard = (idSuffix: string) => {
+                const types = ['chip', 'mult', 'score'] as const;
+                const type = types[Math.floor(Math.random() * types.length)];
+                const val = Math.floor(Math.random() * 5) + 1;
+                return {
+                    id: `shop_special_${idSuffix}`,
+                    type: 'Card' as const,
+                    chips: type === 'chip' || type === 'score' ? val : undefined,
+                    mult: type === 'mult' ? val : undefined,
+                    card: {
+                         id: `shop_special_card_${idSuffix}`,
+                         suit: 'spades', // Dummy
+                         rank: 'A', // Dummy
+                         type,
+                         chips: type === 'chip' || type === 'score' ? val : undefined,
+                         mult: type === 'mult' ? val : undefined,
+                         isFaceUp: true
+                    }
+                };
+            };
+
+            // 1. Forced Special Cards
+            shopCards.push(createSpecialCard('forced_1'));
+            shopCards.push(createSpecialCard('forced_2'));
+
+            // 2. 4 Random Cards (15% chance special)
+            for (let i = 0; i < 4; i++) {
+                if (Math.random() < 0.15) {
+                    shopCards.push(createSpecialCard(`rand_${i}`));
+                } else {
+                    const idx = Math.floor(Math.random() * fullDeck.length);
+                    const card = fullDeck.splice(idx, 1)[0];
+                    card.isFaceUp = true;
+                    shopCards.push({
+                        id: `shop_card_${card.rank}_${card.suit}`,
+                        type: 'Card' as const,
+                        card: card
+                    });
+                }
+            }
+
             set({
-                shopItems: [...charms, ...angles],
+                shopItems: [...charms, ...angles, ...shopCards],
                 phase: 'gift_shop',
-                // dealerVisible: false? Maybe? User said "Sign slides down where dealer hand usually is".
-                // We'll handle visual hiding in the component or set dealerVisible to false.
                 dealerVisible: false
             });
-            // We do NOT reset the round yet. That happens in selectShopItem.
             return;
         }
 
@@ -1066,11 +1170,11 @@ export const useGameStore = create<GameState>((set, get) => ({
         });
     },
 
-    drawSpecificCard: (suit, rank) => {
+    drawSpecificCard: (cardId: string) => {
         const { deck, phase, drawnCards } = get();
         if (phase !== 'playing' || drawnCards.length > 0) return;
 
-        const cardIndex = deck.findIndex(c => c.suit === suit && c.rank === rank);
+        const cardIndex = deck.findIndex(c => c.id === cardId);
         if (cardIndex === -1) return;
 
         const newDeck = [...deck];

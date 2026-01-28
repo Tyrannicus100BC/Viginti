@@ -26,6 +26,7 @@ export const SCORING_RULES: Record<ScoringCriterionId, ScoringRule> = {
   'pair': { id: 'pair', name: 'Pair', chips: 0, mult: 0.5 },
   'straight': { id: 'straight', name: 'Straight', chips: 0, mult: 0.5 },
   'flush': { id: 'flush', name: 'Flush', chips: 0, mult: 0.5 },
+  'special_cards': { id: 'special_cards', name: 'Special Cards', chips: 0, mult: 0 },
 };
 
 export function getBaseBlackjackScore(cards: Card[]): number {
@@ -33,9 +34,17 @@ export function getBaseBlackjackScore(cards: Card[]): number {
   let aces = 0;
 
   for (const card of cards) {
+    if (card.type === 'chip' || card.type === 'mult') continue;
+    if (card.type === 'score') {
+        score -= (card.chips || 0); // Score cards reduce score
+        continue;
+    }
+
     const val = RANK_VALUES[card.rank];
-    score += val;
-    if (card.rank === 'A') aces += 1;
+    if (val !== undefined) {
+      score += val;
+      if (card.rank === 'A') aces += 1;
+    }
   }
 
   while (score > 21 && aces > 0) {
@@ -55,16 +64,19 @@ export const findMatches = (
   const matches: ScoringMatch[] = [];
   const usedAsRight = new Set<string>();
 
-  for (let i = 0; i < sortedCards.length; i++) {
-    const leftCard = sortedCards[i];
+  // Filter out special cards from matching consideration
+  const playableCards = sortedCards.filter(c => !c.type || c.type === 'standard');
+
+  for (let i = 0; i < playableCards.length; i++) {
+    const leftCard = playableCards[i];
     
     let potentialPartners: Card[];
     if (scanForwardOnly) {
       // Only look at subsequent cards to enforce order/prevent cycles for symmetric types
-      potentialPartners = sortedCards.slice(i + 1);
+      potentialPartners = playableCards.slice(i + 1);
     } else {
       // Look at all other cards
-      potentialPartners = sortedCards.filter((_, idx) => idx !== i);
+      potentialPartners = playableCards.filter((_, idx) => idx !== i);
     }
     
     // Filter out cards already used as a target

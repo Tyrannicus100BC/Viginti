@@ -76,14 +76,35 @@ export const PlayingCard: React.FC<CardProps> = ({
         onAnimationEnd={handleAnimationEnd}
       >
         {/* Front */}
-        <div className={`${styles.face} ${styles.front} ${isRed ? styles.red : styles.black}`}>
+        <div className={`${styles.face} ${styles.front} ${isRed ? styles.red : styles.black}`}
+             style={
+               card.type === 'chip' ? { color: '#4ade80', WebkitTextStroke: '2px #166534', paintOrder: 'stroke fill' } as React.CSSProperties :
+               card.type === 'mult' ? { color: '#facc15', WebkitTextStroke: '2px #854d0e', paintOrder: 'stroke fill' } as React.CSSProperties :
+               card.type === 'score' ? { color: '#c084fc', WebkitTextStroke: '2px #6b21a8', paintOrder: 'stroke fill' } as React.CSSProperties :
+               undefined
+             }
+        >
           <div className={styles.cornerTop}>
-            <div className={styles.rank}>{card.rank}</div>
-            <div className={styles.smallSuit}>{SUIT_ICONS[card.suit]}</div>
+            <div className={styles.rank}>
+              {card.type === 'chip' ? `$${card.chips}` :
+               card.type === 'mult' ? `x${card.mult}` :
+               card.type === 'score' ? `-${card.chips}` :
+               card.rank}
+            </div>
+            {!card.type || card.type === 'standard' ? (
+                <div className={styles.smallSuit}>{SUIT_ICONS[card.suit]}</div>
+            ) : null}
           </div>
           <div className={styles.cornerBottom}>
-            <div className={styles.rank}>{card.rank}</div>
-            <div className={styles.smallSuit}>{SUIT_ICONS[card.suit]}</div>
+            <div className={styles.rank}>
+               {card.type === 'chip' ? `$${card.chips}` :
+               card.type === 'mult' ? `x${card.mult}` :
+               card.type === 'score' ? `-${card.chips}` :
+               card.rank}
+            </div>
+            {!card.type || card.type === 'standard' ? (
+                <div className={styles.smallSuit}>{SUIT_ICONS[card.suit]}</div>
+            ) : null}
           </div>
         </div>
 

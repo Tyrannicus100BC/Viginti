@@ -634,6 +634,17 @@
   fill: currentColor;
 }
 
+.rightButtons {
+    display: flex;
+    gap: 10px;
+}
+
+.trashBtn:hover {
+    border-color: #e74c3c !important;
+    color: #e74c3c !important;
+    background: rgba(231, 76, 60, 0.1) !important;
+}
+
 
 .topNavContainer {
     position: fixed;

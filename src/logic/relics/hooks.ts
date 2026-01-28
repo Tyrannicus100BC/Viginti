@@ -9,6 +9,7 @@ const isFaceCard = (c: Card) => ['J', 'Q', 'K'].includes(c.rank);
 const getRankCounts = (cards: Card[]) => {
     const counts: Record<string, number> = {};
     for (const c of cards) {
+        if (c.type && c.type !== 'standard') continue;
         counts[c.rank] = (counts[c.rank] || 0) + 1;
     }
     return counts;
@@ -31,7 +32,8 @@ const getStandardScore = (cards: Card[], baseChips: number, baseMult: number, is
     return { chips: finalChips, mult: finalMult };
 };
 
-const findBestGroup = (cards: Card[], type: 'rank' | 'flush' | 'straight', fixedLen: number): Card[] | null => {
+const findBestGroup = (inputCards: Card[], type: 'rank' | 'flush' | 'straight', fixedLen: number): Card[] | null => {
+    const cards = inputCards.filter(c => !c.type || c.type === 'standard');
     let candidates: Card[][] = [];
 
     if (type === 'rank') {
@@ -348,27 +350,27 @@ export const Hooks = {
             const chipCards = config?.handType?.chipCards || false;
             if (context.blackjackValue === 21) {
                 const cardChips = chipCards ? context.handCards.reduce((s, c) => s + RANK_VALUES[c.rank], 0) : 0;
-                const newCriteria = [...score.criteria, {
+                const newCriteria = [{
                     id: 'viginti' as any,
                     name: 'Viginti',
                     count: 1,
                     chips: cardChips + 50,
                     multiplier: 1,
                     cardIds: context.handCards.map(c => c.id)
-                }];
+                }, ...score.criteria];
                 const totalChips = newCriteria.reduce((s, c) => s + c.chips, 0);
                 const totalMult = newCriteria.reduce((s, c) => s + c.multiplier, 0);
                 return { ...score, criteria: newCriteria, totalChips, totalMultiplier: totalMult, finalScore: Math.floor(totalChips * totalMult) };
             } else if (context.isWin) {
                 const cardChips = chipCards ? context.handCards.reduce((s, c) => s + RANK_VALUES[c.rank], 0) : 0;
-                const newCriteria = [...score.criteria, {
+                const newCriteria = [{
                     id: 'win' as any,
                     name: 'Win',
                     count: 1,
                     chips: cardChips + 10,
                     multiplier: 1,
                     cardIds: context.handCards.map(c => c.id)
-                }];
+                }, ...score.criteria];
                 const totalChips = newCriteria.reduce((s, c) => s + c.chips, 0);
                 const totalMult = newCriteria.reduce((s, c) => s + c.multiplier, 0);
                 return { ...score, criteria: newCriteria, totalChips, totalMultiplier: totalMult, finalScore: Math.floor(totalChips * totalMult) };

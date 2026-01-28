@@ -31,6 +31,36 @@ export function evaluateHandScore(cards: Card[], isWin: boolean, isDoubled: bool
     scoringCards: cards
   };
 
+  // Special Cards Calculation (Chip & Mult cards)
+  if (isWin) {
+      let specialChips = 0;
+      let specialMult = 0;
+      const specialCardIds: string[] = [];
+
+      for (const card of cards) {
+          if (card.type === 'chip') {
+              specialChips += (card.chips || 0);
+              specialCardIds.push(card.id);
+          } else if (card.type === 'mult') {
+              specialMult += (card.mult || 0);
+              specialCardIds.push(card.id);
+          }
+      }
+
+      if (specialChips > 0 || specialMult > 0) {
+          initialScore.criteria.push({
+              id: 'special_cards',
+              name: 'Special Cards',
+              count: specialCardIds.length,
+              chips: specialChips,
+              multiplier: specialMult,
+              cardIds: specialCardIds
+          });
+          initialScore.totalChips += specialChips;
+          initialScore.totalMultiplier += specialMult;
+      }
+  }
+
   return RelicManager.executeValueHook('onEvaluateHandScore', initialScore, {
       inventory,
       handCards: cards,

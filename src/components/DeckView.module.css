@@ -114,3 +114,28 @@
     align-items: center;
     gap: 2px;
 }
+
+.removable:hover {
+    background: #ff7675 !important;
+    color: #fff !important;
+    transform: translateY(-4px) scale(1.1);
+}
+
+.removeOverlay {
+    position: absolute;
+    bottom: -8px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #d63031;
+    color: #fff;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%; /* Circle */
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    z-index: 2;
+    pointer-events: none;
+}

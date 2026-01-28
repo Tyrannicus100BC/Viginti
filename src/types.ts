@@ -1,5 +1,5 @@
 export type Suit = 'hearts' | 'diamonds' | 'clubs' | 'spades';
-export type Rank = 'A' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | 'J' | 'Q' | 'K';
+export type Rank = 'A' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | 'J' | 'Q' | 'K' | 'none'; // 'none' for special cards
 
 export interface Card {
   id: string;
@@ -7,6 +7,9 @@ export interface Card {
   rank: Rank;
   isFaceUp?: boolean;
   origin?: 'deck' | 'draw_pile' | 'double_down';
+  type?: 'standard' | 'chip' | 'mult' | 'score';
+  chips?: number;
+  mult?: number;
 }
 
 export interface ScoringMatch {
@@ -30,7 +33,8 @@ export type ScoringCriterionId =
   | 'flush_run_chips' | 'flush_run_mult'
   | 'straight_pair_chips' | 'straight_pair_mult'
   | 'straight_triple_chips' | 'straight_triple_mult'
-  | 'straight_run_chips' | 'straight_run_mult';
+  | 'straight_run_chips' | 'straight_run_mult'
+  | 'special_cards';
 
 export interface ScoringDetail {
   id: string; // e.g. 'win', 'pair', 'sequence'

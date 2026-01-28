@@ -1,6 +1,6 @@
 
 import type { GamblerDefinition } from './types';
-import { createStandardDeck, createCard, SUITS, RANKS } from '../deck';
+import { createStandardDeck, createCard, SUITS, RANKS, createChipCard, createMultCard, createScoreCard } from '../deck';
 import { RelicManager } from '../relics/manager'; // We need this to get default properties
 import type { RelicInstance } from '../relics/types';
 
@@ -49,7 +49,7 @@ export const GAMBLER_DEFINITIONS: GamblerDefinition[] = [
     {
         id: 'wild',
         name: 'The Wildcard',
-        description: 'Chaos incarnate. A distorted deck heavy on high cards in black suits, and low cards in red suits.',
+        description: 'Chaos incarnate. A distorted deck heavy on high cards in black suits and low red cards. Starts with 8 random Special Cards.',
         getInitialDeck: () => {
             const deck = [];
             
@@ -70,6 +70,21 @@ export const GAMBLER_DEFINITIONS: GamblerDefinition[] = [
                     deck.push(createCard(suit, rank));
                 });
             });
+
+            // Start with 8 random Special Cards (Chip, Mult, Score) with values 1-5
+            const specialTypes = ['chip', 'mult', 'score'];
+            for (let i = 0; i < 8; i++) {
+                const type = getRandomItem(specialTypes);
+                const value = Math.floor(Math.random() * 5) + 1;
+                
+                if (type === 'chip') {
+                    deck.push(createChipCard(value));
+                } else if (type === 'mult') {
+                    deck.push(createMultCard(value));
+                } else {
+                    deck.push(createScoreCard(value));
+                }
+            }
 
             return deck;
         },

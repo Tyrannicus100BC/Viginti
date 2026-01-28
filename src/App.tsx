@@ -18,7 +18,7 @@ import { RelicStore } from './components/RelicStore';
 import { GiftShop } from './components/GiftShop';
 import type { PlayerHand } from './types';
 import { useLayout } from './components/ResponsiveLayout';
-import { CasinosButton, DeckButton } from './components/HeaderButtons';
+import { CasinosButton, DeckButton, TrashButton } from './components/HeaderButtons';
 
 // Constants for layout
 const POT_TOP_Y = 380; // Anchor pots to this Y value
@@ -77,7 +77,9 @@ export default function App() {
         dealerVisible,
         debugEnabled,
         toggleDebug,
-        confirmShopSelection
+        confirmShopSelection,
+        removeCard,
+        leaveShop
     } = useGameStore();
 
     const { viewportWidth, viewportHeight } = useLayout();
@@ -85,6 +87,7 @@ export default function App() {
     const hasDoubleDownRelic = inventory.some(r => r.id === 'double_down');
 
     const [showDeck, setShowDeck] = useState(false);
+    const [isRemovingCards, setIsRemovingCards] = useState(false);
     const [isSelectingDebugCard, setIsSelectingDebugCard] = useState(false);
     // showHandRankings removed
     const [showCasinoListing, setShowCasinoListing] = useState(false);
@@ -497,7 +500,12 @@ export default function App() {
                     </div>
                 </header>
 
-                <DeckButton onClick={() => setShowDeck(true)} />
+                <div className={styles.rightButtons}>
+                    <DeckButton onClick={() => {
+                        setIsRemovingCards(false);
+                        setShowDeck(true);
+                    }} />
+                </div>
             </div>
 
             <div className={styles.headerSpacer} />
@@ -872,7 +880,7 @@ export default function App() {
                                 className={styles.nextRoundButton}
                                 onClick={(e) => {
                                     e.stopPropagation();
-                                    confirmShopSelection();
+                                    leaveShop();
                                 }}
                             >
                                 Next Casino
@@ -894,10 +902,13 @@ export default function App() {
                     activeCards={activeCards}
                     onClose={() => {
                         setShowDeck(false);
+                        setIsRemovingCards(false);
                         setIsSelectingDebugCard(false);
                     }}
-                    onSelectCard={isSelectingDebugCard ? (suit, rank) => {
-                        drawSpecificCard(suit, rank);
+                    mode={isRemovingCards ? 'remove' : 'view'}
+                    onRemoveCard={isRemovingCards ? (id) => removeCard(id) : undefined}
+                    onSelectCard={isSelectingDebugCard ? (cardId) => {
+                        drawSpecificCard(cardId);
                         setIsSelectingDebugCard(false);
                     } : undefined}
                 />
@@ -912,7 +923,10 @@ export default function App() {
                 />
             )}
 
-            {phase === 'gift_shop' && <GiftShop />}
+            {phase === 'gift_shop' && <GiftShop onOpenDeckRemoval={() => {
+                setIsRemovingCards(true);
+                setShowDeck(true);
+            }} />}
 
             {showCompsWindow && (
                 <CompsWindow
