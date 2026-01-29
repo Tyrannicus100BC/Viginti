@@ -99,7 +99,8 @@ export default function App() {
 
         // Debug Functions
         debugFillDoubleDown,
-        debugFillSurrender
+        debugFillSurrender,
+        isReshuffling
     } = useGameStore();
 
     const { viewportWidth, viewportHeight } = useLayout();
@@ -574,10 +575,14 @@ export default function App() {
                 </header>
 
                 <div className={styles.rightButtons}>
-                    <DeckButton onClick={() => {
-                        setIsRemovingCards(false);
-                        setShowDeck(true);
-                    }} />
+                    <DeckButton 
+                        onClick={() => {
+                            setIsRemovingCards(false);
+                            setShowDeck(true);
+                        }} 
+                        className={isReshuffling ? styles.reshuffleAnim : ''}
+                        title={isReshuffling ? "Reshuffling..." : "Deck"}
+                    />
                 </div>
             </div>
 

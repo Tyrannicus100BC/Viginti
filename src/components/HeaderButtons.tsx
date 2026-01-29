@@ -4,6 +4,7 @@ import styles from '../App.module.css';
 interface HeaderButtonProps {
     onClick: () => void;
     title?: string;
+    className?: string;
 }
 
 export const CasinosButton: React.FC<HeaderButtonProps> = ({ onClick, title }) => {
@@ -22,10 +23,10 @@ export const CasinosButton: React.FC<HeaderButtonProps> = ({ onClick, title }) =
     );
 };
 
-export const DeckButton: React.FC<HeaderButtonProps> = ({ onClick, title }) => {
+export const DeckButton: React.FC<HeaderButtonProps> = ({ onClick, title, className }) => {
     return (
         <button 
-            className={styles.headerIconButton} 
+            className={`${styles.headerIconButton} ${className || ''}`} 
             onClick={onClick}
             title={title || "Deck"}
             aria-label="Deck"

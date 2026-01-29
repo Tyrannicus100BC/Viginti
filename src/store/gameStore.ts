@@ -106,6 +106,7 @@ interface GameState {
     enhanceCard: (cardId: string, effect: { type: 'chip' | 'mult' | 'score', value: number }) => void;
     leaveShop: () => void;
     revealDealerHiddenCard: () => void;
+    isReshuffling: boolean;
 }
 
 
@@ -146,6 +147,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     surrenders: 0,
     isInitialDeal: true,
     isShaking: false,
+    isReshuffling: false,
     allWinnersEnlarged: false,
     dealerVisible: true,
     isDealerPlaying: false,
@@ -366,7 +368,31 @@ export const useGameStore = create<GameState>((set, get) => ({
 
         drawCount = RelicManager.executeValueHook('getDrawCount', drawCount, { inventory });
 
-        const deckRef = [...deck];
+        drawCount = RelicManager.executeValueHook('getDrawCount', drawCount, { inventory });
+
+        // Auto-Reshuffle Check
+        let deckRef = [...deck];
+        let discardRef = [...get().discardPile];
+
+        // Standard check: do we have enough cards?
+        if (deckRef.length < drawCount && discardRef.length > 0) {
+             // Reshuffle needed
+             const combined = [...deckRef, ...discardRef];
+             deckRef = shuffleDeck(combined);
+             discardRef = []; // Empty discard pile
+             
+             set({ 
+                 deck: deckRef, 
+                 discardPile: discardRef,
+                 isReshuffling: true 
+             });
+
+             // Reset animation flag after duration
+             setTimeout(() => {
+                 set({ isReshuffling: false });
+             }, 1000);
+        }
+
         const cardsToDraw: Card[] = [];
 
         for (let i = 0; i < drawCount; i++) {
@@ -1124,13 +1150,14 @@ export const useGameStore = create<GameState>((set, get) => ({
         }
     },
 
+
     leaveShop: () => {
         const { inventory } = get();
         // Trigger the actual Casino Transition now
-        const { round, totalScore, targetScore, comps, deck, discardPile } = get();
+        const { round, totalScore, targetScore, comps, deck, discardPile, dealer, playerHands, drawnCards } = get();
 
         const newRound = round + 1;
-        const newTotalScore = totalScore; // Keep total score cumulative
+        const newTotalScore = totalScore; 
 
         // Rewards already applied on entry to shop
 
@@ -1138,9 +1165,24 @@ export const useGameStore = create<GameState>((set, get) => ({
         // Set target relative to current cumulated score
         newTargetScore = newTotalScore + calculateTargetScore(newRound);
 
-        // Preserve and shuffle the manipulated deck
-        const combinedDeck = [...deck, ...discardPile];
-        const shuffledDeck = shuffleDeck(combinedDeck.length > 0 ? combinedDeck : createStandardDeck());
+        // Preserve and shuffle ALL cards in play to prevent loss
+        // Collect from: Remaining Deck, Discard Pile, Dealer Hand, Player Hands, Drawn/Active Cards
+        const allCards = [
+            ...deck,
+            ...discardPile,
+            ...dealer.cards,
+            ...playerHands.flatMap(h => h.cards),
+            ...drawnCards.filter((c): c is Card => c !== null)
+        ];
+
+        // Ensure all cards are reset to face down / no origin
+        allCards.forEach(c => {
+            c.isFaceUp = false;
+            c.origin = undefined;
+            // Keep enhancements/chips/mults/special effects
+        });
+
+        const shuffledDeck = shuffleDeck(allCards.length > 0 ? allCards : createStandardDeck());
 
         const emptyHands: PlayerHand[] = Array.from({ length: INITIAL_HAND_COUNT }, (_, i) => ({
             id: i,
@@ -1160,9 +1202,12 @@ export const useGameStore = create<GameState>((set, get) => ({
             totalScore: newTotalScore,
             dealsTaken: 0,
             handsRemaining: RelicManager.executeValueHook('getDealsPerCasino', BASE_DEALS_PER_CASINO, { inventory }),
-            comps: comps, // Already updated
+            comps: comps, 
             discardPile: [],
-            surrenders: inventory.some(r => r.id === 'surrender') ? 3 : 0, // Reset to 3 if owned
+            drawnCards: [], // Clear drawn area
+            selectedDrawIndex: null, 
+            cardsPlacedThisTurn: 0,
+            surrenders: inventory.some(r => r.id === 'surrender') ? 3 : 0, 
             dealerMessage: null,
             runningSummary: null,
             roundSummary: null,
