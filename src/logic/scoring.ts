@@ -11,9 +11,9 @@ export function getBlackjackScore(cards: Card[], inventory: RelicInstance[] = []
   let score = getBaseBlackjackScore(cards, ignoreSpecialEffects);
 
   // Relic: Adjust Blackjack Score (e.g. Joker)
-  score = RelicManager.executeValueHook('adjustBlackjackScore', score, { 
-      inventory, 
-      handCards: cards 
+  score = RelicManager.executeValueHook('adjustBlackjackScore', score, {
+    inventory,
+    handCards: cards
   });
 
   return score;
@@ -26,58 +26,71 @@ export function evaluateHandScore(cards: Card[], isWin: boolean, isDoubled: bool
   const initialScore: HandScore = {
     criteria: [],
     totalChips: 0,
-    totalMultiplier: 0, 
+    totalMultiplier: 0,
     finalScore: 0,
     scoringCards: cards
   };
 
   // Special Cards Calculation (Chip & Mult cards)
   if (isWin) {
-      let specialChips = 0;
-      let specialMult = 0;
-      const specialCardIds: string[] = [];
+    let specialChips = 0;
+    let specialMult = 0;
+    const specialCardIds: string[] = [];
 
-      for (const card of cards) {
-          // Check for inline special effects
-          if (card.specialEffect) {
-              if (card.specialEffect.type === 'chip') {
-                  specialChips += card.specialEffect.value;
-                  specialCardIds.push(card.id);
-              } else if (card.specialEffect.type === 'mult') {
-                  specialMult += card.specialEffect.value;
-                  specialCardIds.push(card.id);
-              }
-          }
-
-          if (card.type === 'chip') {
-              specialChips += (card.chips || 0);
-              specialCardIds.push(card.id);
-          } else if (card.type === 'mult') {
-              specialMult += (card.mult || 0);
-              specialCardIds.push(card.id);
-          }
+    for (const card of cards) {
+      // Check for inline special effects
+      if (card.specialEffect) {
+        if (card.specialEffect.type === 'chip') {
+          specialChips += card.specialEffect.value;
+          specialCardIds.push(card.id);
+        } else if (card.specialEffect.type === 'mult') {
+          specialMult += card.specialEffect.value;
+          specialCardIds.push(card.id);
+        }
       }
 
-      if (specialChips > 0 || specialMult > 0) {
-          initialScore.criteria.push({
-              id: 'special_cards',
-              name: 'Special Cards',
-              count: specialCardIds.length,
-              chips: specialChips,
-              multiplier: specialMult,
-              cardIds: specialCardIds
-          });
-          initialScore.totalChips += specialChips;
-          initialScore.totalMultiplier += specialMult;
+      if (card.type === 'chip') {
+        specialChips += (card.chips || 0);
+        specialCardIds.push(card.id);
+      } else if (card.type === 'mult') {
+        specialMult += (card.mult || 0);
+        specialCardIds.push(card.id);
       }
+    }
+
+    if (specialChips > 0 || specialMult > 0) {
+      initialScore.criteria.push({
+        id: 'special_cards',
+        name: 'Special Cards',
+        count: specialCardIds.length,
+        chips: specialChips,
+        multiplier: specialMult,
+        cardIds: specialCardIds
+      });
+      initialScore.totalChips += specialChips;
+      initialScore.totalMultiplier += specialMult;
+    }
+  }
+
+  // Double Down Bonus
+  if (isWin && isDoubled) {
+    initialScore.criteria.push({
+      id: 'double_down_bonus',
+      name: 'Double Down',
+      count: 1,
+      chips: 0,
+      multiplier: 1, // +1 Multiplier
+      cardIds: []
+    });
+    initialScore.totalMultiplier += 1;
   }
 
   return RelicManager.executeValueHook('onEvaluateHandScore', initialScore, {
-      inventory,
-      handCards: cards,
-      isWin,
-      isDoubled,
-      handsRemaining,
-      blackjackValue: blackjackScore
+    inventory,
+    handCards: cards,
+    isWin,
+    isDoubled,
+    handsRemaining,
+    blackjackValue: blackjackScore
   });
 }

@@ -72,7 +72,8 @@
     flex: 1;
     height: 60px;
     margin: 0 12px;
-    visibility: hidden; /* occupies space but is invisible */
+    visibility: hidden;
+    /* occupies space but is invisible */
 }
 
 /* Add spacing between stats using margin instead of gap */
@@ -155,7 +156,8 @@
     z-index: 20;
     height: 100%;
     justify-content: space-between;
-    padding-bottom: 20px; /* Safe padding for bottom edge */
+    padding-bottom: 20px;
+    /* Safe padding for bottom edge */
     box-sizing: border-box;
 }
 
@@ -241,6 +243,7 @@
         opacity: 1;
         transform: translate(calc(-50% + var(--startX, 0px)), -50%);
     }
+
     100% {
         opacity: 0;
         transform: translate(calc(-50% + var(--startX, 0px)), calc(-50% + 50px));
@@ -304,12 +307,14 @@
     position: relative;
     margin-top: 4px;
     box-sizing: border-box;
-    overflow: visible; /* Allow scoring focus overlap */
+    overflow: visible;
+    /* Allow scoring focus overlap */
 }
 
 .playerHandsContainer {
     display: flex;
-    gap: 15px; /* Slightly reduced gap to help on narrow windows */
+    gap: 15px;
+    /* Slightly reduced gap to help on narrow windows */
     justify-content: center;
     position: relative;
     width: 100%;
@@ -385,7 +390,8 @@
 .actionButtonContainer {
     width: 100%;
     max-width: 100%;
-    height: 80px; /* Fixed height for the button area */
+    height: 80px;
+    /* Fixed height for the button area */
     margin-top: 15px;
     display: flex;
     justify-content: center;
@@ -394,7 +400,8 @@
 
 .standButton {
     width: 100%;
-    height: 100%; /* Fill container */
+    height: 100%;
+    /* Fill container */
     background: #0f0202;
     /* Very dark, almost black-red */
     color: #c0392b;
@@ -420,7 +427,8 @@
 
 .nextRoundButton {
     width: 100%;
-    height: 100%; /* Fill container */
+    height: 100%;
+    /* Fill container */
     background: #0f0e02;
     /* Very dark, almost black-yellow */
     color: #f1c40f;
@@ -605,33 +613,36 @@
 /* Header Icon Buttons */
 /* Header Icon Buttons */
 .headerIconButton {
-  background: #1e1e1e;
-  border: 1px solid #333;
-  border-radius: 12px;
-  width: 60px; /* Match header height */
-  height: 60px; /* Match header height */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: #ecf0f1;
-  transition: all 0.2s ease;
-  padding: 12px; /* Increased padding slightly */
-  flex-shrink: 0; 
+    background: #1e1e1e;
+    border: 1px solid #333;
+    border-radius: 12px;
+    width: 60px;
+    /* Match header height */
+    height: 60px;
+    /* Match header height */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #ecf0f1;
+    transition: all 0.2s ease;
+    padding: 12px;
+    /* Increased padding slightly */
+    flex-shrink: 0;
 }
 
 .headerIconButton:hover {
-  background: rgba(44, 62, 80, 0.8);
-  border-color: #f1c40f;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-  color: #f1c40f;
+    background: rgba(44, 62, 80, 0.8);
+    border-color: #f1c40f;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    color: #f1c40f;
 }
 
 .headerIconSvg {
-  width: 100%;
-  height: 100%;
-  fill: currentColor;
+    width: 100%;
+    height: 100%;
+    fill: currentColor;
 }
 
 .rightButtons {
@@ -658,20 +669,24 @@
     justify-content: space-between;
     align-items: center;
     z-index: 1000;
-    pointer-events: none; /* Let clicks pass through transparent areas */
+    pointer-events: none;
+    /* Let clicks pass through transparent areas */
 }
 
-.topNavContainer > * {
-    pointer-events: auto; /* Re-enable clicks on children */
+.topNavContainer>* {
+    pointer-events: auto;
+    /* Re-enable clicks on children */
 }
 
 .header {
-    position: absolute; /* Changed from relative to absolute for smooth transitions */
+    position: absolute;
+    /* Changed from relative to absolute for smooth transitions */
     top: 0;
     left: 50%;
     transform: translateX(-50%);
-    width: calc(100% - 170px); /* Fit between buttons (60px*2 + gaps) */
-    
+    width: calc(100% - 170px);
+    /* Fit between buttons (60px*2 + gaps) */
+
     height: 60px;
     background: #1e1e1e;
     backdrop-filter: blur(10px);
@@ -689,9 +704,10 @@
     /* Overlay mode styles */
     /* Position stays absolute */
     /* top is handled by inline style */
-   
+
     /* left: 50% stays same */
-    transform: translate(-50%, -50%); /* Center vertically on target */
+    transform: translate(-50%, -50%);
+    /* Center vertically on target */
     width: 650px;
     height: 150px;
     padding: 30px 60px;
@@ -700,7 +716,7 @@
     z-index: 1001;
 }
 
-.headerCentered .stat + .stat {
+.headerCentered .stat+.stat {
     margin-left: 60px;
 }
 
@@ -760,48 +776,7 @@
 
 
 
-.doubleDownSpot {
-    width: 90px;
-    height: 90px;
-    border: 2px dashed #444;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #444;
-    font-weight: bold;
-    font-size: 0.8rem;
-    position: absolute;
-    right: 125px;
-    transform: translateX(50%);
-    top: -205px;
-    transition: all 0.2s ease;
-    background: rgba(255, 255, 255, 0.02);
-    z-index: 50;
-}
 
-.doubleDownSpot::after {
-    content: '';
-    position: absolute;
-    top: -22.5px;
-    left: -22.5px;
-    right: -22.5px;
-    bottom: -22.5px;
-    border-radius: 50%;
-}
-
-.doubleDownActive {
-    border-color: #ffd700;
-    cursor: pointer;
-    box-shadow: 0 0 15px rgba(255, 215, 0, 0.1);
-    color: #ffd700;
-}
-
-.doubleDownActive:hover {
-    box-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
-    background: rgba(255, 215, 0, 0.05);
-    transform: translateX(50%) scale(1.2);
-}
 
 .doubleDownText {
     font-size: 0.85rem;
@@ -854,7 +829,8 @@
     font-weight: 900;
     line-height: 1;
     text-shadow: 0 0 30px rgba(255, 215, 0, 0.6);
-    margin-top: 4px; /* Adjust to align with number if needed */
+    margin-top: 4px;
+    /* Adjust to align with number if needed */
 }
 
 .valueAndTitle {
@@ -868,7 +844,8 @@
     font-size: 1.2rem;
     text-transform: uppercase;
     letter-spacing: 4px;
-    margin-top: -6px; /* Slightly adjust spacing after splitting */
+    margin-top: -6px;
+    /* Slightly adjust spacing after splitting */
     text-align: center;
     font-weight: 800;
 }
@@ -922,12 +899,15 @@
     flex-direction: column;
     gap: 0;
     padding-top: 0;
-    margin-top: 0; 
-    width: 220px; /* Reduced width to avoid overlapping dealer area */
+    margin-top: 0;
+    width: 220px;
+    /* Reduced width to avoid overlapping dealer area */
     align-items: center;
-    pointer-events: none; /* Allow clicks through to board */
+    pointer-events: none;
+    /* Allow clicks through to board */
     z-index: 100;
-    align-self: flex-start; /* Only take header/relic height */
+    align-self: flex-start;
+    /* Only take header/relic height */
 }
 
 .leftSidebar {
@@ -938,17 +918,19 @@
     margin-top: 0;
     width: 220px;
     align-items: center;
-    pointer-events: none; /* Allow clicks through to board */
+    pointer-events: none;
+    /* Allow clicks through to board */
     z-index: 100;
-    align-self: flex-start; /* Only take header/relic height */
+    align-self: flex-start;
+    /* Only take header/relic height */
 }
 
 .sidebarBox {
-    background: rgba(0,0,0,0.2);
+    background: rgba(0, 0, 0, 0.2);
     border-radius: 12px;
     padding: 12px;
     width: 100%;
-    border: 2px solid rgba(255,255,255,0.1);
+    border: 2px solid rgba(255, 255, 255, 0.1);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -969,10 +951,11 @@
     font-weight: bold;
     font-size: 0.7rem;
     cursor: pointer;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
     text-transform: uppercase;
     display: flex;
-    flex: 1; /* Stretch to fill details box */
+    flex: 1;
+    /* Stretch to fill details box */
     align-items: center;
     justify-content: center;
     text-align: center;
@@ -984,17 +967,43 @@
     transform: scale(1.1);
 }
 
-.deckBtnStyled { background: #2f404d; border: 1px solid rgba(255,255,255,0.05); }
-.deckBtnStyled:hover { background: #3b5060; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+.deckBtnStyled {
+    background: #2f404d;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
 
-.scoresBtnStyled { background: #3e3442; border: 1px solid rgba(255,255,255,0.05); }
-.scoresBtnStyled:hover { background: #4b3f50; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+.deckBtnStyled:hover {
+    background: #3b5060;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+}
 
-.casinosBtnStyled { background: #263f3a; border: 1px solid rgba(255,255,255,0.05); }
-.casinosBtnStyled:hover { background: #2f4e48; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+.scoresBtnStyled {
+    background: #3e3442;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
 
-.storeBtnStyled { background: #e67e22; }
-.storeBtnStyled:hover { background: #d35400; }
+.scoresBtnStyled:hover {
+    background: #4b3f50;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+}
+
+.casinosBtnStyled {
+    background: #263f3a;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.casinosBtnStyled:hover {
+    background: #2f4e48;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+}
+
+.storeBtnStyled {
+    background: #e67e22;
+}
+
+.storeBtnStyled:hover {
+    background: #d35400;
+}
 
 .subtleDebugBtn {
     background-color: transparent;
@@ -1055,6 +1064,7 @@
     margin: -2px -6px;
     transition: all 0.2s;
 }
+
 .statValueClickable:hover {
     background: rgba(255, 255, 255, 0.05);
 }
@@ -1075,19 +1085,23 @@
 
 /* Value Formatting - Matching RelicTooltip colors */
 .chipsValue {
-    color: #44ff44; /* Green */
+    color: #44ff44;
+    /* Green */
     font-weight: bold;
 }
 
 .multValue {
-    color: #f1c40f; /* Yellow */
+    color: #f1c40f;
+    /* Yellow */
     font-weight: bold;
 }
 
 .handHighlight {
-    color: #64b5f6; /* Blue for hand types */
+    color: #64b5f6;
+    /* Blue for hand types */
 }
 
 .vigintiHighlight {
-    color: #ffd700; /* Gold for Viginti */
+    color: #ffd700;
+    /* Gold for Viginti */
 }

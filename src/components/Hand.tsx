@@ -13,11 +13,12 @@ interface HandProps {
   stagger?: boolean;
   isScoringFocus?: boolean;
   isEnlarged?: boolean;
+  isSelected?: boolean;
 }
 
 import { useGameStore } from '../store/gameStore';
 
-export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay = 0, stagger = true, isScoringFocus = false, isEnlarged = false }) => {
+export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay = 0, stagger = true, isScoringFocus = false, isEnlarged = false, isSelected = false }) => {
   const triggerScoringRow = useGameStore(state => state.triggerScoringRow);
   // Determine if we should show overlay (bust or result revealed)
   const isViginti = hand.blackjackValue === 21;
@@ -170,7 +171,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
         for (let i = 0; i < criteria.length; i++) {
           if (canceled) return;
           const crit = criteria[i];
-          setActiveHighlightIds(null); 
+          setActiveHighlightIds(null);
 
           // Reveal Row Frame and Label
           setVisibleItems(prev => [...prev, i]);
@@ -287,26 +288,26 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
   // Effect to determine transform origin
   useLayoutEffect(() => {
     if ((isScoringFocus || isEnlarged) && containerRef.current) {
-        const rect = containerRef.current.getBoundingClientRect();
-        const viewportWidth = window.innerWidth;
-        
-        // We scale by 1.5
-        const scaledWidth = rect.width * 1.5;
-        const widthDiff = scaledWidth - rect.width;
-        
-        // Default center assumes expansion goes half left, half right
-        const expansionPerSide = widthDiff / 2;
-        
-        const wouldGoOffLeft = (rect.left - expansionPerSide) < 20; // 20px padding
-        const wouldGoOffRight = (rect.right + expansionPerSide) > (viewportWidth - 20);
-        
-        if (wouldGoOffLeft) {
-            setTransformOrigin('left center');
-        } else if (wouldGoOffRight) {
-            setTransformOrigin('right center');
-        } else {
-            setTransformOrigin('center center');
-        }
+      const rect = containerRef.current.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+
+      // We scale by 1.5
+      const scaledWidth = rect.width * 1.5;
+      const widthDiff = scaledWidth - rect.width;
+
+      // Default center assumes expansion goes half left, half right
+      const expansionPerSide = widthDiff / 2;
+
+      const wouldGoOffLeft = (rect.left - expansionPerSide) < 20; // 20px padding
+      const wouldGoOffRight = (rect.right + expansionPerSide) > (viewportWidth - 20);
+
+      if (wouldGoOffLeft) {
+        setTransformOrigin('left center');
+      } else if (wouldGoOffRight) {
+        setTransformOrigin('right center');
+      } else {
+        setTransformOrigin('center center');
+      }
     }
     // Note: We do NOT reset to center on exit. 
     // This effectively preserves the origin during the shrink animation (scale 1.5 -> 1.0).
@@ -353,7 +354,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
       )}
 
       <div
-        className={`${styles.hand} ${canSelect ? styles.activeTarget : ''}`}
+        className={`${styles.hand} ${canSelect ? styles.activeTarget : ''} ${isSelected ? styles.selected : ''}`}
       >
         <div className={`${styles.cardsContainer} ${showOverlay ? styles.tinted : ''}`}>
           <div className={styles.cards}>
@@ -520,7 +521,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
                   isViginti && !hand.isBust ? styles.isViginti :
                     isWin ? styles.isWin :
                       (!isWin && hand.resultRevealed && !hand.isBust && !isViginti) ? styles.isLoss : ''
-                }`}>
+                  }`}>
                 {displayScore}
               </div>
             </div>

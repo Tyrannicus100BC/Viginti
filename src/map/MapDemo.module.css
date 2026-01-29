@@ -1,0 +1,116 @@
+.container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    width: 100vw;
+    /* Green Felt Background */
+    background-color: #0b4d24;
+    background-image:
+        radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.1) 0%, rgba(0, 0, 0, 0.4) 100%),
+        url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.1'/%3E%3C/svg%3E");
+    color: white;
+    font-family: 'Times New Roman', serif;
+    /* More classic casino font */
+    overflow: hidden;
+    box-shadow: inset 0 0 200px #000;
+    /* Vignette */
+}
+
+.boardContainer {
+    position: relative;
+    width: 700px;
+    height: 700px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    filter: drop-shadow(0 20px 40px rgba(0, 0, 0, 0.6));
+}
+
+.controls {
+    margin-top: 40px;
+    display: flex;
+    gap: 20px;
+    z-index: 10;
+}
+
+.moveButton {
+    padding: 15px 35px;
+    font-size: 1.2rem;
+    background: linear-gradient(to bottom, #2c3e50, #1a252f);
+    color: #f1c40f;
+    /* Gold text */
+    border: 2px solid #f1c40f;
+    border-radius: 4px;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: bold;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    transition: all 0.1s;
+}
+
+.moveButton:hover {
+    background: linear-gradient(to bottom, #34495e, #2c3e50);
+    transform: translateY(-1px);
+    box-shadow: 0 0 15px rgba(241, 196, 15, 0.4);
+}
+
+.moveButton:active {
+    transform: translateY(1px);
+}
+
+.playerToken {
+    width: 50px;
+    height: 50px;
+    /* Background handled by inline style with image */
+    background: transparent;
+    border: none;
+    border-radius: 50%;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 100;
+    pointer-events: none;
+    transition: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+    /* Bouncy move */
+    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.5));
+}
+
+.centerLabel {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    pointer-events: none;
+    z-index: 50;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+}
+
+.labelTitle {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #f1c40f;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+.labelInfo {
+    font-size: 1rem;
+    color: #ddd;
+    font-family: monospace;
+}
+
+.nodeLabel {
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    font-size: 16px;
+    font-weight: 700;
+    fill: white;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    pointer-events: none;
+    filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.8));
+}

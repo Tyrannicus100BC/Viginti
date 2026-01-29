@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Card, DealerHand, PlayerHand, Suit, Rank } from '../types';
+import type { Card, DealerHand, PlayerHand } from '../types';
 import { createStandardDeck, shuffleDeck } from '../logic/deck';
 import { getBlackjackScore, evaluateHandScore } from '../logic/scoring';
 import { calculateTargetScore } from '../logic/casinoConfig';
@@ -7,22 +7,7 @@ import { RelicManager } from '../logic/relics/manager';
 import type { RelicInstance } from '../logic/relics/types';
 // import { RELIC_REGISTRY } from '../logic/relics/registry';
 
-const getRandomScoringRelics = (count: number, currentInventory: RelicInstance[], excludeIds: string[]) => {
-    const allScoring = RelicManager.getAllRelics().filter(r => r.categories.includes('Scoring') && !excludeIds.includes(r.id));
-    const currentIds = currentInventory.map(i => i.id);
-    const available = allScoring.filter(r => !currentIds.includes(r.id));
-    
-    const picked: RelicInstance[] = [];
-    const pool = [...available];
-    
-    for (let i=0; i<count; i++) {
-        if (pool.length === 0) break;
-        const idx = Math.floor(Math.random() * pool.length);
-        const relic = pool.splice(idx, 1)[0];
-        picked.push({ id: relic.id, state: { ...(relic.properties || {}) } });
-    }
-    return picked;
-};
+
 
 // Import Gambler Definitions
 import { GAMBLER_DEFINITIONS } from '../logic/gamblers/definitions';
@@ -41,7 +26,7 @@ interface GameState {
     };
     phase: 'init' | 'entering_casino' | 'playing' | 'scoring' | 'round_over' | 'game_over' | 'gift_shop';
     round: number;
-    interactionMode: 'default' | 'double_down_select';
+    interactionMode: 'default' | 'double_down_select' | 'surrender_select';
     totalScore: number;
     targetScore: number;
     comps: number;
@@ -54,12 +39,22 @@ interface GameState {
     // Aggregated Scoring State
     runningSummary: { chips: number; mult: number } | null;
     roundSummary: { totalChips: number; totalMult: number; finalScore: number } | null;
+    shopRewardSummary: { dealsBonus: number; surrenderBonus: number; winBonus: number; total: number } | null;
     discardPile: Card[];
     inventory: RelicInstance[];
     activeRelicId: string | null;
 
-    shopItems: { id: string, type: 'Charm' | 'Angle' | 'Card', card?: Card, purchased?: boolean }[];
+    shopItems: { id: string, type: 'Charm' | 'Angle' | 'Card', card?: Card, purchased?: boolean, cost?: number, nameOverride?: string }[];
     selectedShopItemId: string | null;
+    buyShopItem: (itemId: string) => void;
+
+    // Double Down State
+    doubleDownCharges: number;
+    selectedDoubleDownHands: number[];
+
+    // Surrender State
+    surrenders: number;
+    selectedSurrenderHand: number | null; // Single hand selection for surrender
 
     isInitialDeal: boolean;
     isShaking: boolean; // For >300 score celebration
@@ -67,6 +62,8 @@ interface GameState {
     dealerMessageExiting: boolean;
     dealerMessage: string | null;
     isDealerPlaying: boolean;
+
+
 
     debugEnabled: boolean;
     
@@ -78,9 +75,17 @@ interface GameState {
     cancelDoubleDown: () => void;
     confirmDoubleDown: (handIndex: number) => void;
     assignCard: (handIndex: number) => Promise<void>;
+    toggleDoubleDownHand: (handIndex: number) => void;
+    executeDoubleDown: () => void;
+
+    // Surrender Actions
+    startSurrender: () => void;
+    cancelSurrender: () => void;
+    selectSurrenderHand: (handIndex: number) => void;
+    confirmSurrender: () => void;
     holdReturns: (forceDealerBust?: boolean) => Promise<void>; // Async for pacing
     nextRound: (forceContinue?: boolean) => void;
-    selectShopItem: (itemId: string) => void; 
+    selectShopItem: (itemId: string) => void;
     confirmShopSelection: (itemId?: string) => void;
     completeRoundEarly: () => void;
     startChipCollection: () => Promise<void>;
@@ -108,6 +113,8 @@ interface GameState {
     revealDealerHiddenCard: () => void;
 }
 
+
+
 const INITIAL_HAND_COUNT = 3;
 const BASE_DEALS_PER_CASINO = 3;
 
@@ -134,11 +141,16 @@ export const useGameStore = create<GameState>((set, get) => ({
     isCollectingChips: false,
     runningSummary: null,
     roundSummary: null,
+    shopRewardSummary: null,
     discardPile: [],
     inventory: [],
     activeRelicId: null,
     shopItems: [],
     selectedShopItemId: null,
+    doubleDownCharges: 0,
+    selectedDoubleDownHands: [],
+    surrenders: 3,
+    selectedSurrenderHand: null,
     isInitialDeal: true,
     isShaking: false,
     allWinnersEnlarged: false,
@@ -188,7 +200,7 @@ export const useGameStore = create<GameState>((set, get) => ({
             } : { chips, mult }
         }));
     },
-    
+
     triggerScoringRow: (chips, mult) => {
         set(state => {
             const currentChips = state.runningSummary?.chips || 0;
@@ -245,7 +257,11 @@ export const useGameStore = create<GameState>((set, get) => ({
             dealerVisible: true,
             shopItems: [],
             selectedShopItemId: null,
-            isDealerPlaying: false
+            isDealerPlaying: false,
+            doubleDownCharges: 0,
+            selectedDoubleDownHands: [],
+            surrenders: 3,
+            selectedSurrenderHand: null
         });
     },
 
@@ -299,11 +315,11 @@ export const useGameStore = create<GameState>((set, get) => ({
 
         const d1 = drawForDealer();
         const d2 = drawForDealer();
-        
+
         if (d1) {
-             d1.isFaceUp = false;
-             d1.origin = 'deck';
-             dealerCards.push(d1);
+            d1.isFaceUp = false;
+            d1.origin = 'deck';
+            dealerCards.push(d1);
         }
         if (d2) {
             d2.isFaceUp = true;
@@ -356,7 +372,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         let drawCount = 1 + modifiers.drawCountMod;
         // Consume draw modifier
         set(state => ({ modifiers: { ...state.modifiers, drawCountMod: 0 } }));
-        
+
         drawCount = RelicManager.executeValueHook('getDrawCount', drawCount, { inventory });
 
         const deckRef = [...deck];
@@ -365,19 +381,19 @@ export const useGameStore = create<GameState>((set, get) => ({
         for (let i = 0; i < drawCount; i++) {
             const card = deckRef.pop();
             if (!card) break; // Deck empty handle?
-            
+
             card.isFaceUp = true;
             card.origin = 'deck';
             cardsToDraw.push(card);
-            
+
             set({ deck: deckRef, drawnCards: [...cardsToDraw] });
-            
+
             // Animation delay betwen draws
             if (i < drawCount - 1) {
                 await new Promise(resolve => setTimeout(resolve, 200));
             }
         }
-        
+
         // Auto select center
         const centerIndex = Math.floor((cardsToDraw.length - 1) / 2);
         set({ selectedDrawIndex: Math.max(0, centerIndex) });
@@ -391,87 +407,108 @@ export const useGameStore = create<GameState>((set, get) => ({
     },
 
     startDoubleDown: () => {
-        const { phase, drawnCards } = get();
+        const { phase, drawnCards, doubleDownCharges } = get();
         if (phase !== 'playing' || drawnCards.length > 0) return;
-        set({ interactionMode: 'double_down_select' });
+
+        // Requirement: At least 1 Charge to start
+        if (doubleDownCharges < 1) return;
+
+        set({ interactionMode: 'double_down_select', selectedDoubleDownHands: [] });
     },
 
     cancelDoubleDown: () => {
-        set({ interactionMode: 'default' });
+        set({ interactionMode: 'default', selectedDoubleDownHands: [] });
     },
 
-    confirmDoubleDown: (handIndex) => {
-        const { playerHands, deck, interactionMode } = get();
+    toggleDoubleDownHand: (handIndex: number) => {
+        const { selectedDoubleDownHands, playerHands, doubleDownCharges } = get();
+        const hand = playerHands[handIndex];
+        if (!hand || hand.isBust || hand.isHeld || hand.blackjackValue === 21) return;
+
+        if (selectedDoubleDownHands.includes(handIndex)) {
+            set({ selectedDoubleDownHands: selectedDoubleDownHands.filter(i => i !== handIndex) });
+        } else {
+            // Check if we have enough charges to select another hand
+            if (selectedDoubleDownHands.length < doubleDownCharges) {
+                set({ selectedDoubleDownHands: [...selectedDoubleDownHands, handIndex] });
+            }
+        }
+    },
+
+    executeDoubleDown: () => {
+        const { playerHands, deck, interactionMode, selectedDoubleDownHands, doubleDownCharges } = get();
         if (interactionMode !== 'double_down_select') return;
+        if (selectedDoubleDownHands.length === 0) return; // Must select at least one
 
-        const newDeck = [...deck];
-        const card = newDeck.pop();
-        if (!card) return; // Should handle empty deck?
+        const cost = selectedDoubleDownHands.length;
+        if (doubleDownCharges < cost) return; // Should be prevented by toggle logic, but safety first
 
-        card.isFaceUp = true;
-        card.origin = 'double_down';
-        // Logic to mark card as doubled? Hand identifies it via isDoubled flag.
+        // Consume Charges
+        set({ doubleDownCharges: doubleDownCharges - cost });
 
-        const newHands = playerHands.map((h, idx) => {
-            if (idx !== handIndex) return h;
-            // Prevent if bust or held? UI should handle validation, but safety check:
-            if (h.isBust || h.isHeld) return h;
+        let currentDeck = [...deck];
+        let currentHands = [...playerHands];
 
-            // If the doubled card is special, it should technically be at the start according to the rule,
-            // but double down usually implies a 'hit' that goes to the end visually?
-            // However, consistent rule: "When a Special Card is added... it should be added as the last card (index 0) ... behind and on the left"
-            // Let's apply it consistently.
-            const isSpecial = card.type === 'chip' || card.type === 'mult' || card.type === 'score';
-            
-            const orderedCards = isSpecial ? [card, ...h.cards] : [...h.cards, card];
+        // Process each selected hand
+        for (const handIndex of selectedDoubleDownHands) {
+            const card = currentDeck.pop();
+            if (!card) break; // empty deck safety
 
-            const val = getBlackjackScore(orderedCards, get().inventory);
+            card.isFaceUp = true;
+            card.origin = 'double_down';
 
-            return {
-                ...h,
-                cards: orderedCards,
-                blackjackValue: val,
-                isBust: val > 21,
-                isHeld: true, // Auto stand
-                isDoubled: true
-            };
-        });
+            currentHands = currentHands.map((h, idx) => {
+                if (idx !== handIndex) return h;
+
+                // Double Logic
+                const isSpecial = card.type === 'chip' || card.type === 'mult' || card.type === 'score';
+                const orderedCards = isSpecial ? [card, ...h.cards] : [...h.cards, card];
+                const val = getBlackjackScore(orderedCards, get().inventory);
+
+                return {
+                    ...h,
+                    cards: orderedCards,
+                    blackjackValue: val,
+                    isBust: val > 21,
+                    isHeld: true,
+                    isDoubled: true
+                };
+            });
+        }
 
         set({
-            playerHands: newHands,
-            deck: newDeck,
-            interactionMode: 'default'
+            playerHands: currentHands,
+            deck: currentDeck,
+            interactionMode: 'default',
+            selectedDoubleDownHands: []
         });
 
-        // Trigger onHandBust if applicable
-        const newHand = newHands[handIndex];
-        if (newHand.isBust && !playerHands[handIndex].isBust) {
-            RelicManager.executeInterruptHook('onHandBust', {
-                inventory: get().inventory,
-                handId: newHand.id,
-                handCards: newHand.cards,
-                highlightRelic: async (id, options) => {
-                     const { preDelay = 0, duration = 500, postDelay = 0, trigger } = options || {};
-                     await new Promise(r => setTimeout(r, preDelay));
-                     set({ activeRelicId: id });
-                     if (trigger) await trigger();
-                     await new Promise(r => setTimeout(r, duration));
-                     set({ activeRelicId: null });
-                     await new Promise(r => setTimeout(r, postDelay));
-                },
-                modifyHand: (cards) => {
-                     set(state => ({
-                         playerHands: state.playerHands.map(h => {
-                             if (h.id === newHand.id) {
-                                 const val = getBlackjackScore(cards, state.inventory);
-                                 return { ...h, cards, blackjackValue: val, isBust: val > 21 };
-                             }
-                             return h;
-                         })
-                     }));
-                }
-            }).catch(console.error);
+        // Loop again for side effects after state update (Busts)
+        const newHands = get().playerHands; // Get fresh state
+
+        // 1. Check Busts for Charges & Hooks
+        let bustCount = 0;
+        selectedDoubleDownHands.forEach(handIndex => {
+            const h = newHands[handIndex];
+            const oldHand = playerHands[handIndex]; // Original state
+
+            if (h.isBust && !oldHand.isBust) {
+                bustCount++;
+                RelicManager.executeInterruptHook('onHandBust', {
+                    inventory: get().inventory,
+                    highlightRelic: async () => { },
+                    handId: h.id
+                }).catch(console.error);
+            }
+        });
+
+        // Add charges for busts immediately
+        if (bustCount > 0) {
+            set(state => ({
+                doubleDownCharges: Math.min(3, state.doubleDownCharges + bustCount)
+            }));
         }
+
 
         // Auto-stand if all hands are unplayable
         const allUnplayable = newHands.every(h => h.isBust || h.isHeld || h.blackjackValue === 21);
@@ -480,6 +517,74 @@ export const useGameStore = create<GameState>((set, get) => ({
                 get().holdReturns();
             }, 1000);
         }
+    },
+
+    startSurrender: () => {
+        const { phase, drawnCards, surrenders } = get();
+        if (phase !== 'playing' || drawnCards.length > 0) return;
+
+        // Requirement: At least 1 Surrender remaining
+        if (surrenders < 1) return;
+
+        set({ interactionMode: 'surrender_select', selectedSurrenderHand: null });
+    },
+
+    cancelSurrender: () => {
+        set({ interactionMode: 'default', selectedSurrenderHand: null });
+    },
+
+    selectSurrenderHand: (handIndex: number) => {
+        const { playerHands, selectedSurrenderHand } = get();
+        const hand = playerHands[handIndex];
+
+        // Cannot select busted hands
+        if (!hand || hand.isBust || hand.cards.length === 0) return;
+
+        if (selectedSurrenderHand === handIndex) {
+            set({ selectedSurrenderHand: null });
+        } else {
+            set({ selectedSurrenderHand: handIndex });
+        }
+    },
+
+    confirmSurrender: () => {
+        const { playerHands, interactionMode, selectedSurrenderHand, surrenders, discardPile } = get();
+        if (interactionMode !== 'surrender_select') return;
+        if (selectedSurrenderHand === null) return;
+        if (surrenders < 1) return;
+
+        // Consume Surrender
+        const newSurrenders = surrenders - 1;
+
+        // Process Surrender
+        // 1. Move cards to discard pile (excluding virtual/temp cards if any, typically all cards are real here)
+        const hand = playerHands[selectedSurrenderHand];
+        const cardsToDiscard = [...hand.cards];
+
+        // 2. Reset Hand
+        const newHands = playerHands.map((h, idx) => {
+            if (idx !== selectedSurrenderHand) return h;
+            return {
+                ...h,
+                cards: [],
+                blackjackValue: 0,
+                isBust: false,
+                isHeld: false,
+                isDoubled: false,
+                finalScore: null,
+                resultRevealed: false
+            };
+        });
+
+        const newDiscardPile = [...discardPile, ...cardsToDiscard];
+
+        set({
+            playerHands: newHands,
+            discardPile: newDiscardPile,
+            surrenders: newSurrenders,
+            interactionMode: 'default',
+            selectedSurrenderHand: null
+        });
     },
 
     assignCard: async (handIndex) => {
@@ -496,7 +601,6 @@ export const useGameStore = create<GameState>((set, get) => ({
             const spacing = 120;
             const drawOffset = (selectedDrawIndex - (drawnCards.length - 1) / 2) * spacing;
             const cardToAdd = { ...cardToPlace, origin: 'draw_pile' as const, animationOffset: drawOffset };
-            
             const isSpecial = cardToAdd.type === 'chip' || cardToAdd.type === 'mult' || cardToAdd.type === 'score';
             const newCards = isSpecial ? [cardToAdd, ...h.cards] : [...h.cards, cardToAdd];
 
@@ -567,8 +671,10 @@ export const useGameStore = create<GameState>((set, get) => ({
 
         // 3. Trigger onHandBust if applicable post-hook
          if (finalHand.isBust && !playerHands[handIndex].isBust) { // Compare against ORIGINAL start of turn state? 
-            // Actually, best to just check if it IS bust now and wasn't before this assignment action started?
-            // The original `playerHands` variable holds state before `assignCard` started.
+            
+            // Inject Doubledown Logic: Add Charge on Bust
+            set(state => ({ doubleDownCharges: Math.min(3, state.doubleDownCharges + 1) }));
+
             await RelicManager.executeInterruptHook('onHandBust', {
                 inventory: get().inventory,
                 handId: finalHand.id,
@@ -640,19 +746,19 @@ export const useGameStore = create<GameState>((set, get) => ({
                 cardsPlacedThisTurn: newPlacedCount
             });
         } else {
-             // Turn Sequence Complete
-             // Filter out nulls for discard pile
-             const leftovers = remainingDrawn.filter((c): c is Card => c !== null);
-             const newDiscards = [...discardPile, ...leftovers];
+            // Turn Sequence Complete
+            // Filter out nulls for discard pile
+            const leftovers = remainingDrawn.filter((c): c is Card => c !== null);
+            const newDiscards = [...discardPile, ...leftovers];
 
-             set({
+            set({
                 playerHands: postBustHands,
                 drawnCards: [],
                 selectedDrawIndex: null,
                 cardsPlacedThisTurn: 0,
                 discardPile: newDiscards,
                 modifiers: { ...modifiers, placeCountMod: 0 } // Reset place mod
-             });
+            });
 
             // Auto-stand if all hands are unplayable
             const allUnplayable = postBustHands.every(h => h.isBust || h.isHeld || h.blackjackValue === 21);
@@ -724,8 +830,8 @@ export const useGameStore = create<GameState>((set, get) => ({
 
             let c = dDeck.pop();
             while (c && (c.type === 'chip' || c.type === 'mult' || c.type === 'score')) {
-                 burnedCards.push(c);
-                 c = dDeck.pop();
+                if (c) burnedCards.push(c);
+                c = dDeck.pop();
             }
 
             if (!c) break;
@@ -741,10 +847,10 @@ export const useGameStore = create<GameState>((set, get) => ({
             });
 
             await wait(500); // Match --anim-deal-duration
-            
+
             dCards = nextCards;
             dVal = nextVal;
-            
+
             set({
                 dealer: { ...get().dealer, blackjackValue: dVal }
             });
@@ -763,6 +869,9 @@ export const useGameStore = create<GameState>((set, get) => ({
             set({ dealerMessageExiting: true });
             await wait(100);
             set({ dealerMessage: null, dealerMessageExiting: false });
+        } else if (dVal === 21) {
+            // Exact 21 -> No longer gives +2 Charges per user request
+            // set(state => ({ doubleDownCharges: Math.min(3, state.doubleDownCharges + 2) }));
         }
 
         // 4. Score Logic And Aggregation
@@ -776,6 +885,11 @@ export const useGameStore = create<GameState>((set, get) => ({
             else if (dVal > 21) win = true;
             else if (h.blackjackValue >= dVal) win = true;
             else win = false;
+
+            if (!win && !h.isBust && h.cards.length > 0) {
+                // Loss (Standing but beat by dealer) -> +1 Charge
+                set(state => ({ doubleDownCharges: Math.min(3, state.doubleDownCharges + 1) }));
+            }
 
             if (win) {
                 const score = evaluateHandScore(h.cards, win, h.isDoubled, get().inventory, get().handsRemaining);
@@ -802,14 +916,14 @@ export const useGameStore = create<GameState>((set, get) => ({
 
         // Stagger reveal of player outcomes
         const currentHands = [...scoredHands];
-        
+
         for (let i = 0; i < currentHands.length; i++) {
             const hand = currentHands[i];
             const isBustOrViginti = hand.isBust || hand.blackjackValue === 21;
-            
+
             // Reveal this hand's result
-            currentHands[i] = { 
-                ...hand, 
+            currentHands[i] = {
+                ...hand,
                 resultRevealed: true,
                 outcome: hand.finalScore ? 'win' : 'loss'
             };
@@ -823,11 +937,11 @@ export const useGameStore = create<GameState>((set, get) => ({
 
         // STEP 1 COMPLETE: Fade out dealer
         await wait(200);
-        set({ 
+        set({
             dealerVisible: false
             // allWinnersEnlarged remains false so hands grow one by one via scoringHandIndex
         });
-        
+
         // Allow user to digest outcomes before scoring starts
         await wait(400);
 
@@ -874,11 +988,11 @@ export const useGameStore = create<GameState>((set, get) => ({
                     rowDuration += 700; // 200 (chips) + 500 (mult)
                 }
                 rowDuration += 200; // transition beat
-                
+
                 await wait(rowDuration);
                 await relicHookPromise;
             }
-            
+
             await wait(50); // Tiny buffer for safety
 
             // Hook for Hand Completion (Relics like Royalty)
@@ -908,9 +1022,9 @@ export const useGameStore = create<GameState>((set, get) => ({
         // 6. Round Aggregation & Transition via Interrupt Hooks
         // Allow relics to modify the running totals (which are the source of truth)
         // Checks wins, losses, vigintis based on the scored hands
-        const finalWins = scoredHands.filter(h => h.finalScore && h.finalScore.totalChips >= 0); 
+        const finalWins = scoredHands.filter(h => h.finalScore && h.finalScore.totalChips >= 0);
         // Note: Using finalScore presence as Win indicator.
-        
+
         await RelicManager.executeInterruptHook('onRoundCompletion', {
             inventory: get().inventory,
             wins: finalWins.length,
@@ -918,10 +1032,10 @@ export const useGameStore = create<GameState>((set, get) => ({
             vigintis: finalWins.filter(h => h.blackjackValue === 21).length,
             runningSummary: get().runningSummary || { chips: 0, mult: 0 },
             playerHands: scoredHands, // Pass resolved hands for checking lengths etc.
-             modifyRunningSummary: (c: number, m: number) => {
-                  // Additive update
-                  get().updateRunningSummary(c, m);
-             },
+            modifyRunningSummary: (c: number, m: number) => {
+                // Additive update
+                get().updateRunningSummary(c, m);
+            },
             highlightRelic: async (id: string, options?: any) => {
                 // Apply the requested 200ms delays for onRoundCompletion
                 const { preDelay = 200, duration = 750, postDelay = 200, trigger } = options || {};
@@ -942,9 +1056,9 @@ export const useGameStore = create<GameState>((set, get) => ({
         // Continue to collection if there are any chips to collect
         const currentSummary = get().runningSummary;
         if (currentSummary && (currentSummary.chips > 0 || currentSummary.mult > 0)) {
-             await get().startChipCollection();
+            await get().startChipCollection();
         } else {
-             get().chipCollectionComplete();
+            get().chipCollectionComplete();
         }
     },
 
@@ -1010,12 +1124,12 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     confirmShopSelection: (itemId?: string) => {
         const { shopItems, inventory, selectedShopItemId } = get();
-        
+
         // Determine which ID to use: explicit argument takes precedence over selected state
         const idToConfirm = itemId || selectedShopItemId;
-        
+
         let newInventory = [...inventory];
-        
+
         if (idToConfirm) {
             const selectedItem = shopItems.find(i => i.id === idToConfirm);
             if (selectedItem && !selectedItem.purchased) {
@@ -1038,7 +1152,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
                 // Mark as purchased instead of removing
                 set(state => ({
-                    shopItems: state.shopItems.map(i => 
+                    shopItems: state.shopItems.map(i =>
                         i.id === idToConfirm ? { ...i, purchased: true } : i
                     ),
                     inventory: newInventory,
@@ -1051,18 +1165,16 @@ export const useGameStore = create<GameState>((set, get) => ({
     leaveShop: () => {
         const { inventory } = get();
         // Trigger the actual Casino Transition now
-        const { round, totalScore, targetScore, comps, handsRemaining, deck, discardPile } = get();
-        
-        const newRound = round + 1;
-        const newTotalScore = totalScore - targetScore; // Carry over surplus score
+        const { round, totalScore, targetScore, comps, deck, discardPile } = get();
 
-        // Comps increase logic
-        const currentHandsRemaining = handsRemaining;
-        const newComps = (comps || 0) + (currentHandsRemaining * 5);
+        const newRound = round + 1;
+        const newTotalScore = totalScore; // Keep total score cumulative
+
+        // Rewards already applied on entry to shop
 
         let newTargetScore = targetScore;
-        // Set target based on casino number
-        newTargetScore = calculateTargetScore(newRound);
+        // Set target relative to current cumulated score
+        newTargetScore = newTotalScore + calculateTargetScore(newRound);
 
         // Preserve and shuffle the manipulated deck
         const combinedDeck = [...deck, ...discardPile];
@@ -1086,21 +1198,23 @@ export const useGameStore = create<GameState>((set, get) => ({
             totalScore: newTotalScore,
             dealsTaken: 0,
             handsRemaining: RelicManager.executeValueHook('getDealsPerCasino', BASE_DEALS_PER_CASINO, { inventory }),
-            comps: newComps,
+            comps: comps, // Already updated
             discardPile: [],
+            surrenders: 3, // Reset to 3
             dealerMessage: null,
             runningSummary: null,
             roundSummary: null,
             allWinnersEnlarged: false,
             dealerVisible: true,
             shopItems: [],
-            selectedShopItemId: null
+            selectedShopItemId: null,
+            shopRewardSummary: null
         });
     },
 
     nextRound: (forceContinue = false) => {
         const currentState = get();
-        const { deck, dealer, playerHands, totalScore, targetScore, round, comps, handsRemaining } = currentState;
+        const { deck, dealer, playerHands, totalScore, targetScore, handsRemaining } = currentState;
 
         // Check if player reached the target score
         const hasReachedTarget = totalScore >= targetScore;
@@ -1112,93 +1226,86 @@ export const useGameStore = create<GameState>((set, get) => ({
 
         if (hasReachedTarget && !forceContinue) {
             // GO TO GIFT SHOP PHASE
-            // Generate 4 Charms, 2 Angles
-            
-            // Helper to get random items
-            const getRandomItems = (count: number, category: string, excludeIds: string[]) => {
-                 const allItems = RelicManager.getAllRelics().filter(r => r.categories.includes(category) && !excludeIds.includes(r.id));
-                 // Also filter out things already in inventory if unique? Assuming unique for now.
-                 const curIds = get().inventory.map(i => i.id);
-                 const available = allItems.filter(r => !curIds.includes(r.id));
-                 
-                 const picked = [];
-                 const pool = [...available];
-                 for(let i=0; i<count; i++) {
-                     if(pool.length === 0) break;
-                     const idx = Math.floor(Math.random() * pool.length);
-                     picked.push(pool.splice(idx, 1)[0]);
-                 }
-                 return picked.map(p => ({ id: p.id, type: category as 'Charm' | 'Angle' }));
-            };
-            
+
+            // Calculate Rewards
+            const { surrenders, handsRemaining, comps } = currentState;
+            const dealsBonus = handsRemaining * 2;
+            const surrenderBonus = surrenders * 1;
+            const winBonus = 2;
+            const totalBonus = dealsBonus + surrenderBonus + winBonus;
+
+            set({ comps: comps + totalBonus });
+
+            // 1a. Generate Standard Card (Cost 1, No Special)
+            const fullDeck1 = createStandardDeck();
+            const idx1 = Math.floor(Math.random() * fullDeck1.length);
+            const standardCard = fullDeck1[idx1];
+            standardCard.isFaceUp = true;
+            standardCard.origin = 'shop';
+
+            // 1b. Generate Special Card (Cost 2, Guaranteed Special)
+            const fullDeck2 = createStandardDeck();
+            const idx2 = Math.floor(Math.random() * fullDeck2.length);
+            const specialCard = fullDeck2[idx2];
+            specialCard.isFaceUp = true;
+            specialCard.origin = 'shop';
+
+            const effects = [
+                { type: 'mult' as const, value: 1 }, { type: 'mult' as const, value: 2 },
+                { type: 'chip' as const, value: 5 }, { type: 'chip' as const, value: 10 }
+            ];
+            specialCard.specialEffect = effects[Math.floor(Math.random() * effects.length)];
+
+            // 2. Generate Random Angle
             const currentIds = get().inventory.map(i => i.id);
-            const charms = getRandomItems(4, 'Charm', currentIds);
-            const angles = getRandomItems(2, 'Angle', currentIds);
-            
-            // Generate 6 cards for shop
-            const fullDeck = createStandardDeck(); // Base standard cards
-            const shopCards = [];
+            const allAngles = RelicManager.getAllRelics().filter(r => r.categories.includes('Angle') && !currentIds.includes(r.id));
+            const randomAngle = allAngles.length > 0 ? allAngles[Math.floor(Math.random() * allAngles.length)] : null;
 
-            // Helper for selecting random special effect
-            const getRandomSpecialEffect = () => {
-                 const options = [
-                     // Mult: 1, 2, 3
-                     { type: 'mult' as const, value: 1 },
-                     { type: 'mult' as const, value: 2 },
-                     { type: 'mult' as const, value: 3 },
-                     // Score: -1, -2, -3, -4 (represented as positive reduction)
-                     { type: 'score' as const, value: 1 },
-                     { type: 'score' as const, value: 2 },
-                     { type: 'score' as const, value: 3 },
-                     { type: 'score' as const, value: 4 },
-                     // Chips: 5, 10, 20, 50
-                     { type: 'chip' as const, value: 5 },
-                     { type: 'chip' as const, value: 10 },
-                     { type: 'chip' as const, value: 20 },
-                     { type: 'chip' as const, value: 50 },
-                 ];
-                 return options[Math.floor(Math.random() * options.length)];
-            };
+            // 3. Generate Random Charm
+            const allCharms = RelicManager.getAllRelics().filter(r => r.categories.includes('Charm') && !currentIds.includes(r.id));
+            const randomCharm = allCharms.length > 0 ? allCharms[Math.floor(Math.random() * allCharms.length)] : null;
 
-            // 1. Forced Regular Card with Score Reduction Effect
-            {
-                const idx = Math.floor(Math.random() * fullDeck.length);
-                const card = fullDeck.splice(idx, 1)[0];
-                card.isFaceUp = true;
-                
-                // Force Score Effect (-1 to -4)
-                const val = Math.floor(Math.random() * 4) + 1;
-                card.specialEffect = { type: 'score', value: val };
+            const newShopItems = [];
 
-                shopCards.push({
-                    id: `shop_card_forced_${card.rank}_${card.suit}`,
-                    type: 'Card' as const,
-                    card: card
+            newShopItems.push({
+                id: 'shop_card_standard',
+                type: 'Card' as const,
+                card: standardCard,
+                cost: 1,
+                nameOverride: 'Standard Card'
+            });
+
+            newShopItems.push({
+                id: 'shop_card_special',
+                type: 'Card' as const,
+                card: specialCard,
+                cost: 2,
+                nameOverride: 'Special Card'
+            });
+
+            if (randomAngle) {
+                newShopItems.push({
+                    id: randomAngle.id,
+                    type: 'Angle' as const,
+                    cost: 8,
+                    nameOverride: randomAngle.name
                 });
             }
 
-            // 2. 5 Random Cards (20% chance Special Effect on Regular Card)
-            for (let i = 0; i < 5; i++) {
-                const idx = Math.floor(Math.random() * fullDeck.length);
-                const card = fullDeck.splice(idx, 1)[0];
-                card.isFaceUp = true;
-
-                if (Math.random() < 0.20) {
-                     // Apply Special Effect
-                     card.specialEffect = getRandomSpecialEffect();
-                }
-
-                shopCards.push({
-                    id: `shop_card_${card.rank}_${card.suit}_${i}`,
-                    type: 'Card' as const,
-                    card: card
+            if (randomCharm) {
+                newShopItems.push({
+                    id: randomCharm.id,
+                    type: 'Charm' as const,
+                    cost: 5,
+                    nameOverride: randomCharm.name
                 });
             }
 
             set({
-                shopItems: [...charms, ...angles, ...shopCards],
+                shopItems: newShopItems,
                 phase: 'gift_shop',
-                dealerVisible: false
+                dealerVisible: false,
+                shopRewardSummary: { dealsBonus, surrenderBonus, winBonus, total: totalBonus }
             });
             return;
         }
@@ -1278,7 +1385,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     debugWin: async () => {
         const { phase, drawnCards, holdReturns } = get();
         if (phase !== 'playing') return;
-        
+
         // If there's a drawn card, discard it first
         if (drawnCards.length > 0) {
             get().debugUndo();
@@ -1291,7 +1398,11 @@ export const useGameStore = create<GameState>((set, get) => ({
         const { phase, drawnCards, deck } = get();
         if (phase !== 'playing' || drawnCards.length === 0) return;
 
-        const cardsToReturn = [...drawnCards].reverse();
+        // Filter out nulls first
+        const cardsToReturn = drawnCards
+            .filter((c): c is Card => c !== null)
+            .reverse();
+
         cardsToReturn.forEach(c => {
             c.isFaceUp = false;
             c.origin = undefined;
@@ -1315,10 +1426,10 @@ export const useGameStore = create<GameState>((set, get) => ({
 
         const newDeck = [...deck];
         const [card] = newDeck.splice(cardIndex, 1);
-        
+
         card.isFaceUp = true;
         card.origin = 'deck';
-        
+
         set({
             deck: newDeck,
             drawnCards: [card],
@@ -1331,12 +1442,12 @@ export const useGameStore = create<GameState>((set, get) => ({
         set(state => {
             const config = RelicManager.getRelicConfig(relicId);
             if (!config) return {};
-            
+
             const instance: RelicInstance = {
                 id: relicId,
                 state: config.properties ? JSON.parse(JSON.stringify(config.properties)) : {}
             };
-            
+
             const newInventory = [...state.inventory, instance];
             const dealsPerCasino = RelicManager.executeValueHook('getDealsPerCasino', BASE_DEALS_PER_CASINO, { inventory: newInventory });
             return {
@@ -1347,7 +1458,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     },
 
     removeRelic: (relicId) => {
-         set(state => {
+        set(state => {
             const newInventory = state.inventory.filter(r => r.id !== relicId);
             const dealsPerCasino = RelicManager.executeValueHook('getDealsPerCasino', BASE_DEALS_PER_CASINO, { inventory: newInventory });
             return {
@@ -1388,11 +1499,54 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     enhanceCard: (cardId, effect) => {
         set(state => ({
-            deck: state.deck.map(c => 
-                c.id === cardId 
+            deck: state.deck.map(c =>
+                c.id === cardId
                     ? { ...c, specialEffect: effect }
                     : c
             )
         }));
+    }, // Add comma
+
+    buyShopItem: (itemId: string) => {
+        const { comps, inventory, deck, shopItems } = get();
+
+        const item = shopItems.find(i => i.id === itemId);
+        if (!item || item.purchased) return;
+
+        const cost = item.cost || (item.type === 'Card' ? (item.id.includes('special') ? 2 : 1) : item.type === 'Angle' ? 8 : 5);
+
+        if (comps < cost) {
+            return;
+        }
+
+        // Deduct Cost
+        set({ comps: comps - cost });
+
+        if (item.type === 'Card' && item.card) {
+            set({ deck: [...deck, item.card] });
+        } else {
+            // Add Angle/Charm to inventory
+            const baseRelic = RelicManager.getRelicConfig(item.id);
+            if (baseRelic) {
+                const newInstance: RelicInstance = {
+                    id: item.id,
+                    state: { ...(baseRelic.properties || {}) }
+                };
+
+                const newInventory = [...inventory, newInstance];
+                // Recalculate deals
+                const dealsPerCasino = RelicManager.executeValueHook('getDealsPerCasino', BASE_DEALS_PER_CASINO, { inventory: newInventory });
+
+                set(state => ({
+                    inventory: newInventory,
+                    handsRemaining: dealsPerCasino - state.dealsTaken
+                }));
+            }
+        }
+
+        // Mark purchased
+        set({
+            shopItems: shopItems.map(i => i.id === itemId ? { ...i, purchased: true } : i)
+        });
     }
 }));

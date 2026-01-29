@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { Card as CardType } from '../types';
+import type { Card as CardType, CardOrigin } from '../types';
 import styles from './Card.module.css';
 import '../styles/animations.css';
 
@@ -8,7 +8,7 @@ interface CardProps {
   onClick?: () => void;
   className?: string; // For additional styles if needed
   isDrawn?: boolean;
-  origin?: 'deck' | 'draw_pile' | 'double_down' | 'discard' | 'none';
+  origin?: CardOrigin | 'discard' | 'none';
   delay?: number; // seconds
   style?: React.CSSProperties;
   suppressSpecialVisuals?: boolean;
@@ -79,82 +79,82 @@ export const PlayingCard: React.FC<CardProps> = ({
       >
         {/* Front */}
         <div className={`${styles.face} ${styles.front} ${isRed ? styles.red : styles.black}`}
-             style={
-               card.type === 'chip' ? { color: '#4ade80', WebkitTextStroke: '2px #166534', paintOrder: 'stroke fill' } as React.CSSProperties :
-               card.type === 'mult' ? { color: '#facc15', WebkitTextStroke: '2px #854d0e', paintOrder: 'stroke fill' } as React.CSSProperties :
-               card.type === 'score' ? { color: '#c084fc', WebkitTextStroke: '2px #6b21a8', paintOrder: 'stroke fill' } as React.CSSProperties :
-               undefined
-             }
+          style={
+            card.type === 'chip' ? { color: '#4ade80', WebkitTextStroke: '2px #166534', paintOrder: 'stroke fill' } as React.CSSProperties :
+              card.type === 'mult' ? { color: '#facc15', WebkitTextStroke: '2px #854d0e', paintOrder: 'stroke fill' } as React.CSSProperties :
+                card.type === 'score' ? { color: '#c084fc', WebkitTextStroke: '2px #6b21a8', paintOrder: 'stroke fill' } as React.CSSProperties :
+                  undefined
+          }
         >
           <div className={styles.cornerTop}>
             <div className={styles.rank}>
               {card.type === 'chip' ? `$${card.chips}` :
-               card.type === 'mult' ? `x${card.mult}` :
-               card.type === 'score' ? `${card.chips}` :
-               card.rank}
+                card.type === 'mult' ? `x${card.mult}` :
+                  card.type === 'score' ? `${card.chips}` :
+                    card.rank}
             </div>
             {!card.type || card.type === 'standard' ? (
-                <div className={styles.smallSuit}>{SUIT_ICONS[card.suit]}</div>
+              <div className={styles.smallSuit}>{SUIT_ICONS[card.suit]}</div>
             ) : null}
           </div>
-            <div className={styles.cornerBottom}>
+          <div className={styles.cornerBottom}>
             <div className={styles.rank}>
-               {card.type === 'chip' ? `$${card.chips}` :
-               card.type === 'mult' ? `x${card.mult}` :
-               card.type === 'score' ? `${card.chips}` :
-               card.rank}
+              {card.type === 'chip' ? `$${card.chips}` :
+                card.type === 'mult' ? `x${card.mult}` :
+                  card.type === 'score' ? `${card.chips}` :
+                    card.rank}
             </div>
             {!card.type || card.type === 'standard' ? (
-                <div className={styles.smallSuit}>{SUIT_ICONS[card.suit]}</div>
+              <div className={styles.smallSuit}>{SUIT_ICONS[card.suit]}</div>
             ) : null}
           </div>
 
           {/* Special Effect Indicators */}
           {card.specialEffect && !suppressSpecialVisuals && (
             <>
-                {/* Bottom Left */}
-                <div className={styles.specialEffect}>
-                    <div className={styles.specialSymbol}
-                         style={{ 
-                             color: card.specialEffect.type === 'chip' ? '#166534' : card.specialEffect.type === 'mult' ? '#854d0e' : '#6b21a8',
-                             WebkitTextStroke: card.specialEffect.type === 'chip' ? '1px #6ee7b7' : card.specialEffect.type === 'mult' ? '1px #fde047' : '1px #d8b4fe',
-                             fontSize: card.specialEffect.type === 'chip' ? '1.0rem' : undefined
-                         }}
-                    >
-                         {card.specialEffect.type === 'chip' ? '$' : card.specialEffect.type === 'mult' ? 'x' : '–'}
-                    </div>
-                    <div className={styles.specialValue}
-                         style={{ 
-                             color: card.specialEffect.type === 'chip' ? '#166534' : card.specialEffect.type === 'mult' ? '#854d0e' : '#6b21a8',
-                             WebkitTextStroke: card.specialEffect.type === 'chip' ? '1px #6ee7b7' : card.specialEffect.type === 'mult' ? '1px #fde047' : '1px #d8b4fe',
-                             paintOrder: 'stroke fill'
-                         }}
-                    >
-                        {card.specialEffect.value}
-                    </div>
+              {/* Bottom Left */}
+              <div className={styles.specialEffect}>
+                <div className={styles.specialSymbol}
+                  style={{
+                    color: card.specialEffect.type === 'chip' ? '#166534' : card.specialEffect.type === 'mult' ? '#854d0e' : '#6b21a8',
+                    WebkitTextStroke: card.specialEffect.type === 'chip' ? '1px #6ee7b7' : card.specialEffect.type === 'mult' ? '1px #fde047' : '1px #d8b4fe',
+                    fontSize: card.specialEffect.type === 'chip' ? '1.0rem' : undefined
+                  }}
+                >
+                  {card.specialEffect.type === 'chip' ? '$' : card.specialEffect.type === 'mult' ? 'x' : '–'}
                 </div>
+                <div className={styles.specialValue}
+                  style={{
+                    color: card.specialEffect.type === 'chip' ? '#166534' : card.specialEffect.type === 'mult' ? '#854d0e' : '#6b21a8',
+                    WebkitTextStroke: card.specialEffect.type === 'chip' ? '1px #6ee7b7' : card.specialEffect.type === 'mult' ? '1px #fde047' : '1px #d8b4fe',
+                    paintOrder: 'stroke fill'
+                  }}
+                >
+                  {card.specialEffect.value}
+                </div>
+              </div>
 
-                {/* Top Right (Upside Down) */}
-                <div className={styles.specialEffectTopRight}>
-                    <div className={styles.specialSymbol}
-                         style={{ 
-                             color: card.specialEffect.type === 'chip' ? '#166534' : card.specialEffect.type === 'mult' ? '#854d0e' : '#6b21a8',
-                             WebkitTextStroke: card.specialEffect.type === 'chip' ? '1px #6ee7b7' : card.specialEffect.type === 'mult' ? '1px #fde047' : '1px #d8b4fe',
-                              fontSize: card.specialEffect.type === 'chip' ? '1.0rem' : undefined
-                         }}
-                    >
-                         {card.specialEffect.type === 'chip' ? '$' : card.specialEffect.type === 'mult' ? 'x' : '–'}
-                    </div>
-                     <div className={styles.specialValue}
-                         style={{ 
-                             color: card.specialEffect.type === 'chip' ? '#166534' : card.specialEffect.type === 'mult' ? '#854d0e' : '#6b21a8',
-                             WebkitTextStroke: card.specialEffect.type === 'chip' ? '1px #6ee7b7' : card.specialEffect.type === 'mult' ? '1px #fde047' : '1px #d8b4fe',
-                             paintOrder: 'stroke fill'
-                         }}
-                    >
-                        {card.specialEffect.value}
-                    </div>
+              {/* Top Right (Upside Down) */}
+              <div className={styles.specialEffectTopRight}>
+                <div className={styles.specialSymbol}
+                  style={{
+                    color: card.specialEffect.type === 'chip' ? '#166534' : card.specialEffect.type === 'mult' ? '#854d0e' : '#6b21a8',
+                    WebkitTextStroke: card.specialEffect.type === 'chip' ? '1px #6ee7b7' : card.specialEffect.type === 'mult' ? '1px #fde047' : '1px #d8b4fe',
+                    fontSize: card.specialEffect.type === 'chip' ? '1.0rem' : undefined
+                  }}
+                >
+                  {card.specialEffect.type === 'chip' ? '$' : card.specialEffect.type === 'mult' ? 'x' : '–'}
                 </div>
+                <div className={styles.specialValue}
+                  style={{
+                    color: card.specialEffect.type === 'chip' ? '#166534' : card.specialEffect.type === 'mult' ? '#854d0e' : '#6b21a8',
+                    WebkitTextStroke: card.specialEffect.type === 'chip' ? '1px #6ee7b7' : card.specialEffect.type === 'mult' ? '1px #fde047' : '1px #d8b4fe',
+                    paintOrder: 'stroke fill'
+                  }}
+                >
+                  {card.specialEffect.value}
+                </div>
+              </div>
             </>
           )}
         </div>
