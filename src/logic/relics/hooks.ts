@@ -1,7 +1,6 @@
-
-import { withPriority, type RoundCompletionContext, type HandCompletionContext, type ScoreRowContext, type HandContext, type GameContext, type HandBustContext } from './types';
+import { withPriority, type ScoreRowContext, type HandContext, type GameContext, type HandCompletionContext, type RoundCompletionContext, type HandBustContext } from './types';
 import type { Card, HandScore } from '../../types';
-import { findMatches, POKER_ORDER, SCORING_RULES, RANK_VALUES } from '../rules';
+import { POKER_ORDER, RANK_VALUES } from '../rules';
 
 // Helpers
 const isFaceCard = (c: Card) => ['J', 'Q', 'K'].includes(c.rank);
@@ -236,9 +235,9 @@ const createSuitBonusHook = (suit: string) => ({
         let changed = false;
         const updatedCriteria = score.criteria.map(c => {
             const isChipCards = /^(rank|flush|straight|double_down)/.test(c.id);
-
-            if (isChipCards && c.cardIds && c.cardIds.length > 0) {
-                 const cards = context.handCards.filter(card => c.cardIds.includes(card.id));
+            const cardIds = c.cardIds;
+            if (isChipCards && cardIds && cardIds.length > 0) {
+                 const cards = context.handCards.filter(card => cardIds.includes(card.id));
                  const suitCount = cards.filter(card => card.suit.toLowerCase() === suit.toLowerCase()).length;
                  
                  if (suitCount > 0) {
@@ -389,11 +388,11 @@ export const Hooks = {
                 const ddCard = context.handCards.find(c => c.origin === 'double_down');
                 const cardChips = (chipCards && ddCard) ? RANK_VALUES[ddCard.rank] : 0;
                 const newCriteria = [...score.criteria, {
-                    id: 'double_down' as any,
-                    name: 'Double Down',
+                    id: config?.handType?.id || ('double_down' as any),
+                    name: config?.handType?.name || 'Double Down',
                     count: 1,
                     chips: cardChips,
-                    multiplier: 1,
+                    multiplier: config?.handType?.mult ?? 1,
                     cardIds: ddCard ? [ddCard.id] : []
                 }];
                 const totalChips = newCriteria.reduce((s, c) => s + c.chips, 0);
@@ -401,6 +400,11 @@ export const Hooks = {
                 return { ...score, criteria: newCriteria, totalChips, totalMultiplier: totalMult, finalScore: Math.floor(totalChips * totalMult) };
             }
             return score;
+        },
+        onScoreRow: async (context: ScoreRowContext, _relicState: any) => {
+            if (context.criterionId === 'double_down') {
+                await context.highlightRelic('double_down', { preDelay: 200 });
+            }
         }
     },
 

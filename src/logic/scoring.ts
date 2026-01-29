@@ -72,18 +72,6 @@ export function evaluateHandScore(cards: Card[], isWin: boolean, isDoubled: bool
     }
   }
 
-  // Double Down Bonus
-  if (isWin && isDoubled) {
-    initialScore.criteria.push({
-      id: 'double_down_bonus',
-      name: 'Double Down',
-      count: 1,
-      chips: 0,
-      multiplier: 1, // +1 Multiplier
-      cardIds: []
-    });
-    initialScore.totalMultiplier += 1;
-  }
 
   return RelicManager.executeValueHook('onEvaluateHandScore', initialScore, {
     inventory,

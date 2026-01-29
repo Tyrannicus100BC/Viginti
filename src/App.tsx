@@ -52,6 +52,7 @@ export default function App() {
         selectedDrawIndex,
         selectDrawnCard,
         discardPile,
+        dealsTaken,
 
         startGame,
         dealFirstHand,
@@ -205,7 +206,7 @@ export default function App() {
                 // Clear after animation
                 setTimeout(() => {
                     setDiscardingCards([]);
-                }, 500);
+                }, 350);
             }
         }
 
@@ -689,7 +690,7 @@ export default function App() {
                             <div className={styles.zoneLabel}>Dealer</div>
                             <div style={{ pointerEvents: 'none', position: 'relative' }}>
                                 <Hand
-                                    key={`dealer-${handsRemaining}`}
+                                    key={`dealer-${dealerHandProps.id}-${round}-${dealsTaken}`}
                                     hand={dealerHandProps}
                                     baseDelay={dealer.isRevealed ? 0 : 0.6}
                                     stagger={!dealer.isRevealed}
@@ -982,7 +983,7 @@ export default function App() {
                                     const canSelectHand = (showSelectionUI && drawnCards.length > 0) || interactionMode === 'double_down_select' || interactionMode === 'surrender_select';
                                     return (
                                         <Hand
-                                            key={`${hand.id}-${handsRemaining}`}
+                                            key={`${hand.id}`}
                                             hand={hand}
                                             canSelect={canSelectHand && !hand.isBust && !hand.isHeld && hand.blackjackValue !== 21}
                                             isSelected={false}

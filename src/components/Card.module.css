@@ -6,6 +6,7 @@
   -webkit-user-select: none;
   /* Ensure spacing if passed className affects this */
   position: relative; 
+  transform-style: preserve-3d;
 }
 
 .card {
@@ -37,8 +38,8 @@
   position: absolute;
   width: 100%;
   height: 100%;
-  /* backface-visibility: hidden; */
-  /* -webkit-backface-visibility: hidden; */
+  backface-visibility: visible;
+  -webkit-backface-visibility: visible;
   border-radius: 8px;
   display: flex;
   flex-direction: column;
@@ -213,11 +214,11 @@
     /* If Local X+ is now UP, we need Local X-. */
     0% {
       opacity: 0;
-      transform: translateX(-30px) rotateY(180deg) translateZ(0); 
+      transform: translateX(-30px) rotateY(179.9deg) translateZ(0); 
     }
     50% {
       opacity: 1;
-      transform: translateX(0) rotateY(180deg) translateZ(0);
+      transform: translateX(0) rotateY(179.9deg) translateZ(0);
     }
     50.01% {
       transform: translateX(0) rotateY(180deg) translateZ(0);
@@ -304,4 +305,15 @@
 /* Static states */
 .isFlipped {
     transform: rotateY(180deg);
+}
+
+.discarding .front {
+    animation: hideFrontDiscard 0.42s linear forwards;
+    animation-delay: inherit;
+}
+
+@keyframes hideFrontDiscard {
+    0% { visibility: visible; }
+    45% { visibility: hidden; }
+    100% { visibility: hidden; }
 }

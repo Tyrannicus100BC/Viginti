@@ -9,7 +9,9 @@ import { createPortal } from 'react-dom';
 import styles from './GiftShop.module.css';
 
 export const GiftShop: React.FC = () => {
-    const { comps, shopItems, buyShopItem, leaveShop, shopRewardSummary } = useGameStore();
+    const { comps, inventory, shopItems, buyShopItem, leaveShop, shopRewardSummary } = useGameStore();
+    const hasDoubleDownRelic = inventory.some(r => r.id === 'double_down');
+    const hasSurrenderRelic = inventory.some(r => r.id === 'surrender');
     const [hoveredItemId, setHoveredItemId] = useState<string | null>(null);
     const [hoveredCardPos, setHoveredCardPos] = useState<{ x: number, y: number, width: number } | null>(null);
     const [introStep, setIntroStep] = useState(0);
@@ -23,9 +25,16 @@ export const GiftShop: React.FC = () => {
             // Step 2: Deals
             setIntroStep(2);
             await new Promise(r => setTimeout(r, 1200)); // Slower
-            // Step 3: Surrender
-            setIntroStep(3);
-            await new Promise(r => setTimeout(r, 1200)); // Slower
+            // Step 3: Surrender (If owned)
+            if (hasSurrenderRelic) {
+                setIntroStep(3);
+                await new Promise(r => setTimeout(r, 1200));
+            }
+            // Step 3.5: Double Down (If owned)
+            if (hasDoubleDownRelic) {
+                setIntroStep(3.5);
+                await new Promise(r => setTimeout(r, 1200));
+            }
             // Step 4: Win
             setIntroStep(4);
             await new Promise(r => setTimeout(r, 2000)); // Hold full result
@@ -148,10 +157,17 @@ export const GiftShop: React.FC = () => {
                             </div>
                         )}
 
-                        {introStep >= 3 && shopRewardSummary && (
+                        {introStep >= 3 && shopRewardSummary && hasSurrenderRelic && (
                             <div className={styles.bonusLine}>
                                 <span className={styles.bonusLabel}>Surrenders Bonus</span>
                                 <span className={styles.bonusValue}>+₵{shopRewardSummary.surrenderBonus}</span>
+                            </div>
+                        )}
+
+                        {introStep >= 3.5 && shopRewardSummary && hasDoubleDownRelic && (
+                            <div className={styles.bonusLine}>
+                                <span className={styles.bonusLabel}>Double Down Bonus</span>
+                                <span className={styles.bonusValue}>+₵{shopRewardSummary.doubleDownBonus}</span>
                             </div>
                         )}
 
@@ -165,10 +181,6 @@ export const GiftShop: React.FC = () => {
                 </div>
             )}
 
-            <div className={styles.balanceDisplay}>
-                <span>₵{comps}</span>
-                <span style={{ fontSize: '0.8rem', color: '#aaa' }}>COMPS</span>
-            </div>
 
             <h1 className={styles.title}>CHOOSE YOUR REWARD</h1>
 

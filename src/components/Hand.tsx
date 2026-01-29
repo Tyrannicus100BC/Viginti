@@ -49,14 +49,14 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
   // Reset state when hand ID changes (new hand slot content)
   // Visual State for Cards (syncs with hand.cards but handles exit animations)
   // Store posIndex to lock position during discard
-  const [visualCards, setVisualCards] = useState<Array<{ card: any, isDiscarding: boolean, posIndex: number }>>([]);
+  const [visualCards, setVisualCards] = useState<Array<{ card: any, isDiscarding: boolean, posIndex: number, hasEntered: boolean }>>([]);
   const prevHandId = useRef(hand.id);
 
   // Sync hand.cards to visualCards
   useEffect(() => {
     // If hand ID changed, hard reset (new hand slot content)
     if (hand.id !== prevHandId.current) {
-        setVisualCards(hand.cards.map((c, i) => ({ card: c, isDiscarding: false, posIndex: i })));
+        setVisualCards(hand.cards.map((c, i) => ({ card: c, isDiscarding: false, posIndex: i, hasEntered: false })));
         prevHandId.current = hand.id;
         return;
     }
@@ -87,7 +87,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
                 // Determine posIndex. It should be the index in the NEW hand provided by props?
                 // Or sequential? 
                 // Using 'i' from hand.cards provides the target slot.
-                nextVisuals.push({ card: c, isDiscarding: false, posIndex: i });
+                nextVisuals.push({ card: c, isDiscarding: false, posIndex: i, hasEntered: false });
             } else {
                 // Ensure it's not marked discarding if it came back
                 if (nextVisuals[existingIdx].isDiscarding) {
@@ -96,6 +96,12 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
                 nextVisuals[existingIdx].card = c;
                 // Update posIndex to match current hand state (shift if needed)
                 nextVisuals[existingIdx].posIndex = i;
+                // Preserve existing hasEntered state (or default to true if undefined safety)
+                // We do NOT force true here, to allow animation to complete if rapid updates occur.
+                // The useEffect will handle setting it to true.
+                if (nextVisuals[existingIdx].hasEntered === undefined) {
+                     nextVisuals[existingIdx].hasEntered = true;
+                }
             }
         });
         
@@ -109,12 +115,50 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
       const discardingIndices = visualCards.map((vc, i) => vc.isDiscarding ? i : -1).filter(i => i !== -1);
       
       if (discardingIndices.length > 0) {
+          // Calculate max delay based on position in visual list (matching render logic)
+          // We use simple index-based staggering: idx * 0.1s
+          const maxIndex = Math.max(...discardingIndices);
+          const maxDelay = maxIndex * 100; // ms
+
           const timer = setTimeout(() => {
               setVisualCards(prev => prev.filter(vc => !vc.isDiscarding));
-          }, 500); // Animation duration
+          }, 550 + maxDelay); // Animation duration (0.42s) + buffer + stagger
           return () => clearTimeout(timer);
       }
   }, [visualCards]);
+
+  // Cleanup entering cards (Z-index layering fix)
+  // Automatically mark cards as "entered" after animation duration to drop their Z-index
+  useEffect(() => {
+     const enteringIds = visualCards
+        .filter(vc => !vc.hasEntered && !vc.isDiscarding)
+        .map(vc => vc.card.id);
+
+      if (enteringIds.length > 0) {
+          // Calculate max required delay
+          let maxDelayInSeconds = 0;
+          visualCards.forEach((vc, idx) => {
+             if (enteringIds.includes(vc.card.id)) {
+                 // Match logic in render: delay + stagger
+                 const cardDelay = (vc.card.origin === 'deck' ? baseDelay + (stagger ? idx * 0.5 : 0) : 0);
+                 if (cardDelay > maxDelayInSeconds) maxDelayInSeconds = cardDelay;
+             }
+          });
+
+          // Convert to ms and add animation duration buffer (600ms)
+          const timeoutDuration = (maxDelayInSeconds * 1000) + 600;
+
+          const timer = setTimeout(() => {
+              setVisualCards(prev => prev.map(vc => {
+                  if (enteringIds.includes(vc.card.id)) {
+                      return { ...vc, hasEntered: true };
+                  }
+                  return vc;
+              }));
+          }, timeoutDuration); 
+          return () => clearTimeout(timer);
+      }
+  }, [visualCards, baseDelay, stagger]);
 
   // Reset state when hand ID changes (new hand slot content)
   useEffect(() => {
@@ -129,6 +173,20 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
     setPulseScore(false);
     setIsScoreVisible(hand.id !== -1);
   }, [hand.id]);
+
+  // Reset animation state when hand score is cleared (new round with same hand ID)
+  useEffect(() => {
+    if (!hand.finalScore) {
+      setVisibleItems([]);
+      setVisibleChips([]);
+      setVisibleMults([]);
+      setActiveCriteriaIdx(null);
+      animationRef.current = false;
+      setRowValues({});
+      setActiveHighlightIds(null);
+      setPulseScore(false);
+    }
+  }, [hand.finalScore]);
 
   // Handle dealer score visibility delay
   useEffect(() => {
@@ -364,7 +422,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
       >
         <div className={`${styles.cardsContainer} ${showOverlay ? styles.tinted : ''}`}>
           <div className={styles.cards}>
-            {visualCards.map(({ card, isDiscarding, posIndex }, idx) => {
+            {visualCards.map(({ card, isDiscarding, posIndex, hasEntered }, idx) => {
               // const styles = require('./Hand.module.css').default; 
               
               // Use index relative to the FULL set for positioning continuity
@@ -395,7 +453,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
               const rotate = (posIndex - center) * 5;
               const translateY = Math.abs(posIndex - center) * 2;
 
-              const isDoubleCard = hand.isDoubled && idx === activeTotal - 1; // Approximation
+              const isDoubleCard = card.origin === 'double_down';
 
               // Determine highlighting first to use in placement
               const currentCrit = activeCriteriaIdx !== null ? hand.finalScore?.criteria[activeCriteriaIdx] : null;
@@ -421,6 +479,9 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
               const screenDx = isDoubleCard ? (startTxBase + 120) : (startTxBase + (card.animationOffset || 0));
               const screenDy = isDoubleCard ? -400 : -200;
 
+              // Discard Stagger Calculation
+              const discardDelay = isDiscarding ? (idx * 0.1) : 0;
+
               // Local Animation Coordinates (Correcting for Inner Rotation)
               // If Doubled, inner div is rotated 90deg clockwise.
               // Local X = Screen Y
@@ -444,10 +505,10 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
                     transformOrigin: '50% 250%',
                     '--rotate': `${wrapperRotate}deg`,
                     '--translateY': `${wrapperTranslateY}px`,
-                    zIndex: card.origin === 'draw_pile' ? 9 : idx
+                    zIndex: (isDiscarding || (!hasEntered && (card.origin === 'draw_pile' || card.origin === 'double_down'))) ? 100 : idx
                   } as any}
                 >
-                  <div className={isDiscarding ? styles.discardingCard : ''} style={{ width: '100%', height: '100%' }}>
+                  <div className={isDiscarding ? styles.discardingCard : ''} style={{ width: '100%', height: '100%', animationDelay: `${discardDelay}s` }}>
                   {isDoubleCard ? (
                     <div style={{
                       transform: shouldHighlight ? 'rotate(0deg)' : 'translateY(28px) rotate(90deg)',
@@ -460,25 +521,27 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
                     }}>
                       <PlayingCard
                         card={card}
-                        origin={card.origin}
-                         delay={card.origin === 'deck' ? baseDelay + (stagger ? idx * 0.5 : 0) : 0}
+                        origin={isDiscarding ? 'discard' : card.origin}
+                         delay={card.origin === 'deck' ? baseDelay + (stagger ? idx * 0.5 : 0) : discardDelay}
                         style={{
                           '--start-tx': `${animTx}px`,
                           '--start-ty': `${animTy}px`
                         } as React.CSSProperties}
                         suppressSpecialVisuals={hand.id === -1}
+                        suppressEnterAnimation={hasEntered}
                       />
                     </div>
                   ) : (
                     <PlayingCard
                       card={card}
-                      origin={card.origin}
-                      delay={card.origin === 'deck' ? baseDelay + (stagger ? idx * 0.5 : 0) : 0}
+                      origin={isDiscarding ? 'discard' : card.origin}
+                      delay={card.origin === 'deck' ? baseDelay + (stagger ? idx * 0.5 : 0) : discardDelay}
                       style={{
                         '--start-tx': `${screenDx}px`,
                         '--start-ty': `${screenDy}px`
                       } as React.CSSProperties}
                       suppressSpecialVisuals={hand.id === -1}
+                      suppressEnterAnimation={hasEntered}
                     />
                   )}
                   </div>

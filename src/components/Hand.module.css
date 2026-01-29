@@ -148,6 +148,7 @@
     margin-right: -60px;
     /* Overlap increased to tighten spacing */
     transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.3s ease;
+    transform-style: preserve-3d;
 }
 
 .cardWrapper:last-child {
@@ -167,7 +168,7 @@
     align-items: center;
     justify-content: center;
     pointer-events: none;
-    z-index: 10;
+    z-index: 120;
     transition: opacity 0.3s ease;
 }
 
@@ -482,18 +483,26 @@
 }
 
 @keyframes discardExitWrapper {
+    /* Phase 1: Flip to backside (0-80%, ~0.33s) */
     0% {
         opacity: 1;
-        transform: translateY(0);
+        transform: translateY(0) translateX(0) rotateZ(0deg) rotateY(0deg);
     }
+    80% {
+        opacity: 1;
+        transform: translateY(0) translateX(0) rotateZ(0deg) rotateY(180deg);
+    }
+    /* Phase 2: Translation and Fade (80-100%, ~0.09s) */
     100% {
         opacity: 0;
-        transform: translateY(50px);
+        transform: translateY(20px) translateX(13px) rotateZ(15deg) rotateY(180deg);
     }
 }
 
 .discardingCard {
-    animation: discardExitWrapper 0.5s ease-in forwards;
+    animation: discardExitWrapper 0.42s ease-out forwards;
     pointer-events: none;
     z-index: 5;
+    perspective: 1000px;
+    transform-style: preserve-3d;
 }

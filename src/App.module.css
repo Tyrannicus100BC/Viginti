@@ -230,6 +230,7 @@
     transition: all 0.5s ease;
     background: rgba(255, 255, 255, 0.02);
     opacity: 1;
+    transform-style: preserve-3d;
 }
 
 .selectedSpot {
@@ -239,20 +240,27 @@
 }
 
 @keyframes discardExitWrapper {
+    /* Phase 1: Flip to backside (0-80%, ~0.24s) */
     0% {
         opacity: 1;
-        transform: translate(calc(-50% + var(--startX, 0px)), -50%);
+        transform: translate(calc(-50% + var(--startX, 0px)), -50%) rotateZ(0deg) rotateY(0deg);
     }
-
+    80% {
+        opacity: 1;
+        transform: translate(calc(-50% + var(--startX, 0px)), -50%) rotateZ(0deg) rotateY(180deg);
+    }
+    /* Phase 2: Diagonal translation with rotation (80-100%, ~0.06s) */
     100% {
         opacity: 0;
-        transform: translate(calc(-50% + var(--startX, 0px)), calc(-50% + 50px));
+        transform: translate(calc(-50% + var(--startX, 0px) + 8px), calc(-50% + 14px)) rotateZ(10deg) rotateY(180deg);
     }
 }
 
 .discardingCard {
-    animation: discardExitWrapper 0.5s ease-in forwards;
+    animation: discardExitWrapper 0.3s ease-in forwards;
     pointer-events: none;
+    perspective: 1000px;
+    transform-style: preserve-3d;
     /* Ensure no other transforms conflict */
     /* The internal card might be flipped or not, we need to ensure it's face up? User said "don't want the card to flip". */
     /* If the card internal state was FaceUp, it should be fine. If it was re-mounting, it might trigger entry animation? */

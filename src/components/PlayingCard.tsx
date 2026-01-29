@@ -12,6 +12,7 @@ interface CardProps {
   delay?: number; // seconds
   style?: React.CSSProperties;
   suppressSpecialVisuals?: boolean;
+  suppressEnterAnimation?: boolean;
 }
 
 const SUIT_ICONS: Record<string, string> = {
@@ -29,10 +30,12 @@ export const PlayingCard: React.FC<CardProps> = ({
   origin = 'none',
   delay = 0,
   style = {},
-  suppressSpecialVisuals = false
+  suppressSpecialVisuals = false,
+  suppressEnterAnimation = false
 }) => {
-  const [animClass, setAnimClass] = useState(() => {
-    // Determine initial animation class synchronously to prevent flicker/paint before animation
+  // Determine animation class directly from props to handle dynamic changes (e.g. origin changing to 'discard')
+  const getAnimClass = () => {
+    if (suppressEnterAnimation) return '';
     if (origin === 'deck') {
       return card.isFaceUp ? styles.animDealAndFlip : styles.animDealFaceDown;
     } else if (origin === 'draw_pile') {
@@ -43,11 +46,9 @@ export const PlayingCard: React.FC<CardProps> = ({
       return styles.animReset;
     }
     return '';
-  });
-
-  const handleAnimationEnd = () => {
-    setAnimClass(''); // Clear animation class to allow standard transitions to take over
   };
+
+  const animClass = getAnimClass();
 
   const isRed = card.suit === 'hearts' || card.suit === 'diamonds';
 
@@ -73,9 +74,9 @@ export const PlayingCard: React.FC<CardProps> = ({
             ${styles.card} 
             ${!card.isFaceUp ? styles.isFlipped : ''} 
             ${animClass}
+            ${origin === 'discard' ? styles.discarding : ''}
         `}
         style={{ animationDelay: `${delay}s` }}
-        onAnimationEnd={handleAnimationEnd}
       >
         {/* Front */}
         <div className={`${styles.face} ${styles.front} ${isRed ? styles.red : styles.black}`}

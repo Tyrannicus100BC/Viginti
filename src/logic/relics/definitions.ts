@@ -187,7 +187,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
         name: 'Double Down',
         categories: ['Charm', 'Action'],
         description: 'Double Down earns {hand.score}',
-        handType: { id: 'double_down', name: 'Double Down', chips: 0, mult: 2, order: 1.5 },
+        handType: { id: 'double_down', name: 'Double Down', chips: 0, mult: 1, order: 1.5 },
         hooks: Hooks.double_down_relic,
         icon: '⏬'
     },

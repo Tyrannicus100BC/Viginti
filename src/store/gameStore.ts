@@ -39,7 +39,7 @@ interface GameState {
     // Aggregated Scoring State
     runningSummary: { chips: number; mult: number } | null;
     roundSummary: { totalChips: number; totalMult: number; finalScore: number } | null;
-    shopRewardSummary: { dealsBonus: number; surrenderBonus: number; winBonus: number; total: number } | null;
+    shopRewardSummary: { dealsBonus: number; doubleDownBonus: number; surrenderBonus: number; winBonus: number; total: number } | null;
     discardPile: Card[];
     inventory: RelicInstance[];
     activeRelicId: string | null;
@@ -1166,12 +1166,14 @@ export const useGameStore = create<GameState>((set, get) => ({
             // GO TO GIFT SHOP PHASE
 
             // Calculate Rewards
-            const { surrenders, handsRemaining, comps, inventory } = currentState;
+            const { surrenders, doubleDownCharges, handsRemaining, comps, inventory } = currentState;
             const dealsBonus = handsRemaining * 2;
+            const hasDoubleDownRelic = inventory.some(r => r.id === 'double_down');
+            const doubleDownBonus = hasDoubleDownRelic ? (doubleDownCharges * 1) : 0;
             const hasSurrenderRelic = inventory.some(r => r.id === 'surrender');
             const surrenderBonus = hasSurrenderRelic ? (surrenders * 1) : 0;
             const winBonus = 2;
-            const totalBonus = dealsBonus + surrenderBonus + winBonus;
+            const totalBonus = dealsBonus + doubleDownBonus + surrenderBonus + winBonus;
 
             set({ comps: comps + totalBonus });
 
@@ -1244,7 +1246,7 @@ export const useGameStore = create<GameState>((set, get) => ({
                 shopItems: newShopItems,
                 phase: 'gift_shop',
                 dealerVisible: false,
-                shopRewardSummary: { dealsBonus, surrenderBonus, winBonus, total: totalBonus }
+                shopRewardSummary: { dealsBonus, doubleDownBonus, surrenderBonus, winBonus, total: totalBonus }
             });
             return;
         }
