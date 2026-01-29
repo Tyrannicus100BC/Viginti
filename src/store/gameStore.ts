@@ -569,8 +569,32 @@ export const useGameStore = create<GameState>((set, get) => ({
         // Wait helper for animations inside hooks if needed
         const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-        // Wait for card placement animation to complete (0.6s)
-        await wait(600);
+        // Pre-Hook Check: Do we need to wait for the animation?
+        const checkContext = {
+            inventory: get().inventory,
+            handId: handIndex,
+            placedCard: cardToPlace,
+            handCards: placedHandInitial.cards,
+            blackjackValue: placedHandInitial.blackjackValue,
+            // These methods aren't needed for the check, but providing stubs/refs to satisfy type if needed, 
+            // though types.ts says context is CardPlacedContext.
+            // Actually, CardPlacedContext has highlightRelic etc. 
+            // We'll trust the check hook doesn't call them, or we mock them.
+            // To be safe, providing minimal context since check is synchronous and shouldn't effect state.
+            modifyHand: () => {}, 
+            highlightRelic: async () => {},
+            revealDealerHiddenCard: () => {}
+        };
+
+        const shouldWait = RelicManager.executeCheckHook('onCheckCardPlace', checkContext as any); // Cast as needed if strict
+
+        // Wait for card placement animation to complete (0.6s) ONLY if a relic is interested
+        if (shouldWait) {
+            await wait(600);
+        } else {
+            // Small microtask yield just in case, but essentially instant
+            await wait(0);
+        }
 
         await RelicManager.executeInterruptHook('onCardPlaced', {
             inventory: get().inventory,

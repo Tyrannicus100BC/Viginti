@@ -745,6 +745,10 @@ export const Hooks = {
         getDrawCount: (val: number, _context: GameContext, relicState: any) => val + relicState.extra_draws
     },
     redemption_bust_bonus: {
+        onCheckCardPlace: (context: any, _relicState: any, _config: any) => {
+            // Always wait on bust for Redemption (Second Chance) so player sees the bust before the rescue
+            return context.blackjackValue > 21;
+        },
         onHandBust: async (_context: HandBustContext, relicState: any, _config: any) => {
             relicState.pending_bonus = true;
         },
@@ -779,6 +783,10 @@ export const Hooks = {
     safety_net_20: {
         onRoundCompletion: async (_context: RoundCompletionContext, relicState: any, _config: any) => {
              relicState.armed = false; // Reset per round
+        },
+        onCheckCardPlace: (context: any, relicState: any, _config: any) => {
+            // Wait if we are about to hit 20 and not yet armed
+            return !relicState.armed && context.blackjackValue === 20;
         },
         onCardPlaced: async (context: any, relicState: any, _config: any) => {
             if (!relicState.armed && context.blackjackValue === 20) {
@@ -828,6 +836,10 @@ export const Hooks = {
          onRoundCompletion: async (_context: RoundCompletionContext, relicState: any, _config: any) => {
              relicState.used_this_round = false;
         },
+        onCheckCardPlace: (context: any, relicState: any, _config: any) => {
+             // Wait if we are busting and haven't used mulligan yet
+             return !relicState.used_this_round && context.blackjackValue > 21;
+        },
         onHandBust: async (context: HandBustContext, relicState: any, _config: any) => {
             if (!relicState.used_this_round) {
                 // Wait for BUST animation is handled by caller (usually) or we can wait here?
@@ -856,6 +868,10 @@ export const Hooks = {
     spyglass_13: {
         onRoundCompletion: async (_context: RoundCompletionContext, relicState: any, _config: any) => {
              relicState.used_this_round = false;
+        },
+        onCheckCardPlace: (context: any, relicState: any, _config: any) => {
+             // Wait if we are at 13 and haven't used spyglass yet
+             return !relicState.used_this_round && context.blackjackValue === 13;
         },
         onCardPlaced: async (context: any, relicState: any, _config: any) => {
             if (!relicState.used_this_round && context.blackjackValue === 13) {

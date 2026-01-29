@@ -121,4 +121,33 @@ export class RelicManager {
             }
         }
     }
+
+    // Execute check hooks (Sync, boolean, OR-logic)
+    static executeCheckHook<C extends GameContext>(
+        hookName: keyof RelicHooks,
+        context: C
+    ): boolean {
+        const { inventory } = context;
+        let shouldInterrupt = false;
+
+        for (const instance of inventory) {
+             const config = RELIC_REGISTRY[instance.id];
+             if (!config || !config.hooks[hookName]) continue;
+
+             const rawHook = config.hooks[hookName];
+             const normalized = normalizeHook(rawHook as any);
+             
+             try {
+                // If ANY relic returns true, we need to interrupt
+                if (normalized.handler(context, instance.state, config)) {
+                    shouldInterrupt = true;
+                    // We can break early if we just need to know "if any"
+                    break; 
+                }
+             } catch (e) {
+                 console.error(`Error in check relic hook ${hookName} for relic ${instance.id}:`, e);
+             }
+        }
+        return shouldInterrupt;
+    }
 }

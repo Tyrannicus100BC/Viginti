@@ -113,6 +113,9 @@ export type RelicHooks = {
     adjustBlackjackScore?: ValueHook<(value: number, context: { handCards: Card[] }, relicState: any, config: RelicConfig) => number>;
     onEvaluateHandScore?: ValueHook<(score: HandScore, context: HandContext, relicState: any, config: RelicConfig) => HandScore>;
     
+    // Check Hooks (Synchronous, returns boolean)
+    onCheckCardPlace?: ValueHook<(context: CardPlacedContext, relicState: any, config: RelicConfig) => boolean>;
+    
     // Interrupt Hooks (Async, can pause flow)
     onCardPlaced?: ValueHook<(context: CardPlacedContext, relicState: any, config: RelicConfig) => Promise<void>>;
     onScoreRow?: ValueHook<(context: ScoreRowContext, relicState: any, config: RelicConfig) => Promise<void>>;
