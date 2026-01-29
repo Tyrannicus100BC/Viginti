@@ -94,7 +94,11 @@ export default function App() {
         surrenders,
         startSurrender,
         cancelSurrender,
-        surrenderHand
+        surrenderHand,
+
+        // Debug Functions
+        debugFillDoubleDown,
+        debugFillSurrender
     } = useGameStore();
 
     const { viewportWidth, viewportHeight } = useLayout();
@@ -856,6 +860,52 @@ export default function App() {
                                             />
                                         </div>
                                     ))}
+
+                                    {/* Debug Charge Buttons - Above Double Down and Surrender */}
+                                    {debugEnabled && (
+                                        <>
+                                            {/* Surrender Charge Button (Left) */}
+                                            {hasSurrenderRelic && (
+                                                <button 
+                                                    className={`${styles.subtleDebugBtn} ${styles.debugFade} ${isDrawAreaVisible ? styles.debugVisible : styles.debugHidden}`}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        debugFillSurrender();
+                                                    }}
+                                                    style={{
+                                                        position: 'absolute',
+                                                        left: '50%',
+                                                        top: -40,
+                                                        transform: `translate(calc(-50% - ${buttonOffset}px), 0)`,
+                                                        width: '100px',
+                                                        zIndex: 10
+                                                    }}
+                                                >
+                                                    CHARGE
+                                                </button>
+                                            )}
+                                            {/* Double Down Charge Button (Right) */}
+                                            {hasDoubleDownRelic && (
+                                                <button 
+                                                    className={`${styles.subtleDebugBtn} ${styles.debugFade} ${isDrawAreaVisible ? styles.debugVisible : styles.debugHidden}`}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        debugFillDoubleDown();
+                                                    }}
+                                                    style={{
+                                                        position: 'absolute',
+                                                        left: '50%',
+                                                        top: -40,
+                                                        transform: `translate(calc(-50% + ${buttonOffset}px), 0)`,
+                                                        width: '100px',
+                                                        zIndex: 10
+                                                    }}
+                                                >
+                                                    CHARGE
+                                                </button>
+                                            )}
+                                        </>
+                                    )}
 
                                     {/* Double Down Button - Moved to Draw Area */}
                                     {(phase === 'playing' && !dealer.isRevealed && !isInitialDeal && hasDoubleDownRelic) && (

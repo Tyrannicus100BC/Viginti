@@ -93,6 +93,8 @@ interface GameState {
     triggerScoringRow: (chips: number, mult: number) => void;
     debugWin: () => Promise<void>;
     debugUndo: () => void;
+    debugFillDoubleDown: () => void;
+    debugFillSurrender: () => void;
     drawSpecificCard: (cardId: string) => void;
     addRelic: (relicId: string) => void;
     removeRelic: (relicId: string) => void;
@@ -1352,6 +1354,14 @@ export const useGameStore = create<GameState>((set, get) => ({
             modifiers: { drawCountMod: 0, placeCountMod: 0 }, // Reset just in case
             deck: [...deck, ...cardsToReturn]
         });
+    },
+
+    debugFillDoubleDown: () => {
+        set({ doubleDownCharges: 3 });
+    },
+
+    debugFillSurrender: () => {
+        set({ surrenders: 3 });
     },
 
     drawSpecificCard: (cardId: string) => {
