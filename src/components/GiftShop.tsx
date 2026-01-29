@@ -2,21 +2,17 @@ import React, { useState } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { RelicManager } from '../logic/relics/manager';
 import { PlayingCard } from './PlayingCard';
-import { TransparentImage } from './TransparentImage';
 import { RelicTooltip } from './RelicTooltip';
 import { BonusPhysics } from './BonusPhysics';
+import { useLayout } from './ResponsiveLayout';
+import { createPortal } from 'react-dom';
 import styles from './GiftShop.module.css';
 
 export const GiftShop: React.FC = () => {
     const { comps, shopItems, buyShopItem, leaveShop, shopRewardSummary } = useGameStore();
     const [hoveredItemId, setHoveredItemId] = useState<string | null>(null);
+    const [hoveredCardPos, setHoveredCardPos] = useState<{ x: number, y: number, width: number } | null>(null);
     const [introStep, setIntroStep] = useState(0);
-    // 0: Init
-    // 1: "CASINO CLEARED"
-    // 2: Deals Bonus
-    // 3: Surrender Bonus
-    // 4: Win Bonus
-    // 5: Complete/Shop
 
     React.useEffect(() => {
         // Start sequence
@@ -48,12 +44,14 @@ export const GiftShop: React.FC = () => {
         }
     }, [shopRewardSummary]);
 
+    const { viewportWidth, scale } = useLayout();
+
     // Helper to get tooltip content for an item
     const renderTooltip = (item: typeof shopItems[0]) => {
         if (item.type === 'Card' && item.card) {
             if (item.card.specialEffect) {
                 const { type, value } = item.card.specialEffect;
-                const desc = `Special Card:\n${type === 'chip' ? `+${value} Chips` : type === 'mult' ? `x${value} Mult` : `-${value} Target`}`;
+                const desc = `Special Card:\n${type === 'chip' ? `+${value} Chips` : type === 'mult' ? `x${value} Mult` : `-${value} Debt`}`;
                 return (
                     <div className={styles.tooltipContainer}>
                         <div className={styles.tooltipTitle}>Enhanced Card</div>
@@ -61,29 +59,66 @@ export const GiftShop: React.FC = () => {
                     </div>
                 );
             }
-            return null; // No tooltip for standard cards unless we want flavor text
+            return null; // Return null for standard cards - portal will check this
         } else {
             // Relic
             const config = RelicManager.getRelicConfig(item.id);
             if (!config) return null;
 
-            // Re-use RelicTooltip component but maybe styled slightly differently if needed
-            // Or just inline the structure if RelicTooltip is too specific to the sidebar
-            // Let's rely on standard RelicTooltip logic but render it cleanly
-
             return (
                 <div className={styles.tooltipWrapper}>
                     <RelicTooltip
-                        relic={{
-                            ...config,
-                            // state: config.properties || {} // RelicTooltip uses config.properties directly if available
-                        }}
-                        hideIcon={true} // We already show icon in card
+                        relic={config}
+                        displayValues={config.properties}
+                        hideIcon={false}
+                        isFlexible={true}
                         className={styles.shopTooltip}
                     />
                 </div>
             );
         }
+    };
+
+    const renderTooltipPortal = (item: typeof shopItems[0]) => {
+        if (!hoveredCardPos) return null;
+
+        const portalRoot = document.getElementById('tooltip-portal-root');
+        if (!portalRoot) return null;
+
+        const content = renderTooltip(item);
+        if (!content) return null; // Suppress empty tooltips
+
+        // Calculate shiftX to keep on screen
+        const cardCenterX = hoveredCardPos.x + (hoveredCardPos.width / 2);
+        
+        // Tooltip max-width is 380px
+        const maxTooltipWidth = 380;
+        const halfTooltip = maxTooltipWidth / 2;
+        
+        let shiftX = 0;
+        if (cardCenterX - halfTooltip < 10) {
+            shiftX = 10 - (cardCenterX - halfTooltip);
+        } else if (cardCenterX + halfTooltip > viewportWidth - 10) {
+            shiftX = (viewportWidth - 10) - (cardCenterX + halfTooltip);
+        }
+
+        return createPortal(
+            <div 
+                className={styles.hoverOverlay}
+                style={{ 
+                    position: 'absolute',
+                    left: cardCenterX,
+                    top: hoveredCardPos.y - 25, // Increased offset to float higher above the card
+                    bottom: 'auto',
+                    pointerEvents: 'none',
+                    // @ts-ignore
+                    '--shift-x': `${shiftX}px` 
+                }}
+            >
+                {content}
+            </div>,
+            portalRoot
+        );
     };
 
     return (
@@ -109,21 +144,21 @@ export const GiftShop: React.FC = () => {
                         {introStep >= 2 && shopRewardSummary && (
                             <div className={styles.bonusLine}>
                                 <span className={styles.bonusLabel}>Deals Bonus</span>
-                                <span className={styles.bonusValue}>+${shopRewardSummary.dealsBonus}</span>
+                                <span className={styles.bonusValue}>+₵{shopRewardSummary.dealsBonus}</span>
                             </div>
                         )}
 
                         {introStep >= 3 && shopRewardSummary && (
                             <div className={styles.bonusLine}>
                                 <span className={styles.bonusLabel}>Surrenders Bonus</span>
-                                <span className={styles.bonusValue}>+${shopRewardSummary.surrenderBonus}</span>
+                                <span className={styles.bonusValue}>+₵{shopRewardSummary.surrenderBonus}</span>
                             </div>
                         )}
 
                         {introStep >= 4 && shopRewardSummary && (
                             <div className={styles.bonusLine}>
                                 <span className={styles.bonusLabel}>Win Bonus</span>
-                                <span className={styles.bonusValue}>+${shopRewardSummary.winBonus}</span>
+                                <span className={styles.bonusValue}>+₵{shopRewardSummary.winBonus}</span>
                             </div>
                         )}
                     </div>
@@ -131,7 +166,7 @@ export const GiftShop: React.FC = () => {
             )}
 
             <div className={styles.balanceDisplay}>
-                <span>${comps}</span>
+                <span>₵{comps}</span>
                 <span style={{ fontSize: '0.8rem', color: '#aaa' }}>COMPS</span>
             </div>
 
@@ -163,11 +198,15 @@ export const GiftShop: React.FC = () => {
                             styleClass = item.type === 'Angle' ? styles.cardTypeAngle : styles.cardTypeCharm;
 
                             if (config.icon) {
-                                content = (
-                                    <div style={{ width: 100, height: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                        <TransparentImage src={config.icon} threshold={200} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                                    </div>
-                                );
+                                if (config.icon.includes('.') || config.icon.includes('/')) {
+                                    content = (
+                                        <div style={{ width: 100, height: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', overflow: 'hidden' }}>
+                                            <img src={config.icon} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                        </div>
+                                    );
+                                } else {
+                                    content = <div style={{ fontSize: '4rem', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 100, height: 100 }}>{config.icon}</div>;
+                                }
                             } else {
                                 content = <div style={{ fontSize: '3rem' }}>{item.type === 'Angle' ? '📐' : '🧿'}</div>;
                             }
@@ -183,8 +222,24 @@ export const GiftShop: React.FC = () => {
                                     buyShopItem(item.id);
                                 }
                             }}
-                            onMouseEnter={() => setHoveredItemId(item.id)}
-                            onMouseLeave={() => setHoveredItemId(null)}
+                            onMouseEnter={(e) => {
+                                setHoveredItemId(item.id);
+                                // Calculate position relative to game board
+                                const wrapper = document.getElementById('game-scale-wrapper');
+                                if (wrapper) {
+                                    const wrapperRect = wrapper.getBoundingClientRect();
+                                    const cardRect = e.currentTarget.getBoundingClientRect();
+                                    setHoveredCardPos({
+                                        x: (cardRect.left - wrapperRect.left) / scale,
+                                        y: (cardRect.top - wrapperRect.top) / scale,
+                                        width: cardRect.width / scale
+                                    });
+                                }
+                            }}
+                            onMouseLeave={() => {
+                                setHoveredItemId(null);
+                                setHoveredCardPos(null);
+                            }}
                         >
                             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
                                 {content}
@@ -197,16 +252,12 @@ export const GiftShop: React.FC = () => {
                                 </div>
                             ) : (
                                 <div className={styles.costContainer}>
-                                    <span className={styles.costValue}>${cost}</span>
+                                    <span className={styles.costValue}>₵{cost}</span>
                                 </div>
                             )}
 
-                            {/* Tooltip Overlay */}
-                            {hoveredItemId === item.id && (
-                                <div className={styles.hoverOverlay}>
-                                    {renderTooltip(item)}
-                                </div>
-                            )}
+                            {/* Tooltip via Portal */}
+                            {hoveredItemId === item.id && renderTooltipPortal(item)}
                         </div>
                     );
                 })}

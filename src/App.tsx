@@ -79,6 +79,7 @@ export default function App() {
         isDealerPlaying,
         debugEnabled,
         toggleDebug,
+        triggerDebugChips,
         removeCard,
         enhanceCard,
         leaveShop,
@@ -103,6 +104,7 @@ export default function App() {
     const { viewportWidth, viewportHeight } = useLayout();
 
     const hasDoubleDownRelic = inventory.some(r => r.id === 'double_down');
+    const hasSurrenderRelic = inventory.some(r => r.id === 'surrender');
 
     const [showDeck, setShowDeck] = useState(false);
     const [isRemovingCards, setIsRemovingCards] = useState(false);
@@ -249,25 +251,16 @@ export default function App() {
     React.useEffect(() => {
         // Target Reduction Animation
         // When totalScore changes, valid remaining decreases.
-        // We want to: 1) Trigger Animation (White/Big) 2) Wait 3) Update Display Value 4) Restore Animation
         const actualRemaining = Math.max(0, targetScore - totalScore);
 
         if (actualRemaining !== delayedRemainingTarget) {
-            // Trigger Expand/White
+            // Update value and trigger pulse animation immediately
+            setDelayedRemainingTarget(actualRemaining);
             setTargetAnimate(true);
 
             const timer = setTimeout(() => {
-                // Update Value
-                setDelayedRemainingTarget(actualRemaining);
-
-                // Reset Animation (small delay after value change or immediate? Request said "then subtract and have it return")
-                // Usually "subtract" happens visibly. So value changes while big.
-                // Let's hold it big for a moment? 
-                setTimeout(() => {
-                    setTargetAnimate(false);
-                }, 200); // 200ms hold after value change
-
-            }, 400); // 400ms delay before value update
+                setTargetAnimate(false);
+            }, 500); // Match dealDecrement animation duration (0.5s)
 
             return () => {
                 clearTimeout(timer);
@@ -504,6 +497,24 @@ export default function App() {
     // Calculate stable center X
     const centerX = viewportWidth / 2;
 
+    // Calculate Button Positions relative to Draw Area
+    // Draw spots are 100px wide, spaced 120px apart.
+    // The play area width extends from center to: ((count - 1) / 2) * 120 + 50
+    const drawCountVal = Math.max(drawnCards.length, visualDrawCount);
+    const playAreaHalfWidth = ((drawCountVal - 1) / 2) * 120 + 50;
+    
+    // User requested doubling the spacing (80 -> 160)
+    // But constrained to 800px board width (half-width 400px)
+    const desiredSpacing = 160; 
+    const buttonHalfWidth = 60; // Button is 120px wide
+    const maxBoardHalfWidth = 400;
+    
+    const targetOffset = playAreaHalfWidth + desiredSpacing + buttonHalfWidth;
+    const maxOffset = maxBoardHalfWidth - buttonHalfWidth;
+    
+    // Compromise spacing if needed to fit in board
+    const buttonOffset = Math.min(targetOffset, maxOffset);
+
     return (
         <div
             className={`${styles.container} ${isShaking ? 'shake-screen red-tint' : ''}`}
@@ -519,13 +530,33 @@ export default function App() {
                     className={`${styles.header} ${isOverlayMode ? styles.headerCentered : ''} ${(isOverlayMode && round === 1 && !hasSettledFirstOverlay) ? styles.noTransition : ''}`}
                     style={isOverlayMode ? { top: 460 } : {}}
                 >
+                    {debugEnabled && !isOverlayMode && (
+                        <button 
+                            className={`${styles.manageDebugBtn} ${styles.debugFade}`}
+                            style={{
+                                position: 'absolute',
+                                top: 16,
+                                left: '50%',
+                                transform: 'translate(-50%, -50%)',
+                                width: 'auto',
+                                padding: '4px 12px',
+                                zIndex: 100
+                            }}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                triggerDebugChips();
+                            }}
+                        >
+                            CASH
+                        </button>
+                    )}
                     <div className={styles.stat}>
                         <span className={styles.statLabel}>Casino</span>
                         <span key={displayRound} className={`${styles.statValue} ${roundAnimate ? styles.statValueAnimate : ''}`}>{displayRound}</span>
                     </div>
                     <div className={styles.stat}>
-                        <span className={styles.statLabel}>Target</span>
-                        <span key={displayTarget} className={`${styles.statValue} ${targetAnimate ? styles.statValueAnimate : ''}`} style={targetAnimate ? { color: '#fff', transform: 'scale(1.3)' } : {}}>
+                        <span className={styles.statLabel}>Debt</span>
+                        <span key={displayTarget} className={`${styles.statValue} ${targetAnimate ? styles.statValueAnimate : ''}`}>
                             {"$" + delayedRemainingTarget.toLocaleString()}
                         </span>
                     </div>
@@ -535,7 +566,9 @@ export default function App() {
                     </div>
                     <div className={styles.stat}>
                         <span className={styles.statLabel}>Comps</span>
-                        <span key={displayComps} className={`${styles.statValue} ${compsAnimate ? styles.statValueAnimate : ''}`}>{displayComps}</span>
+                        <span key={displayComps} className={`${styles.statValue} ${compsAnimate ? styles.statValueAnimate : ''}`}>
+                            ₵{displayComps}
+                        </span>
                     </div>
                 </header>
 
@@ -815,7 +848,9 @@ export default function App() {
                                                 left: '50%',
                                                 top: '50%',
                                                 transform: `translate(calc(-50% + ${offset}px), -50%)`,
-                                                zIndex: 5
+                                                zIndex: 5,
+                                                // @ts-ignore
+                                                '--startX': `${offset}px`
                                             }}
                                         >
                                             <PlayingCard
@@ -825,20 +860,66 @@ export default function App() {
                                             />
                                         </div>
                                     ))}
+
+                                    {/* Double Down Button - Moved to Draw Area */}
+                                    {(phase === 'playing' && !dealer.isRevealed && !isInitialDeal && hasDoubleDownRelic) && (
+                                        <DoubleDownButton
+                                            charges={doubleDownCharges}
+                                            isActive={canDoubleDown}
+                                            isSelectionMode={interactionMode === 'double_down_select'}
+                                            hasSelectedHands={selectedDoubleDownHands.length > 0}
+                                            onClick={() => {
+                                                if (interactionMode === 'double_down_select') {
+                                                    executeDoubleDown();
+                                                } else {
+                                                    startDoubleDown();
+                                                }
+                                            }}
+                                            onCancel={cancelDoubleDown}
+                                            style={{
+                                                left: '50%',
+                                                top: '50%',
+                                                transform: `translate(calc(-50% + ${buttonOffset}px), -50%)`
+                                            }}
+                                        />
+                                    )}
+
+                                    {/* Surrender Button - Moved to Draw Area */}
+                                    {(phase === 'playing' && !dealer.isRevealed && !isInitialDeal && hasSurrenderRelic) && (
+                                        <SurrenderButton
+                                            surrenders={surrenders}
+                                            isActive={canSurrender}
+                                            isSelectionMode={interactionMode === 'surrender_select'}
+                                            hasSelectedHands={selectedSurrenderHand !== null}
+                                            onClick={() => {
+                                                if (interactionMode === 'surrender_select') {
+                                                    confirmSurrender();
+                                                } else {
+                                                    startSurrender();
+                                                }
+                                            }}
+                                            onCancel={cancelSurrender}
+                                            style={{
+                                                left: '50%',
+                                                top: '50%',
+                                                transform: `translate(calc(-50% - ${buttonOffset}px), -50%)`
+                                            }}
+                                        />
+                                    )}
                                 </div>
                                 <div className={styles.infoTextContainer}>
                                     <div className={`${styles.instructions} ${showSelectionUI && drawnCards.some(c => c !== null) ? styles.textVisible : ''}`}>
-                                        PLACE CARD
+                                        {getProjectedPlaceCount() - cardsPlacedThisTurn > 1 ? `PLACE ${getProjectedPlaceCount() - cardsPlacedThisTurn} CARDS` : 'PLACE CARD'}
                                     </div>
-                                    <div
-                                        className={`${styles.instructions} ${interactionMode === 'double_down_select' ? styles.textVisible : ''}`}
+                                    <div 
+                                        className={`${styles.instructions} ${interactionMode === 'double_down_select' ? styles.textVisible : ''}`} 
                                         style={{ color: '#ffd700' }}
                                     >
                                         Select hand to Double Down
                                     </div>
-                                    <div
-                                        className={`${styles.instructions} ${interactionMode === 'surrender_select' ? styles.textVisible : ''}`}
-                                        style={{ color: '#ff4444' }}
+                                    <div 
+                                        className={`${styles.instructions} ${interactionMode === 'surrender_select' ? styles.textVisible : ''}`} 
+                                        style={{ color: '#ffffff' }}
                                     >
                                         Select hand to Surrender
                                     </div>
@@ -849,7 +930,7 @@ export default function App() {
                             </div>
                         </div>
 
-                        <div className={styles.playerZone} style={{ opacity: areHandsVisible ? 1 : 0, transition: 'opacity 0.5s', pointerEvents: areHandsVisible ? 'auto' : 'none' }}>
+                    <div className={styles.playerZone} style={{ opacity: areHandsVisible ? 1 : 0, transition: 'opacity 0.5s', pointerEvents: areHandsVisible ? 'auto' : 'none' }}>
                             <div className={styles.playerHandsContainer}>
                                 {playerHands.map((hand, idx) => {
                                     const canSelectHand = (showSelectionUI && drawnCards.length > 0) || interactionMode === 'double_down_select' || interactionMode === 'surrender_select';
@@ -873,86 +954,12 @@ export default function App() {
                                     );
                                 })}
 
-                                {/* Render discarding cards */}
-                                {discardingCards.map(({ card, offset, index }) => (
-                                    <div
-                                        key={`discard-${index}`}
-                                        className={`${styles.drawnCardSpot} ${styles.discardingCard}`}
-                                        style={{
-                                            position: 'absolute',
-                                            left: '50%',
-                                            top: '50%',
-                                            transform: `translate(calc(-50% + ${offset}px), -50%)`,
-                                            zIndex: 5,
-                                            // @ts-ignore
-                                            '--startX': `${offset}px`
-                                        }}
-                                   >
-                                         <PlayingCard 
-                                            card={card} 
-                                            isDrawn 
-                                            origin="discard"
-                                        />
-                                    </div>
-                                ))}
+
                             </div>
 
-                            {/* Double Down Button */}
-                            {(phase === 'playing' && !dealer.isRevealed && !isInitialDeal && hasDoubleDownRelic) && (
-                                <DoubleDownButton
-                                    charges={doubleDownCharges}
-                                    isActive={canDoubleDown}
-                                    isSelectionMode={interactionMode === 'double_down_select'}
-                                    hasSelectedHands={selectedDoubleDownHands.length > 0}
-                                    onClick={() => {
-                                        if (interactionMode === 'double_down_select') {
-                                            executeDoubleDown();
-                                        } else {
-                                            startDoubleDown();
-                                        }
-                                    }}
-                                    onCancel={cancelDoubleDown}
-                                />
-                            )}
 
-                            {/* Surrender Button */}
-                            {(phase === 'playing' && !dealer.isRevealed && !isInitialDeal) && (
-                                <SurrenderButton
-                                    surrenders={surrenders}
-                                    isActive={canSurrender}
-                                    isSelectionMode={interactionMode === 'surrender_select'}
-                                    hasSelectedHands={selectedSurrenderHand !== null}
-                                    onClick={() => {
-                                        if (interactionMode === 'surrender_select') {
-                                            confirmSurrender();
-                                        } else {
-                                            startSurrender();
-                                        }
-                                    }}
-                                    onCancel={cancelSurrender}
-                                />
-                            )}
 
-                            <div className={styles.infoTextContainer}>
-                                <div className={`${styles.instructions} ${showSelectionUI && drawnCards.some(c => c !== null) ? styles.textVisible : ''}`}>
-                                    {getProjectedPlaceCount() - cardsPlacedThisTurn > 1 ? `PLACE ${getProjectedPlaceCount() - cardsPlacedThisTurn} CARDS` : 'PLACE CARD'}
-                                </div>
-                                <div 
-                                    className={`${styles.instructions} ${interactionMode === 'double_down_select' ? styles.textVisible : ''}`} 
-                                    style={{ color: '#ffd700' }}
-                                >
-                                    Select hand to Double Down
-                                </div>
-                                <div 
-                                    className={`${styles.instructions} ${interactionMode === 'surrender_select' ? styles.textVisible : ''}`} 
-                                    style={{ color: '#ffffff' }}
-                                >
-                                    Select hand to Surrender
-                                </div>
-                                <div className={`${styles.clickAnywhere} ${canDraw ? styles.textVisible : ''}`}>
-                                    Click Anywhere
-                                </div>
-                            </div>
+
                         </div>
 
                         <div className={styles.actionButtonContainer}>
@@ -1050,7 +1057,8 @@ export default function App() {
             )}
 
             {/* FinalScoreOverlay removed */}
-
+            
+            <div id="tooltip-portal-root" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 3000 }} />
         </div>
     );
 }

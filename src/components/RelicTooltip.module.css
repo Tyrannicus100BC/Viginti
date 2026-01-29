@@ -12,6 +12,12 @@
     animation: fadeIn 0.15s ease-out forwards;
 }
 
+.flexible {
+    width: max-content !important;
+    max-width: 380px;
+    min-width: 240px;
+}
+
 .containerHorizontal {
     flex-direction: row;
     align-items: center;
@@ -98,6 +104,10 @@
     white-space: nowrap;
 }
 
+.flexible .title {
+    white-space: normal;
+}
+
 .description {
     color: #ecf0f1;
     font-size: 0.9rem;
@@ -108,10 +118,18 @@
     white-space: nowrap;
 }
 
+.flexible .description {
+    white-space: normal;
+}
+
 .chipsValue {
     color: #44ff44;
     font-weight: bold;
     white-space: nowrap;
+}
+
+.flexible .chipsValue {
+    white-space: normal;
 }
 
 .multValue {
@@ -120,7 +138,21 @@
     white-space: nowrap;
 }
 
+.flexible .multValue {
+    white-space: normal;
+}
+
 .handHighlight {
     color: #64b5f6;
     font-weight: 500; 
+}
+
+.compsValue {
+    color: #00e5ff;
+    font-weight: bold;
+    white-space: nowrap;
+}
+
+.flexible .compsValue {
+    white-space: normal;
 }

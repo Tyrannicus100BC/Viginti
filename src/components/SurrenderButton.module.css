@@ -1,17 +1,14 @@
 .container {
     position: absolute;
-    left: 125px;
-    /* Symmetric to DoubleDown right: 125px */
-    top: -205px;
+    top: -135px; /* Vertically centered with draw area (approx) */
     width: 120px;
     height: 120px;
     display: flex;
     align-items: center;
     justify-content: center;
-    transform: translateX(-50%);
-    /* Mirror the 50% translation */
     z-index: 50;
     pointer-events: none;
+    transition: transform 0.3s ease; /* Smooth movement */
 }
 
 .button {

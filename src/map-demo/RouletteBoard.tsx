@@ -542,7 +542,7 @@ export const RouletteBoard: React.FC<RouletteBoardProps> = ({ onClose }) => {
                 </div>
                 <div className={styles.stat}>
                     <span className={styles.statLabel}>Comps</span>
-                    <span className={styles.statValue}>{comps}</span>
+                    <span className={styles.statValue}>₵{comps}</span>
                 </div>
             </header>
 

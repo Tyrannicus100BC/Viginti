@@ -8,7 +8,8 @@ interface DoubleDownButtonProps {
     isSelectionMode: boolean; // Are we selecting hands?
     hasSelectedHands?: boolean;
     onClick: () => void;
-    onCancel?: () => void; // Kept in interface for potential future use or consistency, but optional
+    onCancel?: () => void;
+    style?: React.CSSProperties;
 }
 
 export const DoubleDownButton: React.FC<DoubleDownButtonProps> = ({
@@ -17,7 +18,8 @@ export const DoubleDownButton: React.FC<DoubleDownButtonProps> = ({
     isActive,
     isSelectionMode,
     hasSelectedHands,
-    onClick
+    onClick,
+    style
 }) => {
     // Calculate SVG Segments
     // Circle definitions
@@ -56,7 +58,7 @@ export const DoubleDownButton: React.FC<DoubleDownButtonProps> = ({
     };
 
     return (
-        <div className={styles.container}>
+        <div className={styles.container} style={style}>
             {/* Charge Circle SVG */}
             <svg className={styles.chargeSvg} viewBox={`0 0 ${size} ${size}`}>
                 <defs>

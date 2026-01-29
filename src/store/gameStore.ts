@@ -149,7 +149,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     selectedShopItemId: null,
     doubleDownCharges: 0,
     selectedDoubleDownHands: [],
-    surrenders: 3,
+    surrenders: 0,
     selectedSurrenderHand: null,
     isInitialDeal: true,
     isShaking: false,
@@ -187,7 +187,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     triggerDebugChips: () => {
         const { targetScore, incrementScore } = get();
-        const amount = Math.ceil(targetScore / 3);
+        const amount = Math.ceil(targetScore / 2);
         incrementScore(amount);
         get().chipCollectionComplete();
     },
@@ -245,7 +245,7 @@ export const useGameStore = create<GameState>((set, get) => ({
             targetScore: calculateTargetScore(1),
             comps: 5,
             dealsTaken: 0,
-            handsRemaining: RelicManager.executeValueHook('getDealsPerCasino', BASE_DEALS_PER_CASINO, { inventory: [] }),
+            handsRemaining: RelicManager.executeValueHook('getDealsPerCasino', BASE_DEALS_PER_CASINO, { inventory: initialInventory }),
             round: 1,
             discardPile: [],
             isInitialDeal: true,
@@ -260,7 +260,7 @@ export const useGameStore = create<GameState>((set, get) => ({
             isDealerPlaying: false,
             doubleDownCharges: 0,
             selectedDoubleDownHands: [],
-            surrenders: 3,
+            surrenders: initialInventory.some(r => r.id === 'surrender') ? 3 : 0,
             selectedSurrenderHand: null
         });
     },
@@ -1200,7 +1200,7 @@ export const useGameStore = create<GameState>((set, get) => ({
             handsRemaining: RelicManager.executeValueHook('getDealsPerCasino', BASE_DEALS_PER_CASINO, { inventory }),
             comps: comps, // Already updated
             discardPile: [],
-            surrenders: 3, // Reset to 3
+            surrenders: inventory.some(r => r.id === 'surrender') ? 3 : 0, // Reset to 3 if owned
             dealerMessage: null,
             runningSummary: null,
             roundSummary: null,
@@ -1228,9 +1228,10 @@ export const useGameStore = create<GameState>((set, get) => ({
             // GO TO GIFT SHOP PHASE
 
             // Calculate Rewards
-            const { surrenders, handsRemaining, comps } = currentState;
+            const { surrenders, handsRemaining, comps, inventory } = currentState;
             const dealsBonus = handsRemaining * 2;
-            const surrenderBonus = surrenders * 1;
+            const hasSurrenderRelic = inventory.some(r => r.id === 'surrender');
+            const surrenderBonus = hasSurrenderRelic ? (surrenders * 1) : 0;
             const winBonus = 2;
             const totalBonus = dealsBonus + surrenderBonus + winBonus;
 

@@ -1,6 +1,6 @@
 import React from 'react';
 import styles from './RelicTooltip.module.css';
-import { TransparentImage } from './TransparentImage';
+
 import type { Relic } from '../logic/relics/types';
 import { formatHandChips, formatHandMult, formatHandScore } from '../logic/formatters';
 
@@ -13,6 +13,7 @@ interface RelicTooltipProps {
     isRightAligned?: boolean;
     layout?: 'vertical' | 'horizontal';
     direction?: 'ltr' | 'rtl';
+    isFlexible?: boolean;
 }
 
 export const RelicTooltip: React.FC<RelicTooltipProps> = ({ 
@@ -23,7 +24,8 @@ export const RelicTooltip: React.FC<RelicTooltipProps> = ({
     hideIcon, 
     isRightAligned,
     layout = 'vertical',
-    direction = 'ltr' 
+    direction = 'ltr',
+    isFlexible
 }) => {
     const formatDescription = (text: string, values?: Record<string, any>) => {
         const hand = relic.handType;
@@ -79,7 +81,7 @@ export const RelicTooltip: React.FC<RelicTooltipProps> = ({
         // 3. [...] (bracketed text for hand highlighting)
         // 4. x followed by digits (multipliers)
         // 5. $ or + followed by digits, or digits followed by "chips" (chips values)
-        const parts = text.split(/(<[^>]+>|\{[^}]+\}|\[.*?\]|x\d+(?:\.\d+)?|[\$\+]{1,2}\d+(?:\s*chips?)?|\d+\s*chips?)/gi);
+        const parts = text.split(/(<[^>]+>|\{[^}]+\}|\[.*?\]|x\d+(?:\.\d+)?|[₵\$\+]{1,2}\d+(?:\s*chips?)?|\d+\s*chips?)/gi);
         
         return parts.map((part, i) => {
             if (part.startsWith('<') && part.endsWith('>')) {
@@ -95,9 +97,10 @@ export const RelicTooltip: React.FC<RelicTooltipProps> = ({
                 return <span key={i} className={styles.multValue}>{part}</span>;
             }
             if (
-                /^[\$\+\d]/i.test(part.trim()) && (part.trim().startsWith('$') || part.trim().startsWith('+') || part.toLowerCase().includes('chips'))
+                /^[₵\$\+\d]/i.test(part.trim()) && (part.trim().startsWith('₵') || part.trim().startsWith('$') || part.trim().startsWith('+') || part.toLowerCase().includes('chips'))
             ) {
-                return <span key={i} className={styles.chipsValue}>{part}</span>;
+                const isComps = part.trim().includes('₵');
+                return <span key={i} className={isComps ? styles.compsValue : styles.chipsValue}>{part}</span>;
             }
             if (part.includes('\n')) {
                 return (
@@ -120,7 +123,7 @@ export const RelicTooltip: React.FC<RelicTooltipProps> = ({
 
     return (
         <div 
-            className={`${styles.container} ${isHorizontal ? styles.containerHorizontal : ''} ${className || ''}`} 
+            className={`${styles.container} ${isHorizontal ? styles.containerHorizontal : ''} ${isFlexible ? styles.flexible : ''} ${className || ''}`} 
             style={{
                 ...style,
                 flexDirection: isHorizontal ? (isRtl ? 'row-reverse' : 'row') : 'column',
@@ -142,9 +145,13 @@ export const RelicTooltip: React.FC<RelicTooltipProps> = ({
                         visibility: hideIcon ? 'hidden' : 'visible'
                     }}
                 >
-                    {relic.icon && !hideIcon ? (
-                        <TransparentImage src={relic.icon} alt={relic.name} className={styles.icon} threshold={250} />
-                    ) : relic.icon ? null : (
+                    {relic.icon && (relic.icon.includes('.') || relic.icon.includes('/')) ? (
+                        <img src={relic.icon} alt={relic.name} className={styles.icon} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : relic.icon ? (
+                         <div className={styles.icon} style={{ fontSize: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            {relic.icon}
+                        </div>
+                    ) : (
                         <div className={styles.placeholderIcon}>
                             {relic.name.substring(0, 2).toUpperCase()}
                         </div>

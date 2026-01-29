@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { RelicManager } from '../logic/relics/manager';
 import { RelicTooltip } from './RelicTooltip';
-import { TransparentImage } from './TransparentImage';
+
 
 
 interface RelicInventoryProps {
@@ -124,20 +124,32 @@ export const RelicInventory: React.FC<RelicInventoryProps> = ({ enabledCategorie
                                 justifyContent: 'center',
                                 flexShrink: 0,
                                 boxShadow: '0 2px 10px rgba(0,0,0,0.3)',
-                                marginRight: 0 
+                                marginRight: 0,
+                                overflow: 'hidden'
                             }}>
-                                {config.icon ? (
-                                    <TransparentImage 
+                                {config.icon && (config.icon.includes('.') || config.icon.includes('/')) ? (
+                                    <img 
                                         src={config.icon} 
                                         alt={config.name} 
-                                        threshold={250}
                                         style={{ 
-                                            width: '85%', 
-                                            height: '85%', 
-                                            objectFit: 'contain',
+                                            width: '100%', 
+                                            height: '100%', 
+                                            objectFit: 'cover',
                                             filter: isActive ? 'brightness(1.2) drop-shadow(0 0 5px rgba(255,255,255,0.5))' : (instance.state?.used_this_round ? 'brightness(0.5) grayscale(0.8)' : 'none')
                                         }} 
                                     />
+                                ) : config.icon ? (
+                                    <div style={{
+                                        fontSize: '1.5rem',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        width: '100%',
+                                        height: '100%',
+                                        filter: instance.state?.used_this_round ? 'grayscale(0.8) opacity(0.5)' : 'none'
+                                    }}>
+                                        {config.icon}
+                                    </div>
                                 ) : (
                                     <div style={{
                                         fontSize: '0.6rem',
@@ -239,20 +251,32 @@ export const RelicInventory: React.FC<RelicInventoryProps> = ({ enabledCategorie
                             justifyContent: 'center',
                             flexShrink: 0,
                             boxShadow: '0 2px 10px rgba(0,0,0,0.3)',
-                            marginLeft: 0
+                            marginLeft: 0,
+                            overflow: 'hidden'
                         }}>
-                             {config.icon ? (
-                                 <TransparentImage 
+                             {config.icon && (config.icon.includes('.') || config.icon.includes('/')) ? (
+                                 <img 
                                     src={config.icon} 
                                     alt={config.name} 
-                                    threshold={250}
                                     style={{ 
-                                        width: '85%', 
-                                        height: '85%', 
-                                        objectFit: 'contain',
+                                        width: '100%', 
+                                        height: '100%', 
+                                        objectFit: 'cover',
                                         filter: isActive ? 'brightness(1.2) drop-shadow(0 0 5px rgba(255,255,255,0.5))' : (instance.state?.used_this_round ? 'brightness(0.5) grayscale(0.8)' : 'none')
                                     }} 
                                  />
+                             ) : config.icon ? (
+                                <div style={{
+                                    fontSize: '1.5rem',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    width: '100%',
+                                    height: '100%',
+                                    filter: instance.state?.used_this_round ? 'grayscale(0.8) opacity(0.5)' : 'none'
+                                }}>
+                                    {config.icon}
+                                </div>
                              ) : (
                                  <div style={{
                                      fontSize: '0.6rem',

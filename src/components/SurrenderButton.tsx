@@ -9,6 +9,7 @@ interface SurrenderButtonProps {
     hasSelectedHands?: boolean;
     onClick: () => void;
     onCancel?: () => void;
+    style?: React.CSSProperties;
 }
 
 export const SurrenderButton: React.FC<SurrenderButtonProps> = ({
@@ -17,7 +18,8 @@ export const SurrenderButton: React.FC<SurrenderButtonProps> = ({
     isActive,
     isSelectionMode,
     hasSelectedHands,
-    onClick
+    onClick,
+    style
 }) => {
     // Circle definitions
     const size = 120;
@@ -49,7 +51,7 @@ export const SurrenderButton: React.FC<SurrenderButtonProps> = ({
     };
 
     return (
-        <div className={styles.container}>
+        <div className={styles.container} style={style}>
             {/* Charge Circle SVG */}
             <svg className={styles.chargeSvg} viewBox={`0 0 ${size} ${size}`}>
                 <defs>
