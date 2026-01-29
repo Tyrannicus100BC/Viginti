@@ -48,14 +48,6 @@ interface GameState {
     selectedShopItemId: string | null;
     buyShopItem: (itemId: string) => void;
 
-    // Double Down State
-    doubleDownCharges: number;
-    selectedDoubleDownHands: number[];
-
-    // Surrender State
-    surrenders: number;
-    selectedSurrenderHand: number | null; // Single hand selection for surrender
-
     isInitialDeal: boolean;
     isShaking: boolean; // For >300 score celebration
 
@@ -71,18 +63,19 @@ interface GameState {
     startGame: (gamblerId?: string) => void;
     dealFirstHand: () => void;
     drawCard: () => void;
+    assignCard: (handIndex: number) => Promise<void>;
+
+    // Double Down Actions
+    doubleDownCharges: number;
     startDoubleDown: () => void;
     cancelDoubleDown: () => void;
-    confirmDoubleDown: (handIndex: number) => void;
-    assignCard: (handIndex: number) => Promise<void>;
-    toggleDoubleDownHand: (handIndex: number) => void;
-    executeDoubleDown: () => void;
+    doubleDownHand: (handIndex: number) => void;
 
     // Surrender Actions
+    surrenders: number;
     startSurrender: () => void;
     cancelSurrender: () => void;
-    selectSurrenderHand: (handIndex: number) => void;
-    confirmSurrender: () => void;
+    surrenderHand: (handIndex: number) => void;
     holdReturns: (forceDealerBust?: boolean) => Promise<void>; // Async for pacing
     nextRound: (forceContinue?: boolean) => void;
     selectShopItem: (itemId: string) => void;
@@ -148,9 +141,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     shopItems: [],
     selectedShopItemId: null,
     doubleDownCharges: 0,
-    selectedDoubleDownHands: [],
     surrenders: 0,
-    selectedSurrenderHand: null,
     isInitialDeal: true,
     isShaking: false,
     allWinnersEnlarged: false,
@@ -259,9 +250,7 @@ export const useGameStore = create<GameState>((set, get) => ({
             selectedShopItemId: null,
             isDealerPlaying: false,
             doubleDownCharges: 0,
-            selectedDoubleDownHands: [],
             surrenders: initialInventory.some(r => r.id === 'surrender') ? 3 : 0,
-            selectedSurrenderHand: null
         });
     },
 
@@ -413,106 +402,71 @@ export const useGameStore = create<GameState>((set, get) => ({
         // Requirement: At least 1 Charge to start
         if (doubleDownCharges < 1) return;
 
-        set({ interactionMode: 'double_down_select', selectedDoubleDownHands: [] });
+        set({ interactionMode: 'double_down_select' });
     },
 
     cancelDoubleDown: () => {
-        set({ interactionMode: 'default', selectedDoubleDownHands: [] });
+        set({ interactionMode: 'default' });
     },
 
-    toggleDoubleDownHand: (handIndex: number) => {
-        const { selectedDoubleDownHands, playerHands, doubleDownCharges } = get();
+    doubleDownHand: (handIndex: number) => {
+        const { playerHands, deck, interactionMode, doubleDownCharges } = get();
+        if (interactionMode !== 'double_down_select') return;
+        if (doubleDownCharges < 1) return;
+
         const hand = playerHands[handIndex];
         if (!hand || hand.isBust || hand.isHeld || hand.blackjackValue === 21) return;
 
-        if (selectedDoubleDownHands.includes(handIndex)) {
-            set({ selectedDoubleDownHands: selectedDoubleDownHands.filter(i => i !== handIndex) });
-        } else {
-            // Check if we have enough charges to select another hand
-            if (selectedDoubleDownHands.length < doubleDownCharges) {
-                set({ selectedDoubleDownHands: [...selectedDoubleDownHands, handIndex] });
-            }
-        }
-    },
-
-    executeDoubleDown: () => {
-        const { playerHands, deck, interactionMode, selectedDoubleDownHands, doubleDownCharges } = get();
-        if (interactionMode !== 'double_down_select') return;
-        if (selectedDoubleDownHands.length === 0) return; // Must select at least one
-
-        const cost = selectedDoubleDownHands.length;
-        if (doubleDownCharges < cost) return; // Should be prevented by toggle logic, but safety first
-
-        // Consume Charges
-        set({ doubleDownCharges: doubleDownCharges - cost });
+        // Consume Charge
+        set({ doubleDownCharges: doubleDownCharges - 1 });
 
         let currentDeck = [...deck];
-        let currentHands = [...playerHands];
+        const card = currentDeck.pop();
+        if (!card) return; // empty deck safety
 
-        // Process each selected hand
-        for (const handIndex of selectedDoubleDownHands) {
-            const card = currentDeck.pop();
-            if (!card) break; // empty deck safety
+        card.isFaceUp = true;
+        card.origin = 'double_down';
 
-            card.isFaceUp = true;
-            card.origin = 'double_down';
+        const updatedHands = playerHands.map((h, idx) => {
+            if (idx !== handIndex) return h;
 
-            currentHands = currentHands.map((h, idx) => {
-                if (idx !== handIndex) return h;
+            // Double Logic
+            const isSpecial = card.type === 'chip' || card.type === 'mult' || card.type === 'score';
+            const orderedCards = isSpecial ? [card, ...h.cards] : [...h.cards, card];
+            const val = getBlackjackScore(orderedCards, get().inventory);
 
-                // Double Logic
-                const isSpecial = card.type === 'chip' || card.type === 'mult' || card.type === 'score';
-                const orderedCards = isSpecial ? [card, ...h.cards] : [...h.cards, card];
-                const val = getBlackjackScore(orderedCards, get().inventory);
+            return {
+                ...h,
+                cards: orderedCards,
+                blackjackValue: val,
+                isBust: val > 21,
+                isHeld: true,
+                isDoubled: true
+            };
+        });
 
-                return {
-                    ...h,
-                    cards: orderedCards,
-                    blackjackValue: val,
-                    isBust: val > 21,
-                    isHeld: true,
-                    isDoubled: true
-                };
-            });
-        }
-
+        // Update state and exit mode
         set({
-            playerHands: currentHands,
+            playerHands: updatedHands,
             deck: currentDeck,
-            interactionMode: 'default',
-            selectedDoubleDownHands: []
+            interactionMode: 'default'
         });
 
-        // Loop again for side effects after state update (Busts)
-        const newHands = get().playerHands; // Get fresh state
-
-        // 1. Check Busts for Charges & Hooks
-        let bustCount = 0;
-        selectedDoubleDownHands.forEach(handIndex => {
-            const h = newHands[handIndex];
-            const oldHand = playerHands[handIndex]; // Original state
-
-            if (h.isBust && !oldHand.isBust) {
-                bustCount++;
-                RelicManager.executeInterruptHook('onHandBust', {
-                    inventory: get().inventory,
-                    highlightRelic: async () => { },
-                    handId: h.id
-                }).catch(console.error);
-            }
-        });
-
-        // Add charges for busts immediately
-        if (bustCount > 0) {
+        // Handle Bust Side Effects
+        const postHand = updatedHands[handIndex];
+        if (postHand.isBust) {
             set(state => ({
-                doubleDownCharges: Math.min(3, state.doubleDownCharges + bustCount)
+                doubleDownCharges: Math.min(3, state.doubleDownCharges + 1)
             }));
+            RelicManager.executeInterruptHook('onHandBust', {
+                inventory: get().inventory,
+                highlightRelic: async () => { },
+                handId: postHand.id
+            }).catch(console.error);
         }
 
-
-        // Auto-stand if all hands are unplayable
-        const allUnplayable = newHands.every(h => h.isBust || h.isHeld || h.blackjackValue === 21);
-        if (allUnplayable) {
+        // Auto-stand if all hands unplayable
+        if (updatedHands.every(h => h.isBust || h.isHeld || h.blackjackValue === 21)) {
             setTimeout(() => {
                 get().holdReturns();
             }, 1000);
@@ -526,44 +480,29 @@ export const useGameStore = create<GameState>((set, get) => ({
         // Requirement: At least 1 Surrender remaining
         if (surrenders < 1) return;
 
-        set({ interactionMode: 'surrender_select', selectedSurrenderHand: null });
+        set({ interactionMode: 'surrender_select' });
     },
 
     cancelSurrender: () => {
-        set({ interactionMode: 'default', selectedSurrenderHand: null });
+        set({ interactionMode: 'default' });
     },
 
-    selectSurrenderHand: (handIndex: number) => {
-        const { playerHands, selectedSurrenderHand } = get();
-        const hand = playerHands[handIndex];
-
-        // Cannot select busted hands
-        if (!hand || hand.isBust || hand.cards.length === 0) return;
-
-        if (selectedSurrenderHand === handIndex) {
-            set({ selectedSurrenderHand: null });
-        } else {
-            set({ selectedSurrenderHand: handIndex });
-        }
-    },
-
-    confirmSurrender: () => {
-        const { playerHands, interactionMode, selectedSurrenderHand, surrenders, discardPile } = get();
+    surrenderHand: (handIndex: number) => {
+        const { playerHands, interactionMode, surrenders, discardPile } = get();
         if (interactionMode !== 'surrender_select') return;
-        if (selectedSurrenderHand === null) return;
         if (surrenders < 1) return;
+
+        const hand = playerHands[handIndex];
+        // Cannot select busted hands or empty hands
+        if (!hand || hand.isBust || hand.cards.length === 0) return;
 
         // Consume Surrender
         const newSurrenders = surrenders - 1;
-
-        // Process Surrender
-        // 1. Move cards to discard pile (excluding virtual/temp cards if any, typically all cards are real here)
-        const hand = playerHands[selectedSurrenderHand];
         const cardsToDiscard = [...hand.cards];
 
-        // 2. Reset Hand
+        // Reset Hand
         const newHands = playerHands.map((h, idx) => {
-            if (idx !== selectedSurrenderHand) return h;
+            if (idx !== handIndex) return h;
             return {
                 ...h,
                 cards: [],
@@ -576,14 +515,11 @@ export const useGameStore = create<GameState>((set, get) => ({
             };
         });
 
-        const newDiscardPile = [...discardPile, ...cardsToDiscard];
-
         set({
             playerHands: newHands,
-            discardPile: newDiscardPile,
+            discardPile: [...discardPile, ...cardsToDiscard],
             surrenders: newSurrenders,
-            interactionMode: 'default',
-            selectedSurrenderHand: null
+            interactionMode: 'default'
         });
     },
 

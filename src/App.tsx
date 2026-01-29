@@ -88,17 +88,13 @@ export default function App() {
 
         // New Double Down Props
         doubleDownCharges,
-        selectedDoubleDownHands,
-        toggleDoubleDownHand,
-        executeDoubleDown,
+        doubleDownHand,
 
         // Surrender Props
         surrenders,
         startSurrender,
         cancelSurrender,
-        selectedSurrenderHand,
-        selectSurrenderHand,
-        confirmSurrender
+        surrenderHand
     } = useGameStore();
 
     const { viewportWidth, viewportHeight } = useLayout();
@@ -353,9 +349,9 @@ export default function App() {
 
     const handleHandClick = (index: number) => {
         if (interactionMode === 'double_down_select') {
-            toggleDoubleDownHand(index);
+            doubleDownHand(index);
         } else if (interactionMode === 'surrender_select') {
-            selectSurrenderHand(index);
+            surrenderHand(index);
         } else if (drawnCards.length > 0) {
             assignCard(index);
         }
@@ -867,10 +863,10 @@ export default function App() {
                                             charges={doubleDownCharges}
                                             isActive={canDoubleDown}
                                             isSelectionMode={interactionMode === 'double_down_select'}
-                                            hasSelectedHands={selectedDoubleDownHands.length > 0}
+                                            hasSelectedHands={false}
                                             onClick={() => {
                                                 if (interactionMode === 'double_down_select') {
-                                                    executeDoubleDown();
+                                                    cancelDoubleDown();
                                                 } else {
                                                     startDoubleDown();
                                                 }
@@ -890,10 +886,10 @@ export default function App() {
                                             surrenders={surrenders}
                                             isActive={canSurrender}
                                             isSelectionMode={interactionMode === 'surrender_select'}
-                                            hasSelectedHands={selectedSurrenderHand !== null}
+                                            hasSelectedHands={false}
                                             onClick={() => {
                                                 if (interactionMode === 'surrender_select') {
-                                                    confirmSurrender();
+                                                    cancelSurrender();
                                                 } else {
                                                     startSurrender();
                                                 }
@@ -939,13 +935,7 @@ export default function App() {
                                             key={`${hand.id}-${handsRemaining}`}
                                             hand={hand}
                                             canSelect={canSelectHand && !hand.isBust && !hand.isHeld && hand.blackjackValue !== 21}
-                                            isSelected={
-                                                interactionMode === 'double_down_select'
-                                                    ? selectedDoubleDownHands.includes(idx)
-                                                    : interactionMode === 'surrender_select'
-                                                        ? selectedSurrenderHand === idx
-                                                        : false
-                                            }
+                                            isSelected={false}
                                             onSelect={() => handleHandClick(idx)}
                                             baseDelay={idx === 1 ? 0 : 0.6}
                                             isScoringFocus={idx === scoringHandIndex}
