@@ -284,6 +284,8 @@
 .animEnterDraw {
     animation: flyInFromDraw var(--anim-assign-duration) ease-out both;
     transition: none !important;
+    position: relative;
+    z-index: 9; /* Above other cards and UI, but below overlay labels (z-index: 10) */
 }
 
 .animDoubleDownAndFlip {

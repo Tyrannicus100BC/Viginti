@@ -315,6 +315,9 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
     // When checks run again on next focus (at scale 1.0), it will seamlessly update.
   }, [isScoringFocus, isEnlarged]); // Re-eval when focus changes
 
+  // Check if any card is currently animating from draw pile
+  const hasAnimatingCard = hand.cards.some(c => c.origin === 'draw_pile');
+
   return (
     <div
       ref={containerRef}
@@ -323,7 +326,10 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
         e.stopPropagation();
         onSelect?.();
       } : undefined}
-      style={{ transformOrigin }}
+      style={{ 
+        transformOrigin,
+        zIndex: hasAnimatingCard ? 100 : undefined // Boost z-index when animating
+      }}
     >
       {/* Scoring List */}
       {isWin && hand.finalScore && (
@@ -438,7 +444,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
                     transformOrigin: '50% 250%',
                     '--rotate': `${wrapperRotate}deg`,
                     '--translateY': `${wrapperTranslateY}px`,
-                    zIndex: idx
+                    zIndex: card.origin === 'draw_pile' ? 9 : idx
                   } as any}
                 >
                   <div className={isDiscarding ? styles.discardingCard : ''} style={{ width: '100%', height: '100%' }}>
