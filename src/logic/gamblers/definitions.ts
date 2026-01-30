@@ -1,4 +1,5 @@
 
+import type { Card } from '../../types';
 import type { GamblerDefinition } from './types';
 import { createStandardDeck, createCard } from '../deck';
 import { RelicManager } from '../relics/manager'; // We need this to get default properties
@@ -17,6 +18,15 @@ const getRelicInstance = (id: string, properties: Record<string, any> = {}): Rel
 const getRandomItem = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
 
 export const GAMBLER_DEFINITIONS: GamblerDefinition[] = [
+    {
+        id: 'newbie',
+        name: 'The Newbie',
+        description: 'Fresh off the bus. Starts with a standard 52-card deck and only the Viginti angle.',
+        getInitialDeck: () => createStandardDeck(),
+        getInitialRelics: () => [
+            getRelicInstance('viginti')
+        ]
+    },
     {
         id: 'default',
         name: 'The Tourist',
@@ -54,7 +64,7 @@ export const GAMBLER_DEFINITIONS: GamblerDefinition[] = [
         name: 'The Wildcard',
         description: 'Chaos incarnate. A distorted deck heavy on high cards in black suits and low red cards. Starts with 8 random Special Cards.',
         getInitialDeck: () => {
-            const deck: import('../../types').Card[] = [];
+            const deck: Card[] = [];
 
             // Spades & Clubs: 3x A, K, Q, J. No numbered (2-10).
             (['spades', 'clubs'] as const).forEach(suit => {

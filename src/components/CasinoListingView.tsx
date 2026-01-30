@@ -1,6 +1,7 @@
 import React from 'react';
 import styles from './CasinoListingView.module.css';
-import { calculateTargetScore } from '../logic/casinoConfig';
+import { useGameStore } from '../store/gameStore';
+import { CITY_DEFINITIONS } from '../logic/cities/definitions';
 
 interface CasinoListingViewProps {
   currentRound: number;
@@ -8,13 +9,16 @@ interface CasinoListingViewProps {
 }
 
 export const CasinoListingView: React.FC<CasinoListingViewProps> = ({ currentRound, onClose }) => {
-    // Generate list for Casinos 1-8 always, or up to current round + 3?
-    // Let's show 1-8 as a standard "track".
-    const casinos = Array.from({ length: 8 }, (_, i) => i + 1);
+    const selectedCityId = useGameStore(state => state.selectedCityId);
+    const cityId = selectedCityId || 'las_vegas';
+    const city = CITY_DEFINITIONS.find(c => c.id === cityId) || CITY_DEFINITIONS[0];
+
+    const casinos = Array.from({ length: city.casinoTargets.length }, (_, i) => i + 1);
 
     return (
         <div className={styles.overlay} onClick={onClose}>
             <div className={styles.modal} onClick={e => e.stopPropagation()}>
+                <div className={styles.cityNameLabel}>{city.name.toUpperCase()}</div>
                 <h2>Casino Details</h2>
                 
                 <div className={styles.scrollContainer}>
@@ -27,7 +31,7 @@ export const CasinoListingView: React.FC<CasinoListingViewProps> = ({ currentRou
                                 Casino {round}
                             </span>
                             <span className={styles.targetScore}>
-                                {"$" + calculateTargetScore(round).toLocaleString()}
+                                {"$" + city.casinoTargets[round - 1].toLocaleString()}
                             </span>
                         </div>
                     ))}

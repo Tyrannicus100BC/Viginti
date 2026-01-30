@@ -10,6 +10,7 @@ import { TitlePhysics } from './components/TitlePhysics';
 import titleStyles from './components/TitlePhysics.module.css';
 import { CasinoListingView } from './components/CasinoListingView';
 import { GamblerSelect } from './components/GamblerSelect';
+import { CitySelect } from './components/CitySelect';
 
 import { CompsWindow } from './components/CompsWindow';
 import { RelicInventory } from './components/RelicInventory';
@@ -19,9 +20,10 @@ import { GiftShop } from './components/GiftShop';
 import { DoubleDownButton } from './components/DoubleDownButton';
 import { SurrenderButton } from './components/SurrenderButton';
 
-import type { PlayerHand } from './types';
+import type { PlayerHand, Card } from './types';
 import { useLayout } from './components/ResponsiveLayout';
 import { CasinosButton, DeckButton } from './components/HeaderButtons';
+import { CITY_DEFINITIONS } from './logic/cities/definitions';
 
 // Constants for layout
 const POT_TOP_Y = 380; // Anchor pots to this Y value
@@ -100,7 +102,10 @@ export default function App() {
         // Debug Functions
         debugFillDoubleDown,
         debugFillSurrender,
-        isReshuffling
+        isReshuffling,
+        goToTitle,
+        winGame,
+        selectedCityId: storeCityId
     } = useGameStore();
 
     const { viewportWidth, viewportHeight } = useLayout();
@@ -125,11 +130,17 @@ export default function App() {
     const drawAreaRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
-    const [selectedGamblerId, setSelectedGamblerId] = useState(() => localStorage.getItem('viginti_gambler') || 'default');
+    const [selectedGamblerId, setSelectedGamblerId] = useState(() => localStorage.getItem('viginti_gambler') || 'newbie');
 
     useEffect(() => {
         localStorage.setItem('viginti_gambler', selectedGamblerId);
     }, [selectedGamblerId]);
+
+    const [selectedCityId, setSelectedCityId] = useState(() => localStorage.getItem('viginti_city') || 'las_vegas');
+
+    useEffect(() => {
+        localStorage.setItem('viginti_city', selectedCityId);
+    }, [selectedCityId]);
 
 
 
@@ -326,10 +337,20 @@ export default function App() {
                 clearTimeout(exitTimer);
             };
         } else {
-            // Sync values if they change while already in HUD mode (optional safety)
-            setDisplayRound(round);
-            setDisplayTarget(targetScore);
-            setDisplayComps(comps);
+            // Sync values if they change while already in HUD mode
+            if (round !== displayRound) {
+                setDisplayRound(round);
+            }
+            if (targetScore !== displayTarget) {
+                setDisplayTarget(targetScore);
+            }
+            if (comps !== displayComps) {
+                setDisplayComps(comps);
+                // Trigger animation for Comps when they change (e.g. Gift Shop purchase)
+                setCompsAnimate(true);
+                const timer = setTimeout(() => setCompsAnimate(false), 500);
+                return () => clearTimeout(timer);
+            }
         }
     }, [phase, round, targetScore, comps, debugEnabled]);
 
@@ -383,7 +404,7 @@ export default function App() {
     const activeCards = [
         ...dealer.cards.filter((_, idx) => idx !== 0 || dealer.isRevealed),
         ...playerHands.flatMap(h => h.cards),
-        ...drawnCards.filter((c): c is import('./types').Card => c !== null),
+        ...drawnCards.filter((c): c is Card => c !== null),
         ...discardPile
     ];
 
@@ -401,16 +422,27 @@ export default function App() {
                     <button
                         className={`${styles.button} ${styles.startRunButton}`}
                         style={{ zIndex: 1, marginBottom: 40 }}
-                        onClick={() => startGame(selectedGamblerId)}
+                        onClick={() => startGame(selectedGamblerId, selectedCityId)}
                     >
                         Start Run
                     </button>
                 </div>
 
-                <GamblerSelect
-                    selectedId={selectedGamblerId}
-                    onSelect={setSelectedGamblerId}
-                />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 20, position: 'absolute', bottom: 60, left: '50%', transform: 'translateX(-50%)', alignItems: 'center', zIndex: 100 }}>
+                    {/* We render them in a flex column so they stack naturally without absolute positioning conflicts */}
+                    <div style={{ position: 'relative', bottom: 'auto', left: 'auto', transform: 'none' }}>
+                        <CitySelect
+                            selectedId={selectedCityId}
+                            onSelect={setSelectedCityId}
+                        />
+                    </div>
+                    <div style={{ position: 'relative', bottom: 'auto', left: 'auto', transform: 'none' }}>
+                         <GamblerSelect
+                            selectedId={selectedGamblerId}
+                            onSelect={setSelectedGamblerId}
+                        />
+                    </div>
+                </div>
                 <button
                     className={styles.debugToggle}
                     onClick={(e) => {
@@ -438,7 +470,23 @@ export default function App() {
                 <p style={{ fontSize: '1.2rem', color: '#aaa', marginBottom: 40 }}>
                     Final Winnings: ${totalScore.toLocaleString()} / ${targetScore.toLocaleString()}
                 </p>
-                <button className={styles.button} onClick={() => startGame(selectedGamblerId)}>Try Again</button>
+                <button className={styles.button} onClick={goToTitle}>Back to Title</button>
+            </div>
+        );
+    }
+
+    if (phase === 'victory') {
+        const city = CITY_DEFINITIONS.find(c => c.id === selectedCityId) || CITY_DEFINITIONS[0];
+        return (
+            <div className={styles.container} style={{ justifyContent: 'center' }}>
+                <h1 style={{ fontSize: '3rem', color: '#ffd700', marginBottom: 20 }}>CITY CLEARED</h1>
+                <p style={{ fontSize: '1.5rem', color: '#fff', marginBottom: 20 }}>
+                     You've conquered {city.name}!
+                </p>
+                <p style={{ fontSize: '1.2rem', color: '#aaa', marginBottom: 40 }}>
+                    Final Score: ${totalScore.toLocaleString()}
+                </p>
+                <button className={styles.button} onClick={goToTitle} style={{ borderColor: '#ffd700', color: '#ffd700' }}>Victory</button>
             </div>
         );
     }
@@ -516,6 +564,9 @@ export default function App() {
     
     // Compromise spacing if needed to fit in board
     const buttonOffset = Math.min(targetOffset, maxOffset);
+
+    const currentCity = CITY_DEFINITIONS.find(c => c.id === selectedCityId) || CITY_DEFINITIONS[0];
+    const isLastCasino = round >= currentCity.casinoTargets.length;
 
     return (
         <div
@@ -697,7 +748,7 @@ export default function App() {
                                 <Hand
                                     key={`dealer-${dealerHandProps.id}-${round}-${dealsTaken}`}
                                     hand={dealerHandProps}
-                                    baseDelay={dealer.isRevealed ? 0 : 0.6}
+                                    baseDelay={dealer.isRevealed ? 0 : 0.4}
                                     stagger={!dealer.isRevealed}
                                 />
                             </div>
@@ -988,12 +1039,12 @@ export default function App() {
                                     const canSelectHand = (showSelectionUI && drawnCards.length > 0) || interactionMode === 'double_down_select' || interactionMode === 'surrender_select';
                                     return (
                                         <Hand
-                                            key={`${hand.id}`}
+                                            key={`${hand.id}-${round}`}
                                             hand={hand}
                                             canSelect={canSelectHand && !hand.isBust && !hand.isHeld && hand.blackjackValue !== 21}
                                             isSelected={false}
                                             onSelect={() => handleHandClick(idx)}
-                                            baseDelay={idx === 1 ? 0 : 0.6}
+                                            baseDelay={idx === 1 ? 0 : 0.3}
                                             isScoringFocus={idx === scoringHandIndex}
                                             isEnlarged={allWinnersEnlarged && hand.outcome === 'win'}
                                         />
@@ -1025,13 +1076,19 @@ export default function App() {
                                     className={styles.nextRoundButton}
                                     onClick={(e) => {
                                         e.stopPropagation();
-                                        phase === 'entering_casino' ? dealFirstHand() : nextRound();
+                                        if (phase === 'entering_casino') {
+                                            dealFirstHand();
+                                        } else if (totalScore >= targetScore && isLastCasino) {
+                                            winGame();
+                                        } else {
+                                            nextRound();
+                                        }
                                     }}
                                     disabled={phase === 'playing' && isInitialDeal}
                                     style={phase === 'round_over' && totalScore < targetScore && handsRemaining <= 0 ? { color: '#ff4444', borderColor: '#ff4444' } : {}}
                                 >
                                     {phase === 'entering_casino' || (phase === 'playing' && isInitialDeal) ? 'Deal' : (
-                                        totalScore >= targetScore ? 'Next Casino' :
+                                        totalScore >= targetScore ? (isLastCasino ? 'Victory' : 'Next Casino') :
                                             (handsRemaining <= 0 ? 'Game Over' : 'Deal')
                                     )}
                                 </button>
@@ -1040,10 +1097,14 @@ export default function App() {
                                     className={styles.nextRoundButton}
                                     onClick={(e) => {
                                         e.stopPropagation();
-                                        leaveShop();
+                                        if (isLastCasino) {
+                                            winGame();
+                                        } else {
+                                            leaveShop();
+                                        }
                                     }}
                                 >
-                                    Next Casino
+                                    {isLastCasino ? 'Victory' : 'Next Casino'}
                                 </button>
                             ) : (
                                 <div className={styles.actionPlaceholder} />

@@ -231,51 +231,34 @@ const createCategoryBonusHook = (categoryPrefix: string, type: 'mult' | 'chips')
 
 const createSuitBonusHook = (suit: string) => ({
     onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any, config: any) => {
-        const relicId = config?.id;
-        let changed = false;
-        const updatedCriteria = score.criteria.map(c => {
-            const isChipCards = /^(rank|flush|straight|double_down)/.test(c.id);
-            const cardIds = c.cardIds;
-            if (isChipCards && cardIds && cardIds.length > 0) {
-                 const cards = context.handCards.filter(card => cardIds.includes(card.id));
-                 const suitCount = cards.filter(card => card.suit.toLowerCase() === suit.toLowerCase()).length;
-                 
-                 if (suitCount > 0) {
-                     changed = true;
-                     const bonus = suitCount * relicState.bonus_chips;
-                     
-                     const cAny = c as any;
-                     const boostedBy = cAny.boostedBy || [];
-                     if (relicId && !boostedBy.includes(relicId)) {
-                        return { 
-                             ...c, 
-                             chips: c.chips + bonus,
-                             boostedBy: [...boostedBy, relicId]
-                        } as any;
-                     }
-                     
-                     return { ...c, chips: c.chips + bonus };
-                 }
-            }
-            return c;
-        });
+        if (!context.isWin) return score;
 
-        if (!changed) return score;
-        const totalChips = updatedCriteria.reduce((s, c) => s + c.chips, 0);
-        const totalMult = updatedCriteria.reduce((s, c) => s + c.multiplier, 0);
-        return { ...score, criteria: updatedCriteria, totalChips, totalMultiplier: totalMult, finalScore: Math.floor(totalChips * totalMult) };
+        const matchingCards = context.handCards.filter(c => c.suit.toLowerCase() === suit.toLowerCase());
+        const count = matchingCards.length;
+        
+        if (count > 0) {
+            const relicId = config?.id || `suit_${suit}`;
+            const relicName = config?.name || suit;
+
+            const newCriteria = [...score.criteria, {
+                id: relicId as any,
+                name: relicName,
+                count: 1,
+                chips: count * relicState.bonus_chips,
+                multiplier: 0,
+                cardIds: matchingCards.map(c => c.id)
+            }];
+
+            const totalChips = newCriteria.reduce((s, c) => s + c.chips, 0);
+            const totalMult = newCriteria.reduce((s, c) => s + c.multiplier, 0);
+            return { ...score, criteria: newCriteria, totalChips, totalMultiplier: totalMult, finalScore: Math.floor(totalChips * totalMult) };
+        }
+        return score;
     },
-    
     onScoreRow: async (context: ScoreRowContext, _relicState: any, config: any) => {
-        const relicId = config?.id;
-        if (!relicId) return;
-        const crit = context.score.criteria.find(c => c.id === context.criterionId) as any;
-        if (crit && crit.boostedBy && crit.boostedBy.includes(relicId)) {
-            // Highlight!
-            // The user wants: "default chip value ... first, then ... highlight and ... increase"
-            // Since the value is already increased in the score, we can't easily show "default first".
-            // But we can highlight to show WHY it is high.
-            await context.highlightRelic(relicId, { preDelay: 200 }); 
+        const relicId = config?.id || `suit_${suit}`;
+        if (context.criterionId === relicId) {
+            await context.highlightRelic(relicId, { preDelay: 200 });
         }
     }
 });
@@ -636,60 +619,87 @@ export const Hooks = {
 
     // Specific Cards
     star_bead_nines: {
-        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any, _config: any) => {
-            const count = context.handCards.filter(c => c.rank === '9').length;
+        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any, config: any) => {
+            if (!context.isWin) return score;
+            const matchingCards = context.handCards.filter(c => c.rank === '9');
+            const count = matchingCards.length;
             if (count > 0) {
+                 const relicId = config?.id || 'star_bead';
                  const newCriteria = [...score.criteria, {
-                    id: 'star_bead' as any,
-                    name: 'Star Bead',
-                    count: count,
+                    id: relicId as any,
+                    name: config?.name || 'Star Bead',
+                    count: 1,
                     chips: 0,
                     multiplier: count * relicState.bonus_mult,
-                    cardIds: []
+                    cardIds: matchingCards.map(c => c.id)
                 }];
                 const totalChips = newCriteria.reduce((s, c) => s + c.chips, 0);
                 const totalMult = newCriteria.reduce((s, c) => s + c.multiplier, 0);
                 return { ...score, criteria: newCriteria, totalChips, totalMultiplier: totalMult, finalScore: Math.floor(totalChips * totalMult) };
             }
             return score;
+        },
+        onScoreRow: async (context: ScoreRowContext, _relicState: any, config: any) => {
+             const relicId = config?.id || 'star_bead';
+             if (context.criterionId === relicId) {
+                 await context.highlightRelic(relicId, { preDelay: 200 });
+             }
         }
     },
     heart_button_ten_four: {
-        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any, _config: any) => {
-            const count = context.handCards.filter(c => c.rank === '10' || c.rank === '4').length;
+        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any, config: any) => {
+            if (!context.isWin) return score;
+            const matchingCards = context.handCards.filter(c => c.rank === '10' || c.rank === '4');
+            const count = matchingCards.length;
             if (count > 0) {
-                const newCriteria = [...score.criteria, {
-                     id: 'heart_button' as any,
-                     name: 'Heart Button',
-                     count: count,
+                 const relicId = config?.id || 'heart_button';
+                 const newCriteria = [...score.criteria, {
+                     id: relicId as any,
+                     name: config?.name || 'Heart Button',
+                     count: 1,
                      chips: 0,
                      multiplier: count * relicState.bonus_mult,
-                     cardIds: []
+                     cardIds: matchingCards.map(c => c.id)
                  }];
                  const totalChips = newCriteria.reduce((sum, crit) => sum + crit.chips, 0);
                  const totalMult = newCriteria.reduce((sum, crit) => sum + crit.multiplier, 0);
                  return { ...score, criteria: newCriteria, totalChips, totalMultiplier: totalMult, finalScore: Math.floor(totalChips * totalMult) };
             }
             return score;
+        },
+        onScoreRow: async (context: ScoreRowContext, _relicState: any, config: any) => {
+             const relicId = config?.id || 'heart_button';
+             if (context.criterionId === relicId) {
+                 await context.highlightRelic(relicId, { preDelay: 200 });
+             }
         }
     },
     lucky_acorn_kings: {
-        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any, _config: any) => {
-            const count = context.handCards.filter(c => c.rank === 'K').length;
+        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any, config: any) => {
+            if (!context.isWin) return score;
+            const matchingCards = context.handCards.filter(c => c.rank === 'K');
+            const count = matchingCards.length;
             if (count > 0) {
+                 const relicId = config?.id || 'lucky_acorn';
                  const newCriteria = [...score.criteria, {
-                     id: 'lucky_acorn' as any,
-                     name: 'Lucky Acorn',
-                     count: count,
+                     id: relicId as any,
+                     name: config?.name || 'Lucky Acorn',
+                     count: 1,
                      chips: 0,
                      multiplier: count * relicState.bonus_mult,
-                     cardIds: []
+                     cardIds: matchingCards.map(c => c.id)
                  }];
                  const totalChips = newCriteria.reduce((sum, crit) => sum + crit.chips, 0);
                  const totalMult = newCriteria.reduce((sum, crit) => sum + crit.multiplier, 0);
                  return { ...score, criteria: newCriteria, totalChips, totalMultiplier: totalMult, finalScore: Math.floor(totalChips * totalMult) };
             }
             return score;
+        },
+        onScoreRow: async (context: ScoreRowContext, _relicState: any, config: any) => {
+             const relicId = config?.id || 'lucky_acorn';
+             if (context.criterionId === relicId) {
+                 await context.highlightRelic(relicId, { preDelay: 200 });
+             }
         }
     },
 

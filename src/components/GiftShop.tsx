@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { RelicManager } from '../logic/relics/manager';
+import { CITY_DEFINITIONS } from '../logic/cities/definitions';
 import { PlayingCard } from './PlayingCard';
 import { RelicTooltip } from './RelicTooltip';
 import { BonusPhysics } from './BonusPhysics';
@@ -9,12 +10,15 @@ import { createPortal } from 'react-dom';
 import styles from './GiftShop.module.css';
 
 export const GiftShop: React.FC = () => {
-    const { comps, inventory, shopItems, buyShopItem, leaveShop, shopRewardSummary } = useGameStore();
+    const { comps, inventory, shopItems, buyShopItem, leaveShop, shopRewardSummary, round, selectedCityId, winGame } = useGameStore();
     const hasDoubleDownRelic = inventory.some(r => r.id === 'double_down');
     const hasSurrenderRelic = inventory.some(r => r.id === 'surrender');
     const [hoveredItemId, setHoveredItemId] = useState<string | null>(null);
     const [hoveredCardPos, setHoveredCardPos] = useState<{ x: number, y: number, width: number } | null>(null);
     const [introStep, setIntroStep] = useState(0);
+
+    const currentCity = CITY_DEFINITIONS.find(c => c.id === selectedCityId) || CITY_DEFINITIONS[0];
+    const isLastCasino = round >= currentCity.casinoTargets.length;
 
     React.useEffect(() => {
         // Start sequence
@@ -275,8 +279,8 @@ export const GiftShop: React.FC = () => {
                 })}
             </div>
 
-            <button className={styles.leaveButton} onClick={leaveShop}>
-                LEAVE SHOP
+            <button className={styles.leaveButton} onClick={isLastCasino ? winGame : leaveShop}>
+                {isLastCasino ? 'VICTORY' : 'LEAVE SHOP'}
             </button>
         </div>
     );

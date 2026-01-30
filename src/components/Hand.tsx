@@ -33,7 +33,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
   const [visibleChips, setVisibleChips] = useState<number[]>([]);
   const [visibleMults, setVisibleMults] = useState<number[]>([]);
   const [activeCriteriaIdx, setActiveCriteriaIdx] = useState<number | null>(null);
-  const [pulseScore, setPulseScore] = useState(false);
+
   const [isScoreVisible, setIsScoreVisible] = useState(hand.id !== -1);
 
   // New State for sequential updates
@@ -170,7 +170,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
     animationRef.current = false;
     setRowValues({});
     setActiveHighlightIds(null);
-    setPulseScore(false);
+
     setIsScoreVisible(hand.id !== -1);
   }, [hand.id]);
 
@@ -184,7 +184,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
       animationRef.current = false;
       setRowValues({});
       setActiveHighlightIds(null);
-      setPulseScore(false);
+
     }
   }, [hand.finalScore]);
 
@@ -481,7 +481,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
 
               // Discard Stagger Calculation
               const discardDelay = isDiscarding ? (idx * 0.1) : 0;
-
+              
               // Local Animation Coordinates (Correcting for Inner Rotation)
               // If Doubled, inner div is rotated 90deg clockwise.
               // Local X = Screen Y
@@ -533,15 +533,17 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
                     </div>
                   ) : (
                     <PlayingCard
-                      card={card}
                       origin={isDiscarding ? 'discard' : card.origin}
-                      delay={card.origin === 'deck' ? baseDelay + (stagger ? idx * 0.5 : 0) : discardDelay}
+                      delay={card.origin === 'deck' 
+                        ? baseDelay + (stagger ? idx * 0.5 : 0) 
+                        : discardDelay}
                       style={{
                         '--start-tx': `${screenDx}px`,
                         '--start-ty': `${screenDy}px`
                       } as React.CSSProperties}
                       suppressSpecialVisuals={hand.id === -1}
                       suppressEnterAnimation={hasEntered}
+                      card={card} // Ensure card reference is correct
                     />
                   )}
                   </div>
@@ -586,12 +588,12 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
             <div className={`${styles.scoreContainer} ${hand.id === -1 ? styles.scoreFadeIn : ''}`}>
               <div
                 id={`hand-score-${hand.id}`}
-                className={`${styles.scoreValue} ${pulseScore ? styles.pulse : ''} ${hand.isBust ? styles.isBust :
+                className={`${styles.scoreValue} ${hand.isBust ? styles.isBust :
                   isViginti && !hand.isBust ? styles.isViginti :
                     isWin ? styles.isWin :
                       (!isWin && hand.resultRevealed && !hand.isBust && !isViginti) ? styles.isLoss : ''
                   }`}>
-                {displayScore}
+                { (hand.resultRevealed || isWin) ? displayScore : hand.blackjackValue }
               </div>
             </div>
           )}

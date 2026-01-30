@@ -11,6 +11,8 @@ import type { RelicInstance } from '../logic/relics/types';
 
 // Import Gambler Definitions
 import { GAMBLER_DEFINITIONS } from '../logic/gamblers/definitions';
+import { CITY_DEFINITIONS } from '../logic/cities/definitions';
+import { generateShopItems } from '../logic/rewards/generator';
 // import type { RoundSummary } from '../logic/relics/types';
 
 interface GameState {
@@ -24,7 +26,7 @@ interface GameState {
         drawCountMod: number;
         placeCountMod: number;
     };
-    phase: 'init' | 'entering_casino' | 'playing' | 'scoring' | 'round_over' | 'game_over' | 'gift_shop';
+    phase: 'init' | 'entering_casino' | 'playing' | 'scoring' | 'round_over' | 'game_over' | 'gift_shop' | 'victory';
     round: number;
     interactionMode: 'default' | 'double_down_select' | 'surrender_select';
     totalScore: number;
@@ -39,11 +41,11 @@ interface GameState {
     // Aggregated Scoring State
     runningSummary: { chips: number; mult: number } | null;
     roundSummary: { totalChips: number; totalMult: number; finalScore: number } | null;
+    selectedCityId: string | null;
     shopRewardSummary: { dealsBonus: number; doubleDownBonus: number; surrenderBonus: number; winBonus: number; total: number } | null;
     discardPile: Card[];
     inventory: RelicInstance[];
     activeRelicId: string | null;
-
     shopItems: { id: string, type: 'Charm' | 'Angle' | 'Card', card?: Card, purchased?: boolean, cost?: number, nameOverride?: string }[];
     selectedShopItemId: string | null;
     buyShopItem: (itemId: string) => void;
@@ -60,7 +62,7 @@ interface GameState {
     debugEnabled: boolean;
     
     // Actions
-    startGame: (gamblerId?: string) => void;
+    startGame: (gamblerId?: string, cityId?: string) => void;
     dealFirstHand: () => void;
     drawCard: () => void;
     assignCard: (handIndex: number) => Promise<void>;
@@ -106,6 +108,8 @@ interface GameState {
     enhanceCard: (cardId: string, effect: { type: 'chip' | 'mult' | 'score', value: number }) => void;
     leaveShop: () => void;
     revealDealerHiddenCard: () => void;
+    goToTitle: () => void;
+    winGame: () => void;
     isReshuffling: boolean;
 }
 
@@ -137,6 +141,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     isCollectingChips: false,
     runningSummary: null,
     roundSummary: null,
+    selectedCityId: null,
     shopRewardSummary: null,
     discardPile: [],
     inventory: [],
@@ -154,6 +159,10 @@ export const useGameStore = create<GameState>((set, get) => ({
     debugEnabled: localStorage.getItem('viginti_debug') === 'true',
     animationSpeed: 1,
     setAnimationSpeed: (speed) => set({ animationSpeed: speed }),
+
+    goToTitle: () => set({ phase: 'init' }),
+
+    winGame: () => set({ phase: 'victory' }),
 
     toggleDebug: () => {
         set(state => {
@@ -209,8 +218,10 @@ export const useGameStore = create<GameState>((set, get) => ({
         });
     },
 
-    startGame: (gamblerId: string = 'default') => {
+    startGame: (gamblerId: string = 'newbie', cityId: string = 'las_vegas') => {
         const gambler = GAMBLER_DEFINITIONS.find(g => g.id === gamblerId) || GAMBLER_DEFINITIONS[0];
+        const city = CITY_DEFINITIONS.find(c => c.id === cityId) || CITY_DEFINITIONS[0];
+        
         const deck = shuffleDeck(gambler.getInitialDeck());
 
         // Reset to Casino 1 state but don't deal yet
@@ -224,6 +235,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
         // Initialize Inventory from Gambler
         const initialInventory = gambler.getInitialRelics();
+        const initialTargetScore = city.casinoTargets[0]; // 1st casino target score
 
         set({
             deck,
@@ -237,7 +249,8 @@ export const useGameStore = create<GameState>((set, get) => ({
             dealerMessageExiting: false,
             phase: 'entering_casino', // Start in entry mode
             totalScore: 0,
-            targetScore: calculateTargetScore(1),
+            targetScore: initialTargetScore,
+            selectedCityId: city.id,
             comps: 5,
             dealsTaken: 0,
             handsRemaining: RelicManager.executeValueHook('getDealsPerCasino', BASE_DEALS_PER_CASINO, { inventory: initialInventory }),
@@ -264,7 +277,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         }));
     },
 
-    dealFirstHand: () => {
+    dealFirstHand: async () => {
         const { deck, round, targetScore, totalScore } = get();
 
         // Use the existing deck (already shuffled in startGame or nextRound)
@@ -320,9 +333,40 @@ export const useGameStore = create<GameState>((set, get) => ({
             dealerCards.push(d2);
         }
 
+        // --- SEQUENCE CHANGE: Handle Discard Animation Delay ---
+        // Check if there are cards to discard (from previous round)
+        const activeHands = get().playerHands;
+        const hasCardsToDiscard = activeHands.some(h => h.cards.length > 0);
+        
+        if (hasCardsToDiscard) {
+            // 1. Clear State to trigger Discard Animation
+            // Create purely empty hands structure to force discard
+            const emptyHandsForDiscard = activeHands.map(h => ({ ...h, cards: [], blackjackValue: 0, isBust: false, isHeld: false, isDoubled: false }));
+            
+            set({
+                playerHands: emptyHandsForDiscard, 
+                // Keep other state to prevent layout jumps
+            });
+
+            // Calculate wait time: 
+            const centerHandCards = activeHands[1]?.cards.length || 0;
+            const discardDuration = centerHandCards > 0 ? (centerHandCards * 100 + 600) : 0; // ms
+
+            if (discardDuration > 0) {
+                 await new Promise(resolve => setTimeout(resolve, discardDuration));
+            }
+        }
+        
+        // 2. NOW Deal new cards (State Update)
+        // Re-fetch deck/hands in case they changed (unlikely in this sync block but good practice)
+        const currentRef = get();
+        // We need to put the dealt cards INTO the state now.
+        // We already mutated `playerHands` locally above (lines 282-301), let's use that.
+        // Note: The previous logic blindly did `set({ playerHands })` which included the new cards immediately.
+        
         set({
             deck: deckRef,
-            playerHands,
+            playerHands: playerHands, // Now contains the new dealt card
             dealer: {
                 cards: dealerCards,
                 isRevealed: false,
@@ -785,24 +829,21 @@ export const useGameStore = create<GameState>((set, get) => ({
             const revealedCards = [...dealer.cards];
             revealedCards[0] = { ...revealedCards[0], isFaceUp: true };
             
-            // Update cards but keep old blackjackValue for the flip duration
+            const revealVal = getBlackjackScore(revealedCards, get().inventory, true);
+            
+            // Update cards and blackjackValue immediately when reveal starts
             set({ 
                 dealer: { 
                     ...dealer, 
                     isRevealed: true, 
-                    cards: revealedCards 
+                    cards: revealedCards,
+                    blackjackValue: revealVal
                 } 
             });
             
             await wait(600); // Wait for the 0.6s flip transition
             
-            const revealVal = getBlackjackScore(revealedCards, get().inventory, true);
-            set({
-                dealer: {
-                    ...get().dealer,
-                    blackjackValue: revealVal
-                }
-            });
+            // No need for second set() since we updated it above
             dCards = revealedCards;
             dVal = revealVal;
         }
@@ -828,20 +869,21 @@ export const useGameStore = create<GameState>((set, get) => ({
             const nextCards = [...dCards, c];
             const nextVal = getBlackjackScore(nextCards, get().inventory, true);
 
-            // Show card being dealt (face down -> flip) but keep old score
+            // Show card being dealt and update score immediately
+            // Match behavior of player assignCard which updates score synchronously
             set({
                 deck: dDeck,
-                dealer: { ...get().dealer, cards: nextCards }
+                dealer: { 
+                    ...get().dealer, 
+                    cards: nextCards,
+                    blackjackValue: nextVal // Update immediately
+                }
             });
-
-            await wait(500); // Match --anim-deal-duration
-
+            
             dCards = nextCards;
             dVal = nextVal;
 
-            set({
-                dealer: { ...get().dealer, blackjackValue: dVal }
-            });
+            await wait(500); // Match --anim-deal-duration (wait for card to fly/flip)
 
             set({ dealerMessageExiting: true });
             await wait(100);
@@ -1161,9 +1203,34 @@ export const useGameStore = create<GameState>((set, get) => ({
 
         // Rewards already applied on entry to shop
 
+        // Calculate Target Score using City logic
+        // But first we need the city
+        const { selectedCityId } = get();
+        const city = CITY_DEFINITIONS.find(c => c.id === selectedCityId) || CITY_DEFINITIONS[0];
+        
         let newTargetScore = targetScore;
-        // Set target relative to current cumulated score
-        newTargetScore = newTotalScore + calculateTargetScore(newRound);
+        
+        // Check if we exceeded max casinos?
+        // If round > city.numberOfCasinos, what happens?
+        // Usually we should have ended game by verified success. 
+        // If we are here, we are leaving shop to GO TO `newRound`.
+        
+        // If `round` (current) was the last one, `newRound` is out of bounds.
+        // But we processed rewards for `round`.
+        // So now we are entering a non-existent casino?
+        // We should check victory condition here or in nextRound.
+        // But if we are in Shop, we already beat the previous one.
+        // The user says "Cities control the progression... eventually unlock conditions".
+        // Let's assume loop or endless if we go past, OR update target score to standard formula.
+        // City definitions only defined rewards for specific indices?
+        // My `getRewards` logic in definitions uses standard formula or specific indices.
+        
+        const targetIdx = newRound - 1;
+        const cityTarget = city.casinoTargets[targetIdx] !== undefined 
+            ? city.casinoTargets[targetIdx] 
+            : (city.casinoTargets[city.casinoTargets.length - 1] + (targetIdx - city.casinoTargets.length + 1) * 1000); // Fallback scaling
+
+        newTargetScore = newTotalScore + cityTarget; // target for NEW round
 
         // Preserve and shuffle ALL cards in play to prevent loss
         // Collect from: Remaining Deck, Discard Pile, Dealer Hand, Player Hands, Drawn/Active Cards
@@ -1219,7 +1286,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         });
     },
 
-    nextRound: (forceContinue = false) => {
+    nextRound: async (forceContinue = false) => {
         const currentState = get();
         const { deck, dealer, playerHands, totalScore, targetScore, handsRemaining } = currentState;
 
@@ -1235,7 +1302,7 @@ export const useGameStore = create<GameState>((set, get) => ({
             // GO TO GIFT SHOP PHASE
 
             // Calculate Rewards
-            const { surrenders, doubleDownCharges, handsRemaining, comps, inventory } = currentState;
+            const { surrenders, doubleDownCharges, handsRemaining, comps, inventory, selectedCityId, round } = currentState;
             const dealsBonus = handsRemaining * 2;
             const hasDoubleDownRelic = inventory.some(r => r.id === 'double_down');
             const doubleDownBonus = hasDoubleDownRelic ? (doubleDownCharges * 1) : 0;
@@ -1246,70 +1313,35 @@ export const useGameStore = create<GameState>((set, get) => ({
 
             set({ comps: comps + totalBonus });
 
-            // 1a. Generate Standard Card (Cost 1, No Special)
-            const fullDeck1 = createStandardDeck();
-            const idx1 = Math.floor(Math.random() * fullDeck1.length);
-            const standardCard = fullDeck1[idx1];
-            standardCard.isFaceUp = true;
-            standardCard.origin = 'shop';
-
-            // 1b. Generate Special Card (Cost 2, Guaranteed Special)
-            const fullDeck2 = createStandardDeck();
-            const idx2 = Math.floor(Math.random() * fullDeck2.length);
-            const specialCard = fullDeck2[idx2];
-            specialCard.isFaceUp = true;
-            specialCard.origin = 'shop';
-
-            const effects = [
-                { type: 'mult' as const, value: 1 }, { type: 'mult' as const, value: 2 },
-                { type: 'chip' as const, value: 5 }, { type: 'chip' as const, value: 10 }
-            ];
-            specialCard.specialEffect = effects[Math.floor(Math.random() * effects.length)];
-
-            // 2. Generate Random Angle
-            const currentIds = get().inventory.map(i => i.id);
-            const allAngles = RelicManager.getAllRelics().filter(r => r.categories.includes('Angle') && !currentIds.includes(r.id));
-            const randomAngle = allAngles.length > 0 ? allAngles[Math.floor(Math.random() * allAngles.length)] : null;
-
-            // 3. Generate Random Charm
-            const allCharms = RelicManager.getAllRelics().filter(r => r.categories.includes('Charm') && !currentIds.includes(r.id));
-            const randomCharm = allCharms.length > 0 ? allCharms[Math.floor(Math.random() * allCharms.length)] : null;
-
-            const newShopItems = [];
-
-            newShopItems.push({
-                id: 'shop_card_standard',
-                type: 'Card' as const,
-                card: standardCard,
-                cost: 1,
-                nameOverride: 'Standard Card'
-            });
-
-            newShopItems.push({
-                id: 'shop_card_special',
-                type: 'Card' as const,
-                card: specialCard,
-                cost: 2,
-                nameOverride: 'Special Card'
-            });
-
-            if (randomAngle) {
-                newShopItems.push({
-                    id: randomAngle.id,
-                    type: 'Angle' as const,
-                    cost: 8,
-                    nameOverride: randomAngle.name
-                });
+            // Generate Rewards based on City
+            const city = CITY_DEFINITIONS.find(c => c.id === selectedCityId) || CITY_DEFINITIONS[0];
+            
+            // Check if we just beat the LAST casino in the city
+            if (round >= city.casinoTargets.length) {
+                // Victory Condition?
+                // For now, let's allow playing beyond or show Game Over Win?
+                // User requirement: "Cities control the progression... new structure for specifying items available after each casino"
+                // If it's the last casino, typically you win the run.
+                // "This is the tutorial city. It will only be three casinos long."
+                // I should likely add a 'VICTORY' phase or handle it.
+                // But for now, let's generate rewards as if it's just another shop, 
+                // but maybe we should show a specific "City Cleared" message?
+                // The prompt says "first and third rewards offer...", implying there IS a reward after the 3rd.
+                // So we show the shop for the 3rd casino.
+                // But `nextRound` from the shop will then increment round to 4.
+                // My `nextRound` logic should check this.
             }
 
-            if (randomCharm) {
-                newShopItems.push({
-                    id: randomCharm.id,
-                    type: 'Charm' as const,
-                    cost: 5,
-                    nameOverride: randomCharm.name
-                });
-            }
+            // Casino 1 cleared -> Index 0. 
+            // `round` is currently 1 (since we started at 1 and haven't incremented yet).
+            // So we pass index `round - 1`. Or `round`?
+            // "The first and third rewards".
+            // If round 1 is cleared, that's the 1st reward.
+            // So index should be 0 for Round 1 reward?
+            // Let's assume input to getRewards matches the index of the casino just beaten (0-based)
+            const rewardConfig = city.getRewards(round - 1);
+            
+            const newShopItems = generateShopItems(rewardConfig, inventory);
 
             set({
                 shopItems: newShopItems,
@@ -1363,6 +1395,31 @@ export const useGameStore = create<GameState>((set, get) => ({
         dealerCards[1].isFaceUp = true;
         dealerCards[1].origin = 'deck';
 
+        // newHands and dealerCards are prepared above but NOT set yet.
+
+        // --- SEQUENCE CHANGE: Handle Discard Animation Delay ---
+        // 1. Clear State to trigger Discard Animation
+        // Create purely empty hands structure to force discard
+        const activeHands = get().playerHands;
+        const emptyHandsForDiscard = activeHands.map(h => ({ ...h, cards: [], blackjackValue: 0, isBust: false, isHeld: false, isDoubled: false }));
+        
+        set({
+            playerHands: emptyHandsForDiscard, 
+            // Keep other state to prevent layout jumps/flashes
+            dealer: { ...dealer, cards: [] } // Also clear dealer? Yes, dealer needs to discard too.
+        });
+
+        // Calculate wait time based on the actual duration of the discard animation (0.42s)
+        // plus the stagger delay (0.1s per card). 
+        // Adding 200ms buffer to prevent animation overlap bugs.
+        const centerHandCards = activeHands[1]?.cards.length || 0;
+        const discardDuration = centerHandCards > 0 ? ((centerHandCards - 1) * 100 + 620) : 0; // ms
+
+        if (discardDuration > 0) {
+                await new Promise(resolve => setTimeout(resolve, discardDuration));
+        }
+
+        // 2. NOW Deal new cards (State Update)
         set({
             deck: deckRef,
             playerHands: newHands,

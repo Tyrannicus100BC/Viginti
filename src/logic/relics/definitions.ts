@@ -38,7 +38,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     },
     {
         name: 'Rank Triple Chips',
-        categories: ['Angle', 'Rank', 'HandType', 'Chips'],
+        categories: ['Angle', 'Rank', 'HandType', 'Chips', 'Triple'],
         description: 'Highest [Rank Triple] earns {hand.score}',
         handType: { id: 'rank_triple_chips', name: 'Rank Triple', chips: 60, mult: 0, order: 3 },
         hooks: Hooks.rank_triple,
@@ -47,7 +47,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     },
     {
         name: 'Rank Triple Mult',
-        categories: ['Angle', 'Rank', 'HandType', 'Mult'],
+        categories: ['Angle', 'Rank', 'HandType', 'Mult', 'Triple'],
         description: 'Highest [Rank Triple] earns {hand.score}',
         handType: { id: 'rank_triple_mult', name: 'Rank Triple', chips: 0, mult: 3, order: 3.1 },
         hooks: Hooks.rank_triple,
@@ -93,7 +93,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     },
     {
         name: 'Flush Triple Chips',
-        categories: ['Angle', 'Flush', 'HandType', 'Chips'],
+        categories: ['Angle', 'Flush', 'HandType', 'Chips', 'Triple'],
         description: 'Highest [Flush Triple] earns {hand.score}',
         handType: { id: 'flush_triple_chips', name: 'Flush Triple', chips: 60, mult: 0, order: 6, chipCards: true },
         hooks: Hooks.flush_triple,
@@ -102,7 +102,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     },
     {
         name: 'Flush Triple Mult',
-        categories: ['Angle', 'Flush', 'HandType', 'Mult'],
+        categories: ['Angle', 'Flush', 'HandType', 'Mult', 'Triple'],
         description: 'Highest [Flush Triple] earns {hand.score}',
         handType: { id: 'flush_triple_mult', name: 'Flush Triple', chips: 0, mult: 3, order: 6.1 },
         hooks: Hooks.flush_triple,
@@ -148,7 +148,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     },
     {
         name: 'Straight Triple Chips',
-        categories: ['Angle', 'Straight', 'HandType', 'Chips'],
+        categories: ['Angle', 'Straight', 'HandType', 'Chips', 'Triple'],
         description: 'Highest [Straight Triple] earns {hand.score}',
         handType: { id: 'straight_triple_chips', name: 'Straight Triple', chips: 60, mult: 0, order: 9, chipCards: true },
         hooks: Hooks.straight_triple,
@@ -157,7 +157,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     },
     {
         name: 'Straight Triple Mult',
-        categories: ['Angle', 'Straight', 'HandType', 'Mult'],
+        categories: ['Angle', 'Straight', 'HandType', 'Mult', 'Triple'],
         description: 'Highest [Straight Triple] earns {hand.score}',
         handType: { id: 'straight_triple_mult', name: 'Straight Triple', chips: 0, mult: 3, order: 9.1 },
         hooks: Hooks.straight_triple,
@@ -256,7 +256,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Old Receipt',
         categories: ['Charm', 'Suite', 'Diamonds'],
-        description: 'Each [Diamond] earns $${bonus_chips} when scored',
+        description: 'Each [Diamond] in winning hands earn $${bonus_chips}',
         properties: { bonus_chips: 5 },
         hooks: Hooks.old_receipt_diamonds,
         icon: '🧾'
@@ -264,7 +264,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Lucky Rock',
         categories: ['Charm', 'Suite', 'Hearts'],
-        description: 'Each [Hearts] earns $${bonus_chips} when scored',
+        description: 'Each [Hearts] in winning hands earn $${bonus_chips}',
         properties: { bonus_chips: 5 },
         hooks: Hooks.lucky_rock_hearts,
         icon: '🪨'
@@ -272,7 +272,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Burnt Match',
         categories: ['Charm', 'Suite', 'Clubs'],
-        description: 'Each [Club] earns $${bonus_chips} when scored',
+        description: 'Each [Club] in winning hands earn $${bonus_chips}',
         properties: { bonus_chips: 5 },
         hooks: Hooks.burnt_match_clubs,
         icon: '🧨'
@@ -280,7 +280,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Lost Key',
         categories: ['Charm', 'Suite', 'Spades'],
-        description: 'Each [Spade] earns $${bonus_chips} when scored',
+        description: 'Each [Spade] in winning hands earn $${bonus_chips}',
         properties: { bonus_chips: 5 },
         hooks: Hooks.lost_key_spades,
         icon: '🔑'
@@ -289,7 +289,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Star Bead',
         categories: ['Charm', 'Cards'],
-        description: 'Each [9] earns an extra x${bonus_mult}',
+        description: 'Each [9] in winning hands earn x${bonus_mult}',
         properties: { bonus_mult: 0.5 },
         hooks: Hooks.star_bead_nines,
         icon: '⭐️'
@@ -297,7 +297,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Heart Button',
         categories: ['Charm', 'Cards'],
-        description: 'Each [10] and [4] earn an extra x${bonus_mult}',
+        description: 'Each [10] and [4] in winning hands earn x${bonus_mult}',
         properties: { bonus_mult: 0.5 },
         hooks: Hooks.heart_button_ten_four,
         icon: '🩷'
@@ -305,7 +305,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Lucky Acorn',
         categories: ['Charm', 'Cards'],
-        description: 'Each [King] earns an extra x${bonus_mult}',
+        description: 'Each [King] in winning hands earn x${bonus_mult}',
         properties: { bonus_mult: 0.5 },
         hooks: Hooks.lucky_acorn_kings,
         icon: '🌰'
