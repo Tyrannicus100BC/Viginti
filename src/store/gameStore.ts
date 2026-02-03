@@ -268,6 +268,7 @@ export const useGameStore = create<GameState>((set, get) => ({
             isDealerPlaying: false,
             doubleDownCharges: 0,
             surrenders: initialInventory.some(r => r.id === 'surrender') ? 3 : 0,
+            animationSpeed: 1,
         });
     },
 
@@ -278,7 +279,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     },
 
     dealFirstHand: async () => {
-        const { deck, round, targetScore, totalScore } = get();
+        const { deck, round, targetScore, totalScore, isInitialDeal, phase } = get();
+        if (isInitialDeal && phase === 'playing') return; // Already dealing
 
         // Use the existing deck (already shuffled in startGame or nextRound)
         // or create a new one if empty (fallback)
@@ -338,6 +340,9 @@ export const useGameStore = create<GameState>((set, get) => ({
         const activeHands = get().playerHands;
         const hasCardsToDiscard = activeHands.some(h => h.cards.length > 0);
         
+        // Prevent concurrent calls and block hits
+        set({ isInitialDeal: true });
+
         if (hasCardsToDiscard) {
             // 1. Clear State to trigger Discard Animation
             // Create purely empty hands structure to force discard
@@ -353,7 +358,7 @@ export const useGameStore = create<GameState>((set, get) => ({
             const discardDuration = centerHandCards > 0 ? (centerHandCards * 100 + 600) : 0; // ms
 
             if (discardDuration > 0) {
-                 await new Promise(resolve => setTimeout(resolve, discardDuration));
+                 await new Promise(resolve => setTimeout(resolve, discardDuration / get().animationSpeed));
             }
         }
         
@@ -388,14 +393,15 @@ export const useGameStore = create<GameState>((set, get) => ({
             roundSummary: null,
             allWinnersEnlarged: false,
             dealerVisible: true,
-            isDealerPlaying: false
+            isDealerPlaying: false,
+            animationSpeed: 1
         });
 
         // After animations complete (Dealer cards only now)
         const delay = get().debugEnabled ? 0 : 1500;
         setTimeout(() => {
             set({ isInitialDeal: false });
-        }, delay);
+        }, delay / get().animationSpeed);
     },
 
     drawCard: async () => {
@@ -410,9 +416,11 @@ export const useGameStore = create<GameState>((set, get) => ({
         // Consume draw modifier
         set(state => ({ modifiers: { ...state.modifiers, drawCountMod: 0 } }));
 
+        console.log('[DEBUG] Pre-Hook drawCount:', drawCount, 'Inventory:', inventory.map(r => r.id));
         drawCount = RelicManager.executeValueHook('getDrawCount', drawCount, { inventory });
+        console.log('[DEBUG] Post-Hook drawCount:', drawCount);
 
-        drawCount = RelicManager.executeValueHook('getDrawCount', drawCount, { inventory });
+
 
         // Auto-Reshuffle Check
         let deckRef = [...deck];
@@ -1282,13 +1290,15 @@ export const useGameStore = create<GameState>((set, get) => ({
             dealerVisible: true,
             shopItems: [],
             selectedShopItemId: null,
-            shopRewardSummary: null
+            shopRewardSummary: null,
+            animationSpeed: 1
         });
     },
 
     nextRound: async (forceContinue = false) => {
         const currentState = get();
-        const { deck, dealer, playerHands, totalScore, targetScore, handsRemaining } = currentState;
+        const { deck, dealer, playerHands, totalScore, targetScore, handsRemaining, isInitialDeal } = currentState;
+        if (isInitialDeal) return; // Already dealing
 
         // Check if player reached the target score
         const hasReachedTarget = totalScore >= targetScore;
@@ -1403,6 +1413,9 @@ export const useGameStore = create<GameState>((set, get) => ({
         const activeHands = get().playerHands;
         const emptyHandsForDiscard = activeHands.map(h => ({ ...h, cards: [], blackjackValue: 0, isBust: false, isHeld: false, isDoubled: false }));
         
+        // Block hits during animation
+        set({ isInitialDeal: true });
+
         set({
             playerHands: emptyHandsForDiscard, 
             // Keep other state to prevent layout jumps/flashes
@@ -1416,7 +1429,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         const discardDuration = centerHandCards > 0 ? ((centerHandCards - 1) * 100 + 620) : 0; // ms
 
         if (discardDuration > 0) {
-                await new Promise(resolve => setTimeout(resolve, discardDuration));
+                await new Promise(resolve => setTimeout(resolve, discardDuration / get().animationSpeed));
         }
 
         // 2. NOW Deal new cards (State Update)
@@ -1440,13 +1453,14 @@ export const useGameStore = create<GameState>((set, get) => ({
             roundSummary: null,
             allWinnersEnlarged: false,
             dealerVisible: true,
-            isDealerPlaying: false
+            isDealerPlaying: false,
+            animationSpeed: 1
         });
 
         // After animations complete
         setTimeout(() => {
             set({ isInitialDeal: false });
-        }, 1500);
+        }, 1500 / get().animationSpeed);
     },
 
     debugWin: async () => {

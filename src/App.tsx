@@ -63,6 +63,7 @@ export default function App() {
         holdReturns,
 
         setAnimationSpeed,
+        animationSpeed,
         modifiers,
         inventory,
         roundSummary,
@@ -312,25 +313,25 @@ export default function App() {
                 if (round !== displayRound) {
                     setDisplayRound(round);
                     setRoundAnimate(true);
-                    setTimeout(() => setRoundAnimate(false), 500);
+                    setTimeout(() => setRoundAnimate(false), 500 / animationSpeed);
                 }
                 if (targetScore !== displayTarget) {
                     setDisplayTarget(targetScore);
                     setTargetAnimate(true);
-                    setTimeout(() => setTargetAnimate(false), 500);
+                    setTimeout(() => setTargetAnimate(false), 500 / animationSpeed);
                 }
                 if (comps !== displayComps) {
                     setDisplayComps(comps);
                     setCompsAnimate(true);
-                    setTimeout(() => setCompsAnimate(false), 500);
+                    setTimeout(() => setCompsAnimate(false), 500 / animationSpeed);
                 }
-            }, 800);
+            }, 800 / animationSpeed);
 
             // Calculate exit delay
             const delay = round === 1 ? 1080 : 1800;
             const exitTimer = setTimeout(() => {
                 setOverlayComplete(true);
-            }, delay);
+            }, delay / animationSpeed);
 
             return () => {
                 clearTimeout(transitionTimer);
@@ -348,7 +349,7 @@ export default function App() {
                 setDisplayComps(comps);
                 // Trigger animation for Comps when they change (e.g. Gift Shop purchase)
                 setCompsAnimate(true);
-                const timer = setTimeout(() => setCompsAnimate(false), 500);
+                const timer = setTimeout(() => setCompsAnimate(false), 500 / animationSpeed);
                 return () => clearTimeout(timer);
             }
         }
@@ -510,11 +511,14 @@ export default function App() {
         if (target.closest('button')) return;
 
         // Speed up animations if dealer is revealed (Dealer Turn OR Scoring Phase)
+        // or during the entering_casino interstitial
         // and the round is not yet over.
-        const canSpeedUp = dealer.isRevealed && phase !== 'round_over';
+        const canSpeedUp = (dealer.isRevealed && phase !== 'round_over') || (phase === 'entering_casino' && !overlayComplete);
 
-        if (canSpeedUp) {
-            setAnimationSpeed(3);
+        if (canSpeedUp && animationSpeed === 1) {
+            setAnimationSpeed(4);
+            // If we just sped up the interstitial, consume this click so they don't accidentally start the deal instantly
+            if (phase === 'entering_casino') return;
         }
 
         if (canDraw) {
@@ -572,6 +576,9 @@ export default function App() {
         <div
             className={`${styles.container} ${isShaking ? 'shake-screen red-tint' : ''}`}
             onClick={handleGlobalClick}
+            style={{
+                '--header-transition-duration': `${0.8 / animationSpeed}s`
+            } as React.CSSProperties}
         >
             <div className={styles.topNavContainer}>
 

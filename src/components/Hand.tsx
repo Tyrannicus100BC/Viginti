@@ -209,6 +209,8 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
     }
   }, [hand.blackjackValue, isWin, hand.resultRevealed]);
 
+  const animationSpeed = useGameStore(state => state.animationSpeed);
+
   // Scoring Animation Sequence
   useEffect(() => {
     if (isWin && hand.finalScore && !animationRef.current && (isScoringFocus || isEnlarged)) {
@@ -218,7 +220,9 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
       const criteria = hand.finalScore.criteria;
 
       const runAnimation = async () => {
-        const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+        const wait = (ms: number) => {
+          return new Promise(resolve => setTimeout(resolve, ms / animationSpeed));
+        };
 
         // Initial delay
         await wait(0);
