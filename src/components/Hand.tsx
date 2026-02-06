@@ -14,11 +14,12 @@ interface HandProps {
   isScoringFocus?: boolean;
   isEnlarged?: boolean;
   isSelected?: boolean;
+  id?: string;
 }
 
 import { useGameStore } from '../store/gameStore';
 
-export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay = 0, stagger = true, isScoringFocus = false, isEnlarged = false, isSelected = false }) => {
+export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay = 0, stagger = true, isScoringFocus = false, isEnlarged = false, isSelected = false, id }) => {
   const triggerScoringRow = useGameStore(state => state.triggerScoringRow);
   // Determine if we should show overlay (bust or result revealed)
   const isViginti = hand.blackjackValue === 21;
@@ -392,6 +393,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
         transformOrigin,
         zIndex: hasAnimatingCard ? 100 : undefined // Boost z-index when animating
       }}
+      id={id}
     >
       {/* Scoring List */}
       {isWin && hand.finalScore && (

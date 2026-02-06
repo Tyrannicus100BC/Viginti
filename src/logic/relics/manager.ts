@@ -6,6 +6,7 @@ import type {
     PrioritizedHook
 } from './types';
 import { RELIC_DEFINITIONS } from './definitions';
+import { TutorialManager } from '../tutorials/tutorials';
 
 // Build Registry
 export const RELIC_REGISTRY: Record<string, RelicConfig> = {};
@@ -70,6 +71,19 @@ export class RelicManager {
             });
         });
 
+        // Mix-in Tutorial Hook
+        const activeStep = TutorialManager.getInstance().getActiveStep();
+        if (activeStep && activeStep.hooks && activeStep.hooks[hookName]) {
+            const rawHook = activeStep.hooks[hookName];
+            const normalized = normalizeHook(rawHook as any);
+            activeHooks.push({
+                instance: { id: activeStep.id, state: {} },
+                priority: normalized.priority,
+                handler: normalized.handler,
+                config: { ...activeStep, hooks: activeStep.hooks } as any
+            });
+        }
+
         // Sort by Priority ASC, then by Inventory Order (FIFO)
         activeHooks.sort((a, b) => a.priority - b.priority);
 
@@ -111,6 +125,19 @@ export class RelicManager {
             });
         });
 
+        // Mix-in Tutorial Hook
+        const activeStep = TutorialManager.getInstance().getActiveStep();
+        if (activeStep && activeStep.hooks && activeStep.hooks[hookName]) {
+            const rawHook = activeStep.hooks[hookName];
+            const normalized = normalizeHook(rawHook as any);
+            activeHooks.push({
+                instance: { id: activeStep.id, state: {} },
+                priority: normalized.priority,
+                handler: normalized.handler,
+                config: { ...activeStep, hooks: activeStep.hooks } as any
+            });
+        }
+
         activeHooks.sort((a, b) => a.priority - b.priority);
 
         for (const hook of activeHooks) {
@@ -148,6 +175,21 @@ export class RelicManager {
                  console.error(`Error in check relic hook ${hookName} for relic ${instance.id}:`, e);
              }
         }
+
+        // Mix-in Tutorial Hook
+        const activeStep = TutorialManager.getInstance().getActiveStep();
+        if (!shouldInterrupt && activeStep && activeStep.hooks && activeStep.hooks[hookName]) {
+            const rawHook = activeStep.hooks[hookName];
+            const normalized = normalizeHook(rawHook as any);
+            try {
+                if (normalized.handler(context, {}, { ...activeStep, hooks: activeStep.hooks } as any)) {
+                    shouldInterrupt = true;
+                }
+            } catch (e) {
+                console.error(`Error in check tutorial hook ${hookName}:`, e);
+            }
+        }
+
         return shouldInterrupt;
     }
 }

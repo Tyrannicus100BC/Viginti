@@ -25,6 +25,9 @@ import { useLayout } from './components/ResponsiveLayout';
 import { CasinosButton, DeckButton } from './components/HeaderButtons';
 import { CITY_DEFINITIONS } from './logic/cities/definitions';
 
+import { TutorialOverlay } from './components/TutorialOverlay';
+import { TutorialManager } from './logic/tutorials/tutorials';
+
 // Constants for layout
 const POT_TOP_Y = 380; // Anchor pots to this Y value
 
@@ -106,7 +109,11 @@ export default function App() {
         isReshuffling,
         goToTitle,
         winGame,
-        selectedCityId: storeCityId
+        selectedCityId: storeCityId,
+
+        // Tutorial Actions
+        registerTutorials,
+        checkTutorials,
     } = useGameStore();
 
     const { viewportWidth, viewportHeight } = useLayout();
@@ -409,6 +416,15 @@ export default function App() {
         ...discardPile
     ];
 
+    // Tutorial Logic
+    useEffect(() => {
+        registerTutorials();
+    }, [registerTutorials]);
+
+    useEffect(() => {
+        checkTutorials();
+    }, [phase, round, isInitialDeal, dealer.cards.length, playerHands, drawnCards, checkTutorials]);
+
 
     if (phase === 'init') {
         return (
@@ -456,6 +472,27 @@ export default function App() {
                     <svg className={styles.bugIcon} viewBox="0 0 24 24">
                         <path d="M20 8h-2.81c-.45-.78-1.07-1.45-1.82-1.96L17 4.41 15.59 3l-2.17 2.17C12.96 5.06 12.49 5 12 5c-.49 0-.96.06-1.41.17L8.41 3 7 4.41l1.62 1.63C7.88 6.55 7.26 7.22 6.81 8H4v2h2.09c-.05.33-.09.66-.09 1v1H4v2h2v1c0 .34.04.67.09 1H4v2h2.81c1.04 1.79 2.97 3 5.19 3s4.15-1.21 5.19-3H20v-2h-2.09c.05-.33.09-.66.09-1v-1h2v-2h-2v-1c0-.34-.04-.67-.09-1H20V8zm-6 8h-4v-2h4v2zm0-4h-4v-2h4v2z" />
                     </svg>
+                )}
+                {debugEnabled && (
+                    <button
+                        className={styles.button}
+                        style={{ 
+                            position: 'absolute', 
+                            bottom: 20, 
+                            right: 20, 
+                            zIndex: 100, 
+                            fontSize: '0.8rem', 
+                            padding: '8px 12px', 
+                            width: 'auto',
+                            opacity: 0.8
+                        }}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            TutorialManager.getInstance().reset();
+                        }}
+                    >
+                        Reset Tutorials
+                    </button>
                 )}
             </div>
         );
@@ -749,7 +786,7 @@ export default function App() {
 
                 <div className={styles.board}>
                     <div className={styles.topContent}>
-                        <div className={`${styles.dealerZone} ${!dealerVisible ? styles.dealerZoneHidden : ''}`}>
+                        <div id="dealer-hand-zone" className={`${styles.dealerZone} ${!dealerVisible ? styles.dealerZoneHidden : ''}`}>
                             <div className={styles.zoneLabel}>Dealer</div>
                             <div style={{ pointerEvents: 'none', position: 'relative' }}>
                                 <Hand
@@ -795,7 +832,7 @@ export default function App() {
 
                     <div className={styles.bottomContent}>
                         <div className={styles.middleZone} style={{ position: 'relative' }}>
-                            <div className={styles.drawAreaContainer} ref={drawAreaRef}>
+                            <div id="draw-area-zone" className={styles.drawAreaContainer} ref={drawAreaRef}>
                                 {debugEnabled && (
                                     <div
                                         className={`${styles.debugFade} ${isDrawAreaVisible ? styles.debugVisible : styles.debugHidden}`}
@@ -1041,7 +1078,7 @@ export default function App() {
                         </div>
 
                     <div className={styles.playerZone} style={{ opacity: areHandsVisible ? 1 : 0, transition: 'opacity 0.5s', pointerEvents: areHandsVisible ? 'auto' : 'none' }}>
-                            <div className={styles.playerHandsContainer}>
+                            <div id="player-hands-zone" className={styles.playerHandsContainer}>
                                 {playerHands.map((hand, idx) => {
                                     const canSelectHand = (showSelectionUI && drawnCards.length > 0) || interactionMode === 'double_down_select' || interactionMode === 'surrender_select';
                                     return (
@@ -1054,6 +1091,7 @@ export default function App() {
                                             baseDelay={idx === 1 ? 0 : 0.3}
                                             isScoringFocus={idx === scoringHandIndex}
                                             isEnlarged={allWinnersEnlarged && hand.outcome === 'win'}
+                                            id={`player-hand-${idx}`}
                                         />
                                     );
                                 })}
@@ -1171,6 +1209,8 @@ export default function App() {
             )}
 
             {/* FinalScoreOverlay removed */}
+
+            <TutorialOverlay />
             
             <div id="tooltip-portal-root" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 3000 }} />
         </div>

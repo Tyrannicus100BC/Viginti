@@ -1,0 +1,99 @@
+
+.container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 5000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    /* transition: opacity 0.3s; */
+}
+
+/* Modal text box */
+.messageBox {
+    background: rgba(20, 20, 25, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 12px;
+    padding: 24px 32px;
+    max-width: 500px;
+    color: #fff;
+    text-align: center;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    pointer-events: auto;
+    position: relative;
+    z-index: 5010;
+    backdrop-filter: blur(10px);
+}
+
+.messageText {
+    font-size: 1.2rem;
+    line-height: 1.6;
+    margin-bottom: 16px;
+    white-space: pre-line;
+}
+
+.continueHint {
+    font-size: 0.9rem;
+    color: #aaa;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% { opacity: 0.5; }
+    50% { opacity: 1; }
+    100% { opacity: 0.5; }
+}
+
+/* Highlight "Hole" implementation */
+.highlightHole {
+    position: absolute;
+    border-radius: 8px;
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.75);
+    pointer-events: none; /* Allow clicks through to the target */
+    z-index: 5005;
+    transition: all 0.3s ease-out;
+    border: 2px solid rgba(255, 215, 0, 0.5);
+}
+
+.highlightHole::after {
+    content: '';
+    position: absolute;
+    inset: -6px;
+    border: 2px solid rgba(255, 215, 0, 0.8);
+    border-radius: 12px;
+    animation: borderPulse 2s infinite;
+}
+
+@keyframes borderPulse {
+    0% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.05); opacity: 0.5; }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+/* Blocker layers for 'custom' completion to block clicks outside hole */
+/* Actually, the huge box-shadow DOES NOT block clicks. It's just visual shadow. */
+/* We need a real blocker if we want to prevent interactions elsewhere. */
+/* For now, maybe we just use a full screen div for click-to-continue steps. */
+/* For 'custom' steps (interactive), we might want to block non-target interactions, but that's complex to map perfectly. */
+/* Simplification: If 'custom', we assume the user knows what to do via the highlight, and we make the overlay "allow all pointer events" (height 0 wrapper?) 
+   OR we use the 4-div technique. */
+/* Let's stick to: visual highlight + message box. If completion is 'click', the message box (or screen) captures click. */
+/* If completion is 'custom', the screen is interactive (overlay container pointer-events: none), but we show the dark overlay visually via box-shadow on the highlight element. */
+
+.interactiveMode {
+    pointer-events: none;
+}
+
+.blockingMode {
+    pointer-events: auto;
+    background: rgba(0, 0, 0, 0.75); /* Fallback if no highlight */
+}
+
+/* If we have a highlight in blocking mode, we rely on the highlight's box-shadow for dimming, so blocking overlay checks that */
+

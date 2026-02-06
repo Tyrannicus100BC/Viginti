@@ -14,6 +14,8 @@ import { GAMBLER_DEFINITIONS } from '../logic/gamblers/definitions';
 import { CITY_DEFINITIONS } from '../logic/cities/definitions';
 import { generateShopItems } from '../logic/rewards/generator';
 // import type { RoundSummary } from '../logic/relics/types';
+import { TutorialManager } from '../logic/tutorials/tutorials';
+import { TUTORIAL_STEPS } from '../logic/tutorials/definitions';
 
 interface GameState {
     deck: Card[];
@@ -111,6 +113,8 @@ interface GameState {
     goToTitle: () => void;
     winGame: () => void;
     isReshuffling: boolean;
+    registerTutorials: () => void;
+    checkTutorials: () => void;
 }
 
 
@@ -159,6 +163,31 @@ export const useGameStore = create<GameState>((set, get) => ({
     debugEnabled: localStorage.getItem('viginti_debug') === 'true',
     animationSpeed: 1,
     setAnimationSpeed: (speed) => set({ animationSpeed: speed }),
+
+    registerTutorials: () => {
+         TutorialManager.getInstance().registerSteps(TUTORIAL_STEPS);
+    },
+
+    checkTutorials: () => {
+        const state = get();
+        const manager = TutorialManager.getInstance();
+        const context = {
+            phase: state.phase,
+            round: state.round,
+            isInitialDeal: state.isInitialDeal,
+            dealerCards: state.dealer.cards,
+            drawnCards: state.drawnCards,
+            playerHands: state.playerHands,
+            cardsPlacedThisTurn: state.cardsPlacedThisTurn
+        };
+        
+        // Trigger generic check
+        if (!manager.getActiveStep()) {
+             TUTORIAL_STEPS.forEach(step => {
+                 manager.tryTriggerStep(step.id, context);
+             });
+        }
+    },
 
     goToTitle: () => set({ phase: 'init' }),
 
