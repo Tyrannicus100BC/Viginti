@@ -1,5 +1,7 @@
 type SfxId =
     | 'viginti'
+    | 'win'
+    | 'loss'
     | 'click'
     | 'cardDeal'
     | 'cardFlip'
@@ -7,18 +9,22 @@ type SfxId =
     | 'bust'
     | 'stand'
     | 'totalWinnings'
-    | 'score';
+    | 'score'
+    | 'tutorial';
 
 const CARD_FLIP_GAIN = 2;
 const CARD_DEAL_GAIN = 1;
 
 const SFX_SOURCES = {
     viginti: '/sounds/Viginti.mp3',
+    win: '/sounds/Win.mp3',
+    loss: '/sounds/Loss.mp3',
     click: '/sounds/Click.mp3',
     bust: '/sounds/Bust.mp3',
     stand: '/sounds/Stand.mp3',
     totalWinnings: '/sounds/TotalWinnings.mp3',
     score: '/sounds/Score.mp3',
+    tutorial: '/sounds/Tutorial.wav',
     cardPlace: [
         '/sounds/CardPlace-01.wav',
         '/sounds/CardPlace-02.wav',
@@ -127,11 +133,14 @@ class SfxEngine {
     async preloadAll() {
         const sources = new Set<string>([
             SFX_SOURCES.viginti,
+            SFX_SOURCES.win,
+            SFX_SOURCES.loss,
             SFX_SOURCES.click,
             SFX_SOURCES.bust,
             SFX_SOURCES.stand,
             SFX_SOURCES.totalWinnings,
             SFX_SOURCES.score,
+            SFX_SOURCES.tutorial,
             ...SFX_SOURCES.cardPlace,
             ...SFX_SOURCES.cardDeal,
             ...SFX_SOURCES.cardFlip
@@ -221,6 +230,12 @@ class SfxEngine {
             case 'viginti':
                 this.playBySrc(SFX_SOURCES.viginti, volume, playbackRate);
                 break;
+            case 'win':
+                this.playBySrc(SFX_SOURCES.win, volume, playbackRate);
+                break;
+            case 'loss':
+                this.playBySrc(SFX_SOURCES.loss, volume, playbackRate);
+                break;
             case 'click':
                 this.playBySrc(SFX_SOURCES.click, volume, playbackRate);
                 break;
@@ -235,6 +250,9 @@ class SfxEngine {
                 break;
             case 'score':
                 this.playBySrc(SFX_SOURCES.score, volume, playbackRate);
+                break;
+            case 'tutorial':
+                this.playBySrc(SFX_SOURCES.tutorial, volume, playbackRate);
                 break;
             case 'cardDeal': {
                 const options = SFX_SOURCES.cardDeal;

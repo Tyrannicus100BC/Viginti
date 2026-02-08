@@ -9,6 +9,7 @@ interface PhysicsPotProps {
   onCollectionComplete: () => void;
   onItemArrived?: (value: number) => void;
   labelPrefix?: string; // '$' or 'x'
+  labelId?: string;
 }
 
 export const PhysicsPot: React.FC<PhysicsPotProps> = ({
@@ -18,7 +19,8 @@ export const PhysicsPot: React.FC<PhysicsPotProps> = ({
   center,
   onCollectionComplete,
   onItemArrived,
-  labelPrefix = '$'
+  labelPrefix = '$',
+  labelId
 }) => {
 const [isPulsing, setIsPulsing] = useState(false);
   const prevValueRef = useRef(totalValue);
@@ -60,6 +62,7 @@ const [isPulsing, setIsPulsing] = useState(false);
     >
       <div 
         className={`${styles.potTotal} ${isPulsing ? styles.pulse : ''}`}
+        id={labelId}
         style={{ 
           left: center.x, 
           top: center.y - 140, 
@@ -73,4 +76,3 @@ const [isPulsing, setIsPulsing] = useState(false);
     </div>
   );
 };
-

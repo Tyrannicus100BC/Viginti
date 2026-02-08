@@ -34,7 +34,7 @@ export const shouldPromptStandNow = (context: any) => {
 export const ATLANTIC_CITY_TUTORIAL_STEPS: TutorialStep[] = [
     {
         id: 'welcome',
-        text: "Welcome to Viginti\n\nClick to Deal your first Round",
+        text: "Welcome to Viginti\n\nDeal Your First Hand",
         completionType: 'click',
         scope: 'session',
         scrim: 'none',
@@ -47,7 +47,7 @@ export const ATLANTIC_CITY_TUTORIAL_STEPS: TutorialStep[] = [
     },
     {
         id: 'dealer_cards',
-        text: "This is the Dealer's Hand\n\nBeat their Score to win Money",
+        text: "This is the Dealer's Hand\n\nBeat Their Score to Win Money",
         highlight: { elementId: 'dealer-hand-zone', type: 'rect', padding: 10 },
         completionType: 'click',
         scope: 'session',
@@ -64,7 +64,7 @@ export const ATLANTIC_CITY_TUTORIAL_STEPS: TutorialStep[] = [
     },
     {
         id: 'player_hands',
-        text: "You have three Hands to Play\n\nEach is a chance to beat the Dealer",
+        text: "You Have Three Hands to Play\n\nEach is a Chance to Beat the Dealer",
         highlight: { elementId: 'player-hands-zone', type: 'rect', padding: 10 },
         completionType: 'click',
         scope: 'session',
@@ -74,7 +74,7 @@ export const ATLANTIC_CITY_TUTORIAL_STEPS: TutorialStep[] = [
     },
     {
         id: 'draw_indicator',
-        text: "Now Draw a Card",
+        text: "Hit to Take a Card",
         highlight: { elementId: 'draw-hit-spot-anchor', type: 'rect', padding: 0 },
         scrim: 'none',
         completionType: 'custom',
@@ -86,7 +86,7 @@ export const ATLANTIC_CITY_TUTORIAL_STEPS: TutorialStep[] = [
     },
     {
         id: 'place_card',
-        text: "Choose a Hand for this Card",
+        text: "Choose a Hand for This Card",
         scrim: 'none',
         completionType: 'custom',
         scope: 'session',
@@ -99,18 +99,18 @@ export const ATLANTIC_CITY_TUTORIAL_STEPS: TutorialStep[] = [
     },
     {
         id: 'get_close',
-        text: "Keep drawing Cards\n\nDon't go over 21",
+        text: "Keep Taking Cards\n\nDon't Go Over 21",
         scrim: 'none',
         completionType: 'custom',
         scope: 'session',
         autoTrigger: false,
         waitForEventId: 'player_place_animation_complete',
-        hooks: TutorialHooks.onPlayerHit('get_close'), // Clears when player hits again
+        hooks: TutorialHooks.onCardPlaced('get_close'), // Clears after placing the next drawn card
         condition: (context: any) => true, // Chained
     },
     {
         id: STAND_TUTORIAL_ID,
-        text: "Your Hands are strong\n\nLet the Dealer play",
+        text: "Your Hands are Strong\n\nLet the Dealer Play",
         highlight: { elementId: 'stand-button', type: 'rect', padding: 8 },
         scrim: 'none',
         completionType: 'custom',
@@ -122,7 +122,7 @@ export const ATLANTIC_CITY_TUTORIAL_STEPS: TutorialStep[] = [
     },
     {
         id: 'dealer_turn',
-        text: "Now the Dealer's turn",
+        text: "Now the Dealer's Turn",
         completionType: 'custom',
         scope: 'session',
         scrim: 'none',
@@ -131,7 +131,7 @@ export const ATLANTIC_CITY_TUTORIAL_STEPS: TutorialStep[] = [
     },
     {
         id: 'win_money_first',
-        text: "Each winning Hand earns you Money",
+        text: "Winning Hands Earn You Money",
         completionType: 'click',
         scope: 'session',
         autoTrigger: false,
@@ -144,29 +144,36 @@ export const ATLANTIC_CITY_TUTORIAL_STEPS: TutorialStep[] = [
     },
     {
         id: 'hud_debt',
-        text: "Earn this amount to beat the Casino",
+        text: "Repay Your Debt to the Casino",
         highlight: { elementId: 'hud-debt', type: 'rect', padding: 6 },
+        scrim: 'none',
         completionType: 'click',
         scope: 'session',
         autoTrigger: false,
-        waitForEventId: 'total_winnings_shown',
         continueActionId: 'mark_draw_tutorial_ready',
         condition: (context: any) => true,
         nextStepId: 'hud_draws'
     },
     {
         id: 'hud_draws',
-        text: "This is how many Draws you have left\n\nClick to Draw again",
+        text: "Your Time is Limited\n\nRepay Your Debt Quickly",
         highlight: { elementId: 'hud-draws', type: 'rect', padding: 6 },
-        completionType: 'click',
+        scrim: 'none',
+        completionType: 'custom',
         scope: 'session',
         autoTrigger: false,
-        waitForEventId: 'draw_available_after_debt',
-        condition: (context: any) => true
+        waitForEventId: 'deal_action_available',
+        completeOnEventId: 'hud_draws_decremented',
+        condition: (context: any) => {
+            const totalScore = context?.totalScore ?? 0;
+            const targetScore = context?.targetScore ?? 0;
+            const handsRemaining = context?.handsRemaining ?? 0;
+            return totalScore < targetScore && handsRemaining > 0;
+        }
     },
     {
         id: 'lost_all_hands',
-        text: "You lost every Hand\n\nYou'll never get out of Debt at this rate",
+        text: "You Lost Every Hand\n\nYou'll Never Get Out of Debt",
         completionType: 'click',
         scope: 'session',
         autoTrigger: false,
@@ -176,7 +183,8 @@ export const ATLANTIC_CITY_TUTORIAL_STEPS: TutorialStep[] = [
     },
     {
         id: 'viginti_first',
-        text: "You got Viginti\n\nExactly 21 always wins",
+        text: "You got Viginti\n\nExactly 21 Always Wins",
+        highlight: { elementId: 'player-hand-0', type: 'rect', padding: 8 },
         completionType: 'click',
         scope: 'session',
         startDelayMs: 520,
@@ -185,7 +193,8 @@ export const ATLANTIC_CITY_TUTORIAL_STEPS: TutorialStep[] = [
     },
     {
         id: 'bust_first',
-        text: "You Busted this Hand\n\nDon't go over 21",
+        text: "You Busted this Hand\n\nDon't Go Over 21",
+        highlight: { elementId: 'player-hand-0', type: 'rect', padding: 8 },
         completionType: 'click',
         scope: 'session',
         startDelayMs: 520,

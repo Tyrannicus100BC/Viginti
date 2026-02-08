@@ -2,6 +2,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { TutorialManager, type TutorialStep } from '../logic/tutorials/tutorials';
 import { useLayout } from './ResponsiveLayout';
+import { sfxEngine } from '../utils/sfxEngine';
 import styles from './TutorialOverlay.module.css';
 
 export const TutorialOverlay: React.FC = () => {
@@ -17,6 +18,10 @@ export const TutorialOverlay: React.FC = () => {
     const [playerHandsRect, setPlayerHandsRect] = useState<DOMRect | null>(null);
     const [standButtonRect, setStandButtonRect] = useState<DOMRect | null>(null);
     const [indicatorRect, setIndicatorRect] = useState<DOMRect | null>(null);
+    const [outcomeHandRect, setOutcomeHandRect] = useState<DOMRect | null>(null);
+    const [hudRect, setHudRect] = useState<DOMRect | null>(null);
+    const [totalWinningsRect, setTotalWinningsRect] = useState<DOMRect | null>(null);
+    const [hudDrawsRect, setHudDrawsRect] = useState<DOMRect | null>(null);
     const [messageBoxSize, setMessageBoxSize] = useState({ width: 0, height: 0 });
     const manager = TutorialManager.getInstance();
     const { scale, viewportWidth, viewportHeight, idealWidth } = useLayout();
@@ -26,6 +31,8 @@ export const TutorialOverlay: React.FC = () => {
     const exitingRef = useRef(false);
     const highlightFadeTimeoutRef = useRef<number | null>(null);
     const exitTimeoutRef = useRef<number | null>(null);
+    const lastSoundStepIdRef = useRef<string | null>(null);
+    const liftedTargetRef = useRef<HTMLElement | null>(null);
 
     useEffect(() => {
         return manager.subscribe(step => {
@@ -34,6 +41,25 @@ export const TutorialOverlay: React.FC = () => {
             }
 
             if (step === null && !exitingRef.current) {
+                if (stepRef.current) {
+                    exitingRef.current = true;
+                    setIsExiting(true);
+                    setIsOverlayFading(true);
+                    allowClickRef.current = false;
+                    if (exitTimeoutRef.current !== null) {
+                        window.clearTimeout(exitTimeoutRef.current);
+                    }
+                    exitTimeoutRef.current = window.setTimeout(() => {
+                        setActiveStep(null);
+                        setIsExiting(false);
+                        setIsOverlayFading(false);
+                        exitingRef.current = false;
+                        allowClickRef.current = false;
+                        exitTimeoutRef.current = null;
+                    }, 220);
+                    return;
+                }
+
                 manager.releaseInputLock();
             }
 
@@ -68,6 +94,16 @@ export const TutorialOverlay: React.FC = () => {
     }, [activeStep]);
 
     useEffect(() => {
+        if (!activeStep) {
+            lastSoundStepIdRef.current = null;
+            return;
+        }
+        if (lastSoundStepIdRef.current === activeStep.id) return;
+        lastSoundStepIdRef.current = activeStep.id;
+        sfxEngine.play('tutorial');
+    }, [activeStep]);
+
+    useEffect(() => {
         if (!messageBoxRef.current) return;
 
         const updateSize = () => {
@@ -87,8 +123,68 @@ export const TutorialOverlay: React.FC = () => {
         };
     }, [activeStep, scale, viewportWidth, viewportHeight]);
 
+    const isOutcomeStep = activeStep?.id === 'viginti_first' || activeStep?.id === 'bust_first';
+
+    const getOutcomeHandIndex = (context: any, stepId: string) => {
+        const hands = Array.isArray(context?.playerHands) ? context.playerHands : [];
+        if (stepId === 'viginti_first') {
+            return hands.findIndex((hand: any) => hand && hand.blackjackValue === 21 && !hand.isBust);
+        }
+        if (stepId === 'bust_first') {
+            return hands.findIndex((hand: any) => hand && hand.isBust);
+        }
+        return -1;
+    };
+
+    useEffect(() => {
+        if (!activeStep || !isOutcomeStep) {
+            setOutcomeHandRect(null);
+            return;
+        }
+
+        const updateRect = () => {
+            const context = manager.getContext();
+            const index = getOutcomeHandIndex(context, activeStep.id);
+            const wrapper = document.getElementById('game-scale-wrapper');
+            if (index < 0 || !wrapper) {
+                setOutcomeHandRect(null);
+                return;
+            }
+
+            const el = document.getElementById(`player-hand-${index}`);
+            if (!el) {
+                setOutcomeHandRect(null);
+                return;
+            }
+
+            const rect = el.getBoundingClientRect();
+            const wrapperRect = wrapper.getBoundingClientRect();
+
+            const left = (rect.left - wrapperRect.left) / scale;
+            const top = (rect.top - wrapperRect.top) / scale;
+            const width = rect.width / scale;
+            const height = rect.height / scale;
+
+            setOutcomeHandRect(new DOMRect(left, top, width, height));
+        };
+
+        updateRect();
+        const interval = setInterval(updateRect, 100);
+        window.addEventListener('resize', updateRect);
+
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener('resize', updateRect);
+        };
+    }, [activeStep, isOutcomeStep, scale]);
+
     // Track active step highlight element
     useEffect(() => {
+        if (isOutcomeStep) {
+            setHighlightRect(outcomeHandRect);
+            return;
+        }
+
         if (!activeStep?.highlight) {
             setHighlightRect(null);
             return;
@@ -121,7 +217,7 @@ export const TutorialOverlay: React.FC = () => {
             clearInterval(interval);
             window.removeEventListener('resize', updateRect);
         };
-    }, [activeStep, scale]);
+    }, [activeStep, scale, isOutcomeStep, outcomeHandRect]);
 
     useEffect(() => {
         if (highlightFadeTimeoutRef.current !== null) {
@@ -158,6 +254,59 @@ export const TutorialOverlay: React.FC = () => {
         };
     }, []);
 
+    useEffect(() => {
+        const clearLiftedTarget = () => {
+            if (!liftedTargetRef.current) return;
+            liftedTargetRef.current.classList.remove(styles.highlightTarget);
+            liftedTargetRef.current = null;
+        };
+
+        if (!activeStep) {
+            clearLiftedTarget();
+            return;
+        }
+
+        const scrimMode = activeStep.scrim ?? 'auto';
+        const shouldLift = scrimMode !== 'none' && (Boolean(activeStep.highlight) || isOutcomeStep);
+
+        const updateTarget = () => {
+            if (!shouldLift) {
+                clearLiftedTarget();
+                return;
+            }
+
+            let target: HTMLElement | null = null;
+            if (isOutcomeStep) {
+                const context = manager.getContext();
+                const index = getOutcomeHandIndex(context, activeStep.id);
+                if (index >= 0) {
+                    target = document.getElementById(`player-hand-${index}`) as HTMLElement | null;
+                }
+            } else if (activeStep.highlight) {
+                target = document.getElementById(activeStep.highlight.elementId) as HTMLElement | null;
+            }
+
+            if (target === liftedTargetRef.current) return;
+            clearLiftedTarget();
+            if (target) {
+                target.classList.add(styles.highlightTarget);
+                liftedTargetRef.current = target;
+            }
+        };
+
+        updateTarget();
+        const intervalId = shouldLift ? window.setInterval(updateTarget, 100) : null;
+        window.addEventListener('resize', updateTarget);
+
+        return () => {
+            if (intervalId !== null) {
+                window.clearInterval(intervalId);
+            }
+            window.removeEventListener('resize', updateTarget);
+            clearLiftedTarget();
+        };
+    }, [activeStep, isOutcomeStep, manager]);
+
     // Track draw indicator zone for draw + placement messaging
     useEffect(() => {
         if (!activeStep || (activeStep.id !== 'draw_indicator' && activeStep.id !== 'place_card' && activeStep.id !== 'get_close')) {
@@ -181,6 +330,78 @@ export const TutorialOverlay: React.FC = () => {
             const height = rect.height / scale;
 
             setIndicatorRect(new DOMRect(left, top, width, height));
+        };
+
+        updateRect();
+        const interval = setInterval(updateRect, 100);
+        window.addEventListener('resize', updateRect);
+
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener('resize', updateRect);
+        };
+    }, [activeStep, scale]);
+
+    useEffect(() => {
+        if (!activeStep || activeStep.id !== 'hud_debt') {
+            setHudRect(null);
+            setTotalWinningsRect(null);
+            return;
+        }
+
+        const updateRect = () => {
+            const hud = document.getElementById('hud-bar');
+            const winnings = document.getElementById('total-winnings');
+            const wrapper = document.getElementById('game-scale-wrapper');
+            if (!hud || !winnings || !wrapper) return;
+
+            const wrapperRect = wrapper.getBoundingClientRect();
+            const hudRect = hud.getBoundingClientRect();
+            const winningsRect = winnings.getBoundingClientRect();
+
+            const hudLeft = (hudRect.left - wrapperRect.left) / scale;
+            const hudTop = (hudRect.top - wrapperRect.top) / scale;
+            const hudWidth = hudRect.width / scale;
+            const hudHeight = hudRect.height / scale;
+            setHudRect(new DOMRect(hudLeft, hudTop, hudWidth, hudHeight));
+
+            const winningsLeft = (winningsRect.left - wrapperRect.left) / scale;
+            const winningsTop = (winningsRect.top - wrapperRect.top) / scale;
+            const winningsWidth = winningsRect.width / scale;
+            const winningsHeight = winningsRect.height / scale;
+            setTotalWinningsRect(new DOMRect(winningsLeft, winningsTop, winningsWidth, winningsHeight));
+        };
+
+        updateRect();
+        const interval = setInterval(updateRect, 100);
+        window.addEventListener('resize', updateRect);
+
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener('resize', updateRect);
+        };
+    }, [activeStep, scale]);
+
+    useEffect(() => {
+        if (!activeStep || activeStep.id !== 'hud_draws') {
+            setHudDrawsRect(null);
+            return;
+        }
+
+        const updateRect = () => {
+            const draws = document.getElementById('hud-draws');
+            const wrapper = document.getElementById('game-scale-wrapper');
+            if (!draws || !wrapper) return;
+
+            const wrapperRect = wrapper.getBoundingClientRect();
+            const drawsRect = draws.getBoundingClientRect();
+
+            const left = (drawsRect.left - wrapperRect.left) / scale;
+            const top = (drawsRect.top - wrapperRect.top) / scale;
+            const width = drawsRect.width / scale;
+            const height = drawsRect.height / scale;
+
+            setHudDrawsRect(new DOMRect(left, top, width, height));
         };
 
         updateRect();
@@ -241,7 +462,7 @@ export const TutorialOverlay: React.FC = () => {
         };
     }, [activeStep, scale]);
 
-    const defaultPositionSteps = new Set(['welcome', 'win_money_first', 'hud_debt']);
+    const defaultPositionSteps = new Set(['welcome', 'win_money_first', 'hud_debt', 'hud_draws']);
     const shouldAnchorAbovePlayerHands = Boolean(
         activeStep &&
         !defaultPositionSteps.has(activeStep.id) &&
@@ -306,6 +527,8 @@ export const TutorialOverlay: React.FC = () => {
     const isDealerTurnStep = activeStep.id === 'dealer_turn';
     const isDealerCardsStep = activeStep.id === 'dealer_cards';
     const isWinMoneyStep = activeStep.id === 'win_money_first';
+    const isHudDebtStep = activeStep.id === 'hud_debt';
+    const isHudDrawsStep = activeStep.id === 'hud_draws';
     
     // Calculate highlight style
     const highlightStyle: React.CSSProperties = renderedHighlightRect ? {
@@ -373,32 +596,27 @@ export const TutorialOverlay: React.FC = () => {
     })() : isDealerTurnStep ? (() => {
         if (!dealerRect) return undefined;
 
-        const gap = 16;
         const safeMargin = 18;
-        const halfWidth = messageBoxSize.width / 2;
         const halfHeight = messageBoxSize.height / 2;
-        const targetCenterX = dealerRect.left - gap - halfWidth;
         const actionCenterY = dealerActionRect
             ? dealerActionRect.top + dealerActionRect.height / 2
             : dealerRect.top + dealerRect.height / 2;
         const targetCenterY = actionCenterY - halfHeight;
 
-        const minCenterX = safeMargin + halfWidth;
-        const maxCenterX = viewportWidth - safeMargin - halfWidth;
-        const centerX = Math.min(Math.max(targetCenterX, minCenterX), maxCenterX);
-
         const minCenterY = safeMargin + halfHeight;
         const maxCenterY = viewportHeight - safeMargin - halfHeight;
         const centerY = Math.min(Math.max(targetCenterY, minCenterY), maxCenterY);
 
-        const available = Math.max(0, dealerRect.left - safeMargin - gap);
-        const maxWidth = Math.min(360, Math.max(0, available - 16));
+        const safeLeft = (viewportWidth - idealWidth) / 2;
+        const leftEdge = safeLeft + safeMargin;
+        const availableWidth = Math.max(0, idealWidth - safeMargin * 2);
+        const maxWidth = Math.min(360, availableWidth);
 
         return {
             position: 'absolute',
-            left: `${centerX}px`,
+            left: `${leftEdge}px`,
             top: `${centerY}px`,
-            transform: 'translate(-50%, -50%)',
+            transform: 'translate(0, -50%)',
             maxWidth: maxWidth > 0 ? `${maxWidth}px` : undefined
         };
     })() : isDealerCardsStep ? (() => {
@@ -417,10 +635,96 @@ export const TutorialOverlay: React.FC = () => {
             transform: 'translate(-50%, -50%)'
         };
     })() : isWinMoneyStep ? (() => {
+        const safeMargin = 18;
+        const halfHeight = messageBoxSize.height / 2;
+        const baseCenterY = viewportHeight / 2;
+        const targetCenterY = baseCenterY - halfHeight;
+        const minCenterY = safeMargin + halfHeight;
+        const maxCenterY = viewportHeight - safeMargin - halfHeight;
+        const centerY = Math.min(Math.max(targetCenterY, minCenterY), maxCenterY);
+
         return {
             position: 'absolute',
             left: `${viewportWidth / 2}px`,
-            top: `${viewportHeight / 2}px`,
+            top: `${centerY}px`,
+            transform: 'translate(-50%, -50%)'
+        };
+    })() : isHudDebtStep && hudRect && totalWinningsRect ? (() => {
+        const halfHeight = messageBoxSize.height / 2;
+        const safeMargin = 18;
+        const topPadding = 24;
+        const bottomPadding = 12;
+        const hudBottom = hudRect.top + hudRect.height;
+        const winningsTop = totalWinningsRect.top;
+        const gapTop = hudBottom + topPadding;
+        const gapBottom = winningsTop - bottomPadding;
+        const gapSize = gapBottom - gapTop;
+        const evenMargin = (gapSize - messageBoxSize.height) / 2;
+        const desiredCenterY = gapTop + evenMargin + halfHeight;
+
+        let minY = gapTop + halfHeight;
+        let maxY = gapBottom - halfHeight;
+        if (minY > maxY) {
+            minY = safeMargin + halfHeight;
+            maxY = viewportHeight - safeMargin - halfHeight;
+        }
+        const centerY = Math.min(Math.max(desiredCenterY, minY), maxY);
+        const maxHudWidth = Math.min(idealWidth - 32, viewportWidth - 32);
+
+        return {
+            position: 'absolute',
+            left: `${viewportWidth / 2}px`,
+            top: `${centerY}px`,
+            transform: 'translate(-50%, -50%)',
+            maxWidth: `${maxHudWidth}px`
+        };
+    })() : isHudDrawsStep && hudDrawsRect ? (() => {
+        const safeMargin = 18;
+        const gapBelow = 12;
+        const halfWidth = messageBoxSize.width / 2;
+
+        const targetTop = hudDrawsRect.top + hudDrawsRect.height + gapBelow;
+        const minTop = safeMargin;
+        const maxTop = viewportHeight - safeMargin - messageBoxSize.height;
+        const top = Math.min(Math.max(targetTop, minTop), maxTop);
+
+        const targetCenterX = hudDrawsRect.left + hudDrawsRect.width / 2;
+        const minX = safeMargin + halfWidth;
+        const maxX = viewportWidth - safeMargin - halfWidth;
+        const centerX = Math.min(Math.max(targetCenterX, minX), maxX);
+        const maxHudWidth = Math.min(idealWidth - 32, viewportWidth - 32);
+
+        return {
+            position: 'absolute',
+            left: `${centerX}px`,
+            top: `${top}px`,
+            transform: 'translateX(-50%)',
+            maxWidth: `${maxHudWidth}px`
+        };
+    })() : isOutcomeStep && outcomeHandRect && playerHandsRect ? (() => {
+        const gapAboveHands = 64;
+        const targetY = playerHandsRect.top - gapAboveHands - messageBoxSize.height / 2;
+
+        const safeMargin = 18;
+        const halfHeight = messageBoxSize.height / 2;
+        const minY = safeMargin + halfHeight;
+        let maxY = viewportHeight - safeMargin - halfHeight;
+        if (standButtonRect) {
+            const standLimit = standButtonRect.top - 12 - halfHeight;
+            maxY = Math.min(maxY, standLimit);
+        }
+        const centerY = Math.min(Math.max(targetY, minY), maxY);
+
+        const handCenterX = outcomeHandRect.left + outcomeHandRect.width / 2;
+        const halfWidth = messageBoxSize.width / 2;
+        const minX = safeMargin + halfWidth;
+        const maxX = viewportWidth - safeMargin - halfWidth;
+        const centerX = Math.min(Math.max(handCenterX, minX), maxX);
+
+        return {
+            position: 'absolute',
+            left: `${centerX}px`,
+            top: `${centerY}px`,
             transform: 'translate(-50%, -50%)'
         };
     })() : shouldAnchorAbovePlayerHands ? (() => {
@@ -457,7 +761,7 @@ export const TutorialOverlay: React.FC = () => {
                 if (!manager.canDismissActiveStep()) return;
                 exitingRef.current = true;
                 setIsExiting(true);
-                setIsOverlayFading(false);
+                setIsOverlayFading(true);
                 void manager.handleOverlayClick();
             }}
             style={{
@@ -488,7 +792,6 @@ export const TutorialOverlay: React.FC = () => {
                             if (e.currentTarget !== e.target) return;
 
                             if (isExiting) {
-                                setIsOverlayFading(true);
                                 exitTimeoutRef.current = window.setTimeout(() => {
                                     setActiveStep(null);
                                     setIsExiting(false);
@@ -503,7 +806,7 @@ export const TutorialOverlay: React.FC = () => {
                             allowClickRef.current = true;
                         }}
                     >
-                        <div className={`${styles.messageText} tutorial-popup-text`}>
+                        <div className={`${styles.messageText} ${isHudDebtStep ? styles.noWrap : ''} tutorial-popup-text`}>
                             {activeStep.text}
                         </div>
                     </div>
@@ -517,7 +820,6 @@ export const TutorialOverlay: React.FC = () => {
                         if (e.currentTarget !== e.target) return;
 
                         if (isExiting) {
-                            setIsOverlayFading(true);
                             exitTimeoutRef.current = window.setTimeout(() => {
                                 setActiveStep(null);
                                 setIsExiting(false);
@@ -532,7 +834,7 @@ export const TutorialOverlay: React.FC = () => {
                         allowClickRef.current = true;
                     }}
                 >
-                    <div className={`${styles.messageText} tutorial-popup-text`}>
+                    <div className={`${styles.messageText} ${isHudDebtStep ? styles.noWrap : ''} tutorial-popup-text`}>
                         {activeStep.text}
                     </div>
                 </div>

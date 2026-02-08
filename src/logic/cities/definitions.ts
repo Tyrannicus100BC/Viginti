@@ -2,10 +2,10 @@ import type { CityDefinition, RewardConfig } from './types';
 
 // Helper to generate standard rewards
 const STANDARD_REWARD_CONFIG: RewardConfig[] = [
-    { type: 'Card', count: 1, cost: 1 }, // Standard Card
-    { type: 'Card', count: 1, cost: 2, forceSpecialCard: true }, // Special Card
-    { type: 'Angle', count: 1, cost: 8 },
-    { type: 'Charm', count: 1, cost: 5 }
+    { type: 'Card', count: 1 }, // Standard Card
+    { type: 'Card', count: 1, forceSpecialCard: true }, // Special Card
+    { type: 'Angle', count: 1 },
+    { type: 'Charm', count: 1 }
 ];
 
 export const CITY_DEFINITIONS: CityDefinition[] = [
@@ -18,11 +18,11 @@ export const CITY_DEFINITIONS: CityDefinition[] = [
         getRewards: (index) => {
             if (index === 1) { // 2nd Reward (after Casino 2)
                 return [
-                    { type: 'Action', count: 2, specificIds: ['double_down', 'surrender'], cost: 5 }
+                    { type: 'Action', count: 2, specificIds: ['double_down', 'surrender'] }
                 ];
             }
             return [
-                { type: 'Charm', count: 4, categories: ['Suite', 'Global', 'Cards'], cost: 5 }
+                { type: 'Charm', count: 4, categories: ['Suite', 'Global', 'Cards'] }
             ];
         }
     },
@@ -33,20 +33,18 @@ export const CITY_DEFINITIONS: CityDefinition[] = [
         unlockCondition: { type: 'beat_city', cityId: 'atlantic_city' },
         casinoTargets: [450, 700, 1100, 1700, 2600, 4000, 6200, 10000],
         getRewards: (index) => {
-             return [
-                 { 
-                     type: 'Charm', 
-                     count: 3, 
-                     categories: ['Suite', 'Global', 'Cards', 'Rank', 'Flush', 'Straight', 'Dealer', 'Hands'],
-                     cost: 5 
-                 },
-                 {
-                     type: 'Angle',
-                     count: 1,
-                     excludeCategories: ['Triple'],
-                     cost: 8
-                 }
-             ];
+            return [
+                { 
+                    type: 'Charm', 
+                    count: 3, 
+                    categories: ['Suite', 'Global', 'Cards', 'Rank', 'Flush', 'Straight', 'Dealer', 'Hands']
+                },
+                {
+                    type: 'Angle',
+                    count: 1,
+                    excludeCategories: ['Triple']
+                }
+            ];
         }
     },
     {
@@ -60,9 +58,9 @@ export const CITY_DEFINITIONS: CityDefinition[] = [
         ],
         getRewards: (index) => {
             return [
-                { type: 'Card', count: 1, forceSpecialCard: true, cost: 2 },
-                { type: 'Charm', count: 2, cost: 5 },
-                { type: 'Angle', count: 1, cost: 8 }
+                { type: 'Card', count: 1, forceSpecialCard: true },
+                { type: 'Charm', count: 2 },
+                { type: 'Angle', count: 1 }
             ];
         }
     }

@@ -3,6 +3,7 @@ import styles from './RelicTooltip.module.css';
 
 import type { Relic } from '../logic/relics/types';
 import { formatHandChips, formatHandMult, formatHandScore } from '../logic/formatters';
+import { getRelicRarityFrameColor, getRelicRarityTextColor } from '../logic/relics/rarity';
 
 interface RelicTooltipProps {
     relic: Relic;
@@ -120,6 +121,8 @@ export const RelicTooltip: React.FC<RelicTooltipProps> = ({
 
     const isHorizontal = layout === 'horizontal';
     const isRtl = direction === 'rtl';
+    const rarityFrameColor = getRelicRarityFrameColor(relic.rarity);
+    const rarityTextColor = getRelicRarityTextColor(relic.rarity);
 
     return (
         <div 
@@ -142,7 +145,8 @@ export const RelicTooltip: React.FC<RelicTooltipProps> = ({
                     className={styles.iconContainer}
                     style={{
                         opacity: hideIcon ? 0 : 1,
-                        visibility: hideIcon ? 'hidden' : 'visible'
+                        visibility: hideIcon ? 'hidden' : 'visible',
+                        borderColor: rarityFrameColor
                     }}
                 >
                     {relic.icon && (relic.icon.includes('.') || relic.icon.includes('/')) ? (
@@ -157,8 +161,21 @@ export const RelicTooltip: React.FC<RelicTooltipProps> = ({
                         </div>
                     )}
                 </div>
-                <div className={styles.title} style={{ textAlign: (isRightAligned && !isHorizontal) ? 'right' : 'left' }}>
-                    {relic.handType?.name || relic.name}
+                <div className={styles.titleBlock} style={{ textAlign: (isRightAligned && !isHorizontal) ? 'right' : 'left' }}>
+                    <div className={styles.title}>
+                        {relic.handType?.name || relic.name}
+                    </div>
+                    <div 
+                        className={styles.rarity}
+                        style={{
+                            color: rarityTextColor,
+                            left: isRightAligned && !isHorizontal ? 'auto' : 0,
+                            right: isRightAligned && !isHorizontal ? 0 : 'auto',
+                            textAlign: isRightAligned && !isHorizontal ? 'right' : 'left'
+                        }}
+                    >
+                        {relic.rarity}
+                    </div>
                 </div>
             </div>
 

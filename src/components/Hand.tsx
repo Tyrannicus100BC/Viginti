@@ -19,11 +19,15 @@ interface HandProps {
   onCardDealSound?: (cardId: string) => void;
   onCardFlipSound?: (cardId: string) => void;
   onCardDiscardSound?: (cardId: string) => void;
+  selectableCardIds?: string[];
+  onCardSelect?: (cardId: string) => void;
+  tableActionColor?: string;
+  hiddenCardIds?: string[];
 }
 
 import { useGameStore } from '../store/gameStore';
 
-export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay = 0, stagger = true, isScoringFocus = false, isEnlarged = false, isSelected = false, id, onDealAnimationComplete, onCardDealSound, onCardFlipSound, onCardDiscardSound }) => {
+export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay = 0, stagger = true, isScoringFocus = false, isEnlarged = false, isSelected = false, id, onDealAnimationComplete, onCardDealSound, onCardFlipSound, onCardDiscardSound, selectableCardIds, onCardSelect, tableActionColor, hiddenCardIds }) => {
   const triggerScoringRow = useGameStore(state => state.triggerScoringRow);
   const triggerVigintiSound = useGameStore(state => state.triggerVigintiSound);
   const playScoreRowSfx = useGameStore(state => state.playScoreRowSfx);
@@ -546,6 +550,14 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
                 isHighlighted = currentCrit.cardIds.includes(card.id);
               }
               const shouldHighlight = !!(isHighlighted && activeCriteriaIdx !== null && currentCrit?.id !== 'win' && currentCrit?.id !== 'viginti');
+              const isTableActionSelectable = !!(selectableCardIds && selectableCardIds.includes(card.id));
+              const isHidden = !!(hiddenCardIds && hiddenCardIds.includes(card.id));
+              const handleCardClick = (event: React.MouseEvent<HTMLDivElement>) => {
+                event.stopPropagation();
+                if (isTableActionSelectable) {
+                  onCardSelect?.(card.id);
+                }
+              };
 
               // Placement Logic
               let wrapperRotate = rotate;
@@ -581,13 +593,14 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
               return (
                 <div
                   key={card.id}
-                  className={`${styles.cardWrapper} ${shouldHighlight ? styles.highlighted : ''}`}
+                  className={`${styles.cardWrapper} ${shouldHighlight ? styles.highlighted : ''} ${isTableActionSelectable ? styles.tableActionTarget : ''} ${isHidden ? styles.cardHidden : ''}`}
                   style={{
                     transform: `translateX(${xOffset}px) rotate(${wrapperRotate}deg) translateY(${wrapperTranslateY}px)`,
                     transformOrigin: '50% 250%',
                     '--rotate': `${wrapperRotate}deg`,
                     '--translateY': `${wrapperTranslateY}px`,
-                    zIndex: (isDiscarding || (!hasEntered && (card.origin === 'draw_pile' || card.origin === 'double_down'))) ? 100 : idx
+                    zIndex: (isDiscarding || (!hasEntered && (card.origin === 'draw_pile' || card.origin === 'double_down'))) ? 100 : idx,
+                    ...(isTableActionSelectable && tableActionColor ? { '--table-action-color': tableActionColor } : {})
                   } as any}
                 >
                   <div className={isDiscarding ? styles.discardingCard : ''} style={{ width: '100%', height: '100%', animationDelay: `${discardDelay}s` }}>
@@ -614,6 +627,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
                         onEnterAnimationEnd={handleDealAnimationEnd}
                         onDealSound={onCardDealSound}
                         onFlipSound={onCardFlipSound}
+                        onClick={isTableActionSelectable ? handleCardClick : undefined}
                       />
                     </div>
                   ) : (
@@ -631,6 +645,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
                       onEnterAnimationEnd={handleDealAnimationEnd}
                       onDealSound={onCardDealSound}
                       onFlipSound={onCardFlipSound}
+                      onClick={isTableActionSelectable ? handleCardClick : undefined}
                       card={card} // Ensure card reference is correct
                     />
                   )}

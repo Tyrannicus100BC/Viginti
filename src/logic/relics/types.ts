@@ -3,12 +3,33 @@ import type { Card, HandScore, ScoringCriterionId } from '../../types';
 
 export type HookType = 'value' | 'interrupt';
 
+export type RelicRarity = 'Common' | 'Uncommon' | 'Rare';
+
+export type TableActionRecharge =
+    | 'none'
+    | 'casino'
+    | 'bust'
+    | 'loss'
+    | 'bust_or_loss';
+
+export type TableActionConfig = {
+    label: string;
+    accentColor: string;
+    maxCharges: number;
+    chargeCost: number;
+    recharge: TableActionRecharge;
+    prompt?: string;
+    promptWhenHeld?: string;
+};
+
 export type Relic = {
     id: string;
     name: string;
+    rarity: RelicRarity;
     description: string;
     categories: string[];
     icon?: string;
+    tableAction?: TableActionConfig;
     handType?: {
         id: ScoringCriterionId;
         name: string;
@@ -31,10 +52,12 @@ export type Relic = {
 
 export type RelicDefinition = {
     name: string;
+    rarity: RelicRarity;
     categories: string[];
     description: string;
     properties?: Record<string, any>;
     hooks?: RelicHooks;
+    tableAction?: TableActionConfig;
     handType?: {
         id: ScoringCriterionId;
         name: string;
@@ -61,6 +84,7 @@ export type RelicDefinition = {
 export type RelicConfig = Relic & {
     hooks: RelicHooks;
     properties?: Record<string, any>;
+    tableAction?: TableActionConfig;
     handType?: {
         id: ScoringCriterionId; // Maps to the ID used in criteria
         name: string;      // Display Name
@@ -203,4 +227,3 @@ export type CardPlacedContext = InterruptContext & {
     modifyHand: (cards: Card[]) => void;
     revealDealerHiddenCard: () => void;
 }
-

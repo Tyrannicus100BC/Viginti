@@ -26,6 +26,7 @@ export interface TutorialStep {
     condition: (context: any) => boolean; // Global condition to START this tutorial
     completionType: TutorialCompletionCondition;
     scope?: TutorialScope; // session = reset on new run, global = persisted
+    completeOnEventId?: string; // Auto-complete when this event fires
 
     // Optional UI behavior
     scrim?: TutorialScrim; // auto = dim when no highlight, dim = always, none = never
@@ -362,6 +363,10 @@ export class TutorialManager {
         this.firedEvents.add(eventId);
         if (context !== undefined) {
             this.lastContext = context;
+        }
+
+        if (this.activeStep && this.activeStep.completeOnEventId === eventId) {
+            this.completeStep(this.activeStep.id);
         }
 
         const waitingSet = this.waitingByEvent.get(eventId);

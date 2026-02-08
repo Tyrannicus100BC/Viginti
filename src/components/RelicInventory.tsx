@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { RelicManager } from '../logic/relics/manager';
 import { RelicTooltip } from './RelicTooltip';
+import { getRelicRarityFrameColor } from '../logic/relics/rarity';
 
 
 
@@ -65,6 +66,7 @@ export const RelicInventory: React.FC<RelicInventoryProps> = ({ enabledCategorie
                 {sortedInventory.map((instance, index) => {
                     const config = RelicManager.getRelicConfig(instance.id);
                     if (!config) return null;
+                    const rarityFrameColor = getRelicRarityFrameColor(config.rarity);
                     
                     const isActive = activeRelicId === instance.id || instance.state?.armed;
                     const isHovered = hoveredIndex === index;
@@ -118,7 +120,7 @@ export const RelicInventory: React.FC<RelicInventoryProps> = ({ enabledCategorie
                                 height: 40,
                                 borderRadius: '50%',
                                 background: isActive ? '#f1c40f' : (instance.state?.used_this_round ? '#151e26' : '#2c3e50'),
-                                border: isActive ? '3px solid #f39c12' : (instance.state?.used_this_round ? '3px solid #2c3e50' : '3px solid rgba(255, 215, 0, 0.6)'), 
+                                border: `3px solid ${rarityFrameColor}`,
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
@@ -205,6 +207,7 @@ export const RelicInventory: React.FC<RelicInventoryProps> = ({ enabledCategorie
             {visibleInventory.map((instance, index) => {
                 const config = RelicManager.getRelicConfig(instance.id);
                 if (!config) return null;
+                const rarityFrameColor = getRelicRarityFrameColor(config.rarity);
 
                 const isActive = activeRelicId === instance.id || instance.state?.armed;
                 const isHovered = hoveredIndex === index;
@@ -245,7 +248,7 @@ export const RelicInventory: React.FC<RelicInventoryProps> = ({ enabledCategorie
                             height: 40,
                             borderRadius: '50%',
                             background: isActive ? '#f1c40f' : (instance.state?.used_this_round ? '#151e26' : '#2c3e50'),
-                            border: isActive ? '3px solid #f39c12' : (instance.state?.used_this_round ? '3px solid #2c3e50' : '3px solid rgba(255, 215, 0, 0.6)'), 
+                            border: `3px solid ${rarityFrameColor}`,
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
@@ -326,5 +329,4 @@ export const RelicInventory: React.FC<RelicInventoryProps> = ({ enabledCategorie
         </div>
     );
 };
-
 

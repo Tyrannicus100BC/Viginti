@@ -5,7 +5,6 @@ export interface RewardConfig {
     categories?: string[];
     excludeCategories?: string[];
     specificIds?: string[];
-    cost?: number;
     forceSpecialCard?: boolean;
 }
 

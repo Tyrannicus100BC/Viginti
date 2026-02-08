@@ -1,0 +1,170 @@
+.container {
+    position: absolute;
+    top: -135px;
+    width: 120px;
+    height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+    pointer-events: none;
+    transition: transform 0.3s ease;
+    --action-color: #ff4444;
+    --action-color-rgb: 255, 68, 68;
+}
+
+.button {
+    width: 90px;
+    height: 90px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.6);
+    border: 2px dashed #444;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: default;
+    transition: all 0.3s ease;
+    pointer-events: auto;
+    position: relative;
+    z-index: 2;
+    overflow: hidden;
+}
+
+.text {
+    color: #444;
+    font-weight: bold;
+    font-size: 0.75rem;
+    text-align: center;
+    z-index: 5;
+    line-height: 1.1;
+    transition: color 0.3s ease;
+    letter-spacing: 0.5px;
+}
+
+.active {
+    border-color: var(--action-color);
+    cursor: pointer;
+    box-shadow: 0 0 15px rgba(var(--action-color-rgb), 0.25);
+}
+
+.active .text {
+    color: var(--action-color);
+}
+
+.smoldering {
+    background: radial-gradient(circle, rgba(var(--action-color-rgb), 0.2) 0%, rgba(0, 0, 0, 0.85) 65%);
+    border: 2px solid var(--action-color);
+    box-shadow: 0 0 25px rgba(var(--action-color-rgb), 0.6);
+    animation: smolderPulse 2s infinite;
+}
+
+.smoldering .text {
+    color: #ffffff;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+}
+
+@keyframes smolderPulse {
+    0% {
+        box-shadow: 0 0 20px rgba(var(--action-color-rgb), 0.35);
+        border-color: var(--action-color);
+    }
+    50% {
+        box-shadow: 0 0 40px rgba(var(--action-color-rgb), 0.75);
+        border-color: var(--action-color);
+    }
+    100% {
+        box-shadow: 0 0 20px rgba(var(--action-color-rgb), 0.35);
+        border-color: var(--action-color);
+    }
+}
+
+.fireOverlay {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(0deg, rgba(var(--action-color-rgb), 0.4) 0%, rgba(var(--action-color-rgb), 0.1) 50%, transparent 100%);
+    filter: blur(4px);
+    animation: fireFlicker 0.1s infinite alternate;
+    pointer-events: none;
+    z-index: 1;
+}
+
+@keyframes fireFlicker {
+    0% {
+        opacity: 0.5;
+        transform: scaleY(1);
+    }
+    100% {
+        opacity: 0.8;
+        transform: scaleY(1.1);
+    }
+}
+
+.chargeSvg {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-90deg);
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.chargeSegment {
+    fill: none;
+    stroke: #333;
+    stroke-width: 6;
+    transition: stroke 0.3s ease, filter 0.3s ease;
+}
+
+.filled {
+    stroke: var(--action-color);
+    filter: drop-shadow(0 0 4px rgba(var(--action-color-rgb), 0.6));
+}
+
+.fullCharge .filled {
+    filter: drop-shadow(0 0 8px rgba(var(--action-color-rgb), 0.9));
+    animation: chargePulse 1s infinite alternate;
+}
+
+@keyframes chargePulse {
+    from {
+        opacity: 0.8;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+.confirmText {
+    font-size: 0.85rem;
+    letter-spacing: 1px;
+}
+
+.costTag {
+    position: absolute;
+    bottom: 6px;
+    right: 6px;
+    padding: 2px 5px;
+    font-size: 0.55rem;
+    font-weight: 700;
+    color: var(--action-color);
+    background: rgba(0, 0, 0, 0.7);
+    border: 1px solid rgba(var(--action-color-rgb), 0.7);
+    border-radius: 4px;
+    text-transform: uppercase;
+}
+
+.heldCard {
+    position: absolute;
+    top: -70px;
+    left: 50%;
+    transform: translateX(-50%) scale(0.6);
+    transform-origin: top center;
+    pointer-events: none;
+    z-index: 3;
+    filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.5));
+}

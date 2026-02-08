@@ -12,7 +12,7 @@ import type { RelicInstance } from '../logic/relics/types';
 // Import Gambler Definitions
 import { GAMBLER_DEFINITIONS } from '../logic/gamblers/definitions';
 import { CITY_DEFINITIONS } from '../logic/cities/definitions';
-import { generateShopItems } from '../logic/rewards/generator';
+import { generateShopItems, getRelicCompCost } from '../logic/rewards/generator';
 // import type { RoundSummary } from '../logic/relics/types';
 import { TutorialManager } from '../logic/tutorials/tutorials';
 import { ATLANTIC_CITY_TUTORIAL_STEPS, GLOBAL_TUTORIAL_STEPS, TUTORIAL_STEPS } from '../logic/tutorials/definitions';
@@ -33,8 +33,55 @@ const buildTutorialContext = (state: GameState) => ({
     drawnCards: state.drawnCards,
     playerHands: state.playerHands,
     cardsPlacedThisTurn: state.cardsPlacedThisTurn,
-    interactionMode: state.interactionMode
+    interactionMode: state.interactionMode,
+    totalScore: state.totalScore,
+    targetScore: state.targetScore,
+    runningSummary: state.runningSummary,
+    handsRemaining: state.handsRemaining
 });
+
+const getTableActionConfig = (relicId: string) => {
+    const config = RelicManager.getRelicConfig(relicId);
+    return config?.tableAction;
+};
+
+const buildTableActionCharges = (
+    inventory: RelicInstance[],
+    existingCharges: Record<string, number> = {},
+    options?: { resetPerCasino?: boolean }
+) => {
+    const charges: Record<string, number> = {};
+    inventory.forEach(instance => {
+        const action = getTableActionConfig(instance.id);
+        if (!action) return;
+        const current = existingCharges[instance.id];
+        let next = current ?? (action.recharge === 'casino' ? action.maxCharges : 0);
+        if (options?.resetPerCasino && action.recharge === 'casino') {
+            next = action.maxCharges;
+        }
+        charges[instance.id] = Math.max(0, Math.min(action.maxCharges, next));
+    });
+    return charges;
+};
+
+const buildTableActionHeldCards = (
+    inventory: RelicInstance[],
+    existingHeld: Record<string, Card | null> = {},
+    options?: { resetPerCasino?: boolean }
+) => {
+    const held: Record<string, Card | null> = {};
+    inventory.forEach(instance => {
+        const action = getTableActionConfig(instance.id);
+        if (!action) return;
+        held[instance.id] = options?.resetPerCasino ? null : (existingHeld[instance.id] ?? null);
+    });
+    return held;
+};
+
+const shouldGainCharge = (recharge: string, event: 'bust' | 'loss') => {
+    if (recharge === 'bust_or_loss') return true;
+    return recharge === event;
+};
 
 interface GameState {
     deck: Card[];
@@ -43,13 +90,15 @@ interface GameState {
     drawnCards: (Card | null)[];
     selectedDrawIndex: number | null;
     cardsPlacedThisTurn: number;
+    redrawDiscard: { card: Card; index: number } | null;
+    isRedrawAnimating: boolean;
     modifiers: {
         drawCountMod: number;
         placeCountMod: number;
     };
     phase: 'init' | 'entering_casino' | 'playing' | 'scoring' | 'round_over' | 'game_over' | 'gift_shop' | 'victory';
     round: number;
-    interactionMode: 'default' | 'double_down_select' | 'surrender_select';
+    interactionMode: 'default' | 'select_hand' | 'select_card' | 'select_draw';
     totalScore: number;
     targetScore: number;
     comps: number;
@@ -67,7 +116,10 @@ interface GameState {
     discardPile: Card[];
     inventory: RelicInstance[];
     activeRelicId: string | null;
-    shopItems: { id: string, type: 'Charm' | 'Angle' | 'Card', card?: Card, purchased?: boolean, cost?: number, nameOverride?: string }[];
+    activeTableActionId: string | null;
+    tableActionCharges: Record<string, number>;
+    tableActionHeldCards: Record<string, Card | null>;
+    shopItems: { id: string, type: 'Charm' | 'Angle' | 'Card', card?: Card, purchased?: boolean, cost: number, nameOverride?: string }[];
     selectedShopItemId: string | null;
     buyShopItem: (itemId: string) => void;
 
@@ -91,17 +143,12 @@ interface GameState {
     drawCard: () => void;
     assignCard: (handIndex: number) => Promise<void>;
 
-    // Double Down Actions
-    doubleDownCharges: number;
-    startDoubleDown: () => void;
-    cancelDoubleDown: () => void;
-    doubleDownHand: (handIndex: number) => void;
-
-    // Surrender Actions
-    surrenders: number;
-    startSurrender: () => void;
-    cancelSurrender: () => void;
-    surrenderHand: (handIndex: number) => void;
+    // Table Action Hooks
+    startTableAction: (relicId: string) => void;
+    cancelTableAction: () => void;
+    selectTableActionHand: (handIndex: number) => Promise<void>;
+    selectTableActionCard: (payload: { target: 'player' | 'dealer'; handIndex?: number; cardId: string }) => Promise<void>;
+    selectTableActionDrawCard: (drawIndex: number) => Promise<void>;
     holdReturns: (forceDealerBust?: boolean) => Promise<void>; // Async for pacing
     nextRound: (forceContinue?: boolean) => void;
     selectShopItem: (itemId: string) => void;
@@ -121,8 +168,7 @@ interface GameState {
     playScoreRowSfx: () => void;
     debugWin: () => Promise<void>;
     debugUndo: () => void;
-    debugFillDoubleDown: () => void;
-    debugFillSurrender: () => void;
+    debugFillTableAction: (relicId: string) => void;
     drawSpecificCard: (cardId: string) => void;
     addRelic: (relicId: string) => void;
     removeRelic: (relicId: string) => void;
@@ -152,13 +198,35 @@ interface GameState {
 const INITIAL_HAND_COUNT = 3;
 const BASE_DEALS_PER_CASINO = 3;
 
-export const useGameStore = create<GameState>((set, get) => ({
+export const useGameStore = create<GameState>((set, get) => {
+    const addTableActionCharge = (event: 'bust' | 'loss') => {
+        set(state => {
+            const next = { ...state.tableActionCharges };
+            state.inventory.forEach(instance => {
+                const action = getTableActionConfig(instance.id);
+                if (!action) return;
+                if (!shouldGainCharge(action.recharge, event)) return;
+                const current = next[instance.id] ?? 0;
+                next[instance.id] = Math.min(action.maxCharges, current + 1);
+            });
+            return { tableActionCharges: next };
+        });
+    };
+
+    const getDealerDisplayValue = (dealer: DealerHand, inventory: RelicInstance[]) => {
+        const visibleCards = dealer.isRevealed ? dealer.cards : dealer.cards.filter(card => card.isFaceUp);
+        return getBlackjackScore(visibleCards, inventory);
+    };
+
+    return ({
     deck: [],
     dealer: { cards: [], isRevealed: false, blackjackValue: 0 },
     playerHands: [],
     drawnCards: [],
     selectedDrawIndex: null,
     cardsPlacedThisTurn: 0,
+    redrawDiscard: null,
+    isRedrawAnimating: false,
     modifiers: { drawCountMod: 0, placeCountMod: 0 },
     dealerMessage: null,
     dealerMessageExiting: false,
@@ -180,11 +248,12 @@ export const useGameStore = create<GameState>((set, get) => ({
     discardPile: [],
     inventory: [],
     activeRelicId: null,
+    activeTableActionId: null,
+    tableActionCharges: {},
+    tableActionHeldCards: {},
     shopItems: [],
     selectedShopItemId: null,
     vigintiSoundKey: 0,
-    doubleDownCharges: 0,
-    surrenders: 0,
     isInitialDeal: true,
     isShaking: false,
     isReshuffling: false,
@@ -372,6 +441,8 @@ export const useGameStore = create<GameState>((set, get) => ({
             drawnCards: [],
             selectedDrawIndex: null,
             cardsPlacedThisTurn: 0,
+            redrawDiscard: null,
+            isRedrawAnimating: false,
             modifiers: { drawCountMod: 0, placeCountMod: 0 },
             dealerMessage: null,
             dealerMessageExiting: false,
@@ -395,8 +466,9 @@ export const useGameStore = create<GameState>((set, get) => ({
             selectedShopItemId: null,
             isDealerPlaying: false,
             drawTutorialReady: false,
-            doubleDownCharges: 0,
-            surrenders: initialInventory.some(r => r.id === 'surrender') ? 3 : 0,
+            activeTableActionId: null,
+            tableActionCharges: buildTableActionCharges(initialInventory, {}, { resetPerCasino: true }),
+            tableActionHeldCards: buildTableActionHeldCards(initialInventory, {}, { resetPerCasino: true }),
             animationSpeed: 1,
         });
     },
@@ -510,6 +582,8 @@ export const useGameStore = create<GameState>((set, get) => ({
             drawnCards: [],
             selectedDrawIndex: null,
             cardsPlacedThisTurn: 0,
+            redrawDiscard: null,
+            isRedrawAnimating: false,
             phase: 'playing',
             isInitialDeal: true,
             // Ensure stats are preserved/set (should be set by startGame/nextRound already)
@@ -533,8 +607,8 @@ export const useGameStore = create<GameState>((set, get) => ({
         const { deck, drawnCards, phase, modifiers, inventory } = get();
         if (phase !== 'playing' || drawnCards.length > 0) return;
 
-        // Cancel double down if active
-        set({ interactionMode: 'default' });
+        // Cancel table action if active
+        set({ interactionMode: 'default', activeTableActionId: null });
 
         // Calculate count
         let drawCount = 1 + modifiers.drawCountMod;
@@ -600,133 +674,582 @@ export const useGameStore = create<GameState>((set, get) => ({
         }
     },
 
-    startDoubleDown: () => {
-        const { phase, drawnCards, doubleDownCharges } = get();
-        if (phase !== 'playing' || drawnCards.length > 0) return;
+    startTableAction: (relicId: string) => {
+        const { phase, drawnCards, isDealerPlaying, isInitialDeal, playerHands, dealer, interactionMode, tableActionCharges, tableActionHeldCards } = get();
+        if (phase !== 'playing' || isDealerPlaying || isInitialDeal) return;
+        if (interactionMode !== 'default') return;
 
-        // Requirement: At least 1 Charge to start
-        if (doubleDownCharges < 1) return;
+        const action = getTableActionConfig(relicId);
+        if (!action) return;
 
-        set({ interactionMode: 'double_down_select' });
+        const charges = tableActionCharges[relicId] ?? 0;
+        const hasDrawnCards = drawnCards.some(c => c !== null);
+        const hasHeldCard = !!tableActionHeldCards[relicId];
+
+        let nextMode: GameState['interactionMode'] | null = null;
+
+        switch (relicId) {
+            case 'double_down':
+            case 'surrender': {
+                const hasPlayableHand = playerHands.some(h => !h.isBust && !h.isHeld && h.blackjackValue !== 21 && h.cards.length > 0);
+                if (!hasPlayableHand) return;
+                if (hasDrawnCards) return;
+                if (charges < action.chargeCost) return;
+                nextMode = 'select_hand';
+                break;
+            }
+            case 'discard': {
+                if (charges < action.chargeCost) return;
+                nextMode = 'select_card';
+                break;
+            }
+            case 'redraw': {
+                if (charges < action.chargeCost) return;
+                if (!hasDrawnCards) return;
+                nextMode = 'select_draw';
+                break;
+            }
+            case 'hold': {
+                if (hasHeldCard) {
+                    nextMode = 'select_hand';
+                } else {
+                    if (charges < action.chargeCost) return;
+                    if (!hasDrawnCards) return;
+                    nextMode = 'select_draw';
+                }
+                break;
+            }
+            case 'switch': {
+                if (charges < action.chargeCost) return;
+                const hasDealerFaceUp = dealer.cards.some(c => c.isFaceUp);
+                const hasPlayerCard = playerHands.some(h => !h.isBust && h.blackjackValue !== 21 && h.cards.length > 0);
+                if (!hasDealerFaceUp || !hasPlayerCard) return;
+                nextMode = 'select_card';
+                break;
+            }
+            default:
+                return;
+        }
+
+        if (!nextMode) return;
+        set({ activeTableActionId: relicId, interactionMode: nextMode });
     },
 
-    cancelDoubleDown: () => {
-        set({ interactionMode: 'default' });
+    cancelTableAction: () => {
+        set({ activeTableActionId: null, interactionMode: 'default' });
     },
 
-    doubleDownHand: (handIndex: number) => {
-        const { playerHands, deck, interactionMode, doubleDownCharges } = get();
-        if (interactionMode !== 'double_down_select') return;
-        if (doubleDownCharges < 1) return;
+    selectTableActionHand: async (handIndex: number) => {
+        const { interactionMode, activeTableActionId } = get();
+        if (interactionMode !== 'select_hand' || !activeTableActionId) return;
 
-        const hand = playerHands[handIndex];
-        if (!hand || hand.isBust || hand.isHeld || hand.blackjackValue === 21) return;
+        const action = getTableActionConfig(activeTableActionId);
+        if (!action) return;
 
-        // Consume Charge
-        set({ doubleDownCharges: doubleDownCharges - 1 });
+        if (activeTableActionId === 'double_down') {
+            const { playerHands, deck, tableActionCharges } = get();
+            const charges = tableActionCharges[activeTableActionId] ?? 0;
+            if (charges < action.chargeCost) return;
 
-        let currentDeck = [...deck];
-        const card = currentDeck.pop();
-        if (!card) return; // empty deck safety
+            const hand = playerHands[handIndex];
+            if (!hand || hand.isBust || hand.isHeld || hand.blackjackValue === 21 || hand.cards.length === 0) return;
 
-        card.isFaceUp = true;
-        card.origin = 'double_down';
-
-        const updatedHands = playerHands.map((h, idx) => {
-            if (idx !== handIndex) return h;
-
-            // Double Logic
-            const isSpecial = card.type === 'chip' || card.type === 'mult' || card.type === 'score';
-            const orderedCards = isSpecial ? [card, ...h.cards] : [...h.cards, card];
-            const val = getBlackjackScore(orderedCards, get().inventory);
-
-            return {
-                ...h,
-                cards: orderedCards,
-                blackjackValue: val,
-                isBust: val > 21,
-                isHeld: true,
-                isDoubled: true
-            };
-        });
-
-        // Update state and exit mode
-        set({
-            playerHands: updatedHands,
-            deck: currentDeck,
-            interactionMode: 'default'
-        });
-
-        // Handle Bust Side Effects
-        const postHand = updatedHands[handIndex];
-        if (postHand.isBust) {
-            sfxEngine.play('bust');
             set(state => ({
-                doubleDownCharges: Math.min(3, state.doubleDownCharges + 1)
+                tableActionCharges: {
+                    ...state.tableActionCharges,
+                    [activeTableActionId]: Math.max(0, charges - action.chargeCost)
+                }
             }));
-            RelicManager.executeInterruptHook('onHandBust', {
+
+            const currentDeck = [...deck];
+            const card = currentDeck.pop();
+            if (!card) return;
+
+            card.isFaceUp = true;
+            card.origin = 'double_down';
+
+            const updatedHands = playerHands.map((h, idx) => {
+                if (idx !== handIndex) return h;
+                const isSpecial = card.type === 'chip' || card.type === 'mult' || card.type === 'score';
+                const orderedCards = isSpecial ? [card, ...h.cards] : [...h.cards, card];
+                const val = getBlackjackScore(orderedCards, get().inventory);
+
+                return {
+                    ...h,
+                    cards: orderedCards,
+                    blackjackValue: val,
+                    isBust: val > 21,
+                    isHeld: true,
+                    isDoubled: true
+                };
+            });
+
+            set({
+                playerHands: updatedHands,
+                deck: currentDeck,
+                interactionMode: 'default',
+                activeTableActionId: null
+            });
+
+            const postHand = updatedHands[handIndex];
+            if (postHand.isBust) {
+                sfxEngine.play('bust');
+                addTableActionCharge('bust');
+                RelicManager.executeInterruptHook('onHandBust', {
+                    inventory: get().inventory,
+                    highlightRelic: async () => { },
+                    handId: postHand.id
+                }).catch(console.error);
+            }
+
+            if (updatedHands.every(h => h.isBust || h.isHeld || h.blackjackValue === 21)) {
+                setTimeout(() => {
+                    get().holdReturns();
+                }, 1000);
+            }
+            return;
+        }
+
+        if (activeTableActionId === 'surrender') {
+            const { playerHands, discardPile, tableActionCharges } = get();
+            const charges = tableActionCharges[activeTableActionId] ?? 0;
+            if (charges < action.chargeCost) return;
+
+            const hand = playerHands[handIndex];
+            if (!hand || hand.isBust || hand.cards.length === 0) return;
+
+            const cardsToDiscard = [...hand.cards];
+            const newHands = playerHands.map((h, idx) => {
+                if (idx !== handIndex) return h;
+                return {
+                    ...h,
+                    cards: [],
+                    blackjackValue: 0,
+                    isBust: false,
+                    isHeld: true,
+                    isDoubled: false,
+                    finalScore: null,
+                    resultRevealed: false
+                };
+            });
+
+            set({
+                playerHands: newHands,
+                discardPile: [...discardPile, ...cardsToDiscard],
+                tableActionCharges: {
+                    ...tableActionCharges,
+                    [activeTableActionId]: Math.max(0, charges - action.chargeCost)
+                },
+                interactionMode: 'default',
+                activeTableActionId: null
+            });
+            const allUnplayable = newHands.every(h => h.isBust || h.isHeld || h.blackjackValue === 21);
+            if (allUnplayable) {
+                setTimeout(() => {
+                    get().holdReturns();
+                }, 1000);
+            }
+            return;
+        }
+
+        if (activeTableActionId === 'hold') {
+            const { playerHands, tableActionHeldCards, inventory } = get();
+            const heldCard = tableActionHeldCards[activeTableActionId];
+            if (!heldCard) return;
+
+            const hand = playerHands[handIndex];
+            if (!hand || hand.isBust || hand.isHeld || hand.blackjackValue === 21) return;
+
+            const cardToPlace: Card = { ...heldCard, origin: 'draw_pile', animationOffset: 0 };
+            const isSpecial = cardToPlace.type === 'chip' || cardToPlace.type === 'mult' || cardToPlace.type === 'score';
+            const newCards = isSpecial ? [cardToPlace, ...hand.cards] : [...hand.cards, cardToPlace];
+            const newVal = getBlackjackScore(newCards, inventory);
+
+            const updatedHands = playerHands.map((h, idx) => {
+                if (idx !== handIndex) return h;
+                return {
+                    ...h,
+                    cards: newCards,
+                    blackjackValue: newVal,
+                    isBust: newVal > 21
+                };
+            });
+
+            set({
+                playerHands: updatedHands,
+                tableActionHeldCards: {
+                    ...tableActionHeldCards,
+                    [activeTableActionId]: null
+                },
+                interactionMode: 'default',
+                activeTableActionId: null
+            });
+            sfxEngine.play('cardPlace');
+
+            const placedHandInitial = updatedHands[handIndex];
+            const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+            const checkContext = {
                 inventory: get().inventory,
+                handId: handIndex,
+                placedCard: cardToPlace,
+                handCards: placedHandInitial.cards,
+                blackjackValue: placedHandInitial.blackjackValue,
+                modifyHand: () => { },
                 highlightRelic: async () => { },
-                handId: postHand.id
-            }).catch(console.error);
-        }
-
-        // Auto-stand if all hands unplayable
-        if (updatedHands.every(h => h.isBust || h.isHeld || h.blackjackValue === 21)) {
-            setTimeout(() => {
-                get().holdReturns();
-            }, 1000);
-        }
-    },
-
-    startSurrender: () => {
-        const { phase, drawnCards, surrenders } = get();
-        if (phase !== 'playing' || drawnCards.length > 0) return;
-
-        // Requirement: At least 1 Surrender remaining
-        if (surrenders < 1) return;
-
-        set({ interactionMode: 'surrender_select' });
-    },
-
-    cancelSurrender: () => {
-        set({ interactionMode: 'default' });
-    },
-
-    surrenderHand: (handIndex: number) => {
-        const { playerHands, interactionMode, surrenders, discardPile } = get();
-        if (interactionMode !== 'surrender_select') return;
-        if (surrenders < 1) return;
-
-        const hand = playerHands[handIndex];
-        // Cannot select busted hands or empty hands
-        if (!hand || hand.isBust || hand.cards.length === 0) return;
-
-        // Consume Surrender
-        const newSurrenders = surrenders - 1;
-        const cardsToDiscard = [...hand.cards];
-
-        // Reset Hand
-        const newHands = playerHands.map((h, idx) => {
-            if (idx !== handIndex) return h;
-            return {
-                ...h,
-                cards: [],
-                blackjackValue: 0,
-                isBust: false,
-                isHeld: false,
-                isDoubled: false,
-                finalScore: null,
-                resultRevealed: false
+                revealDealerHiddenCard: () => { }
             };
-        });
 
-        set({
-            playerHands: newHands,
-            discardPile: [...discardPile, ...cardsToDiscard],
-            surrenders: newSurrenders,
-            interactionMode: 'default'
-        });
+            const shouldWait = RelicManager.executeCheckHook('onCheckCardPlace', checkContext as any);
+            if (shouldWait) {
+                await wait(600);
+            } else {
+                await wait(0);
+            }
+
+            await RelicManager.executeInterruptHook('onCardPlaced', {
+                inventory: get().inventory,
+                handId: handIndex,
+                placedCard: cardToPlace,
+                handCards: placedHandInitial.cards,
+                blackjackValue: placedHandInitial.blackjackValue,
+                highlightRelic: async (id, options) => {
+                    const { preDelay = 0, duration = 500, postDelay = 0, trigger } = options || {};
+                    await wait(preDelay);
+                    set({ activeRelicId: id });
+                    if (trigger) await trigger();
+                    await wait(duration);
+                    set({ activeRelicId: null });
+                    await wait(postDelay);
+                },
+                modifyHand: (cards) => {
+                    set(state => {
+                        const nextHands = state.playerHands.map(h => {
+                            if (h.id === handIndex) {
+                                const val = getBlackjackScore(cards, state.inventory);
+                                return { ...h, cards, blackjackValue: val, isBust: val > 21 };
+                            }
+                            return h;
+                        });
+                        return { playerHands: nextHands };
+                    });
+                },
+                revealDealerHiddenCard: () => get().revealDealerHiddenCard()
+            });
+
+            const finalHands = get().playerHands;
+            const finalHand = finalHands[handIndex];
+            if (finalHand.isBust && !hand.isBust) {
+                sfxEngine.play('bust');
+                addTableActionCharge('bust');
+                await RelicManager.executeInterruptHook('onHandBust', {
+                    inventory: get().inventory,
+                    handId: finalHand.id,
+                    handCards: finalHand.cards,
+                    highlightRelic: async (id, options) => {
+                        const { preDelay = 0, duration = 500, postDelay = 0, trigger } = options || {};
+                        await wait(preDelay);
+                        set({ activeRelicId: id });
+                        if (trigger) await trigger();
+                        await wait(duration);
+                        set({ activeRelicId: null });
+                        await wait(postDelay);
+                    },
+                    modifyHand: (cards) => {
+                        set(state => ({
+                            playerHands: state.playerHands.map(h => {
+                                if (h.id === finalHand.id) {
+                                    const val = getBlackjackScore(cards, state.inventory);
+                                    return { ...h, cards, blackjackValue: val, isBust: val > 21 };
+                                }
+                                return h;
+                            })
+                        }));
+                    }
+                });
+            }
+
+            const postHands = get().playerHands;
+            const allUnplayable = postHands.every(h => h.isBust || h.isHeld || h.blackjackValue === 21);
+            const hasRemainingCards = get().drawnCards.some(c => c !== null);
+            if (allUnplayable && !hasRemainingCards) {
+                setTimeout(() => {
+                    get().holdReturns();
+                }, 1000);
+            }
+        }
+    },
+
+    selectTableActionCard: async (payload) => {
+        const { interactionMode, activeTableActionId } = get();
+        if (interactionMode !== 'select_card' || !activeTableActionId) return;
+
+        const action = getTableActionConfig(activeTableActionId);
+        if (!action) return;
+
+        if (activeTableActionId === 'discard') {
+            const { playerHands, dealer, discardPile, tableActionCharges, inventory } = get();
+            const charges = tableActionCharges[activeTableActionId] ?? 0;
+            if (charges < action.chargeCost) return;
+
+            if (payload.target === 'player') {
+                if (payload.handIndex === undefined) return;
+                const hand = playerHands[payload.handIndex];
+                if (!hand || hand.isBust || hand.blackjackValue === 21 || hand.cards.length === 0) return;
+                const cardIndex = hand.cards.findIndex(c => c.id === payload.cardId);
+                if (cardIndex === -1) return;
+
+                const nextCards = hand.cards.filter((_, idx) => idx !== cardIndex);
+                const nextVal = nextCards.length > 0 ? getBlackjackScore(nextCards, inventory) : 0;
+                const updatedHands = playerHands.map((h, idx) => {
+                    if (idx !== payload.handIndex) return h;
+                    return {
+                        ...h,
+                        cards: nextCards,
+                        blackjackValue: nextVal,
+                        isBust: nextVal > 21
+                    };
+                });
+
+                set({
+                    playerHands: updatedHands,
+                    discardPile: [...discardPile, hand.cards[cardIndex]],
+                    tableActionCharges: {
+                        ...tableActionCharges,
+                        [activeTableActionId]: Math.max(0, charges - action.chargeCost)
+                    },
+                    interactionMode: 'default',
+                    activeTableActionId: null
+                });
+
+                const updatedHand = updatedHands[payload.handIndex];
+                if (updatedHand.isBust && !hand.isBust) {
+                    sfxEngine.play('bust');
+                    addTableActionCharge('bust');
+                    await RelicManager.executeInterruptHook('onHandBust', {
+                        inventory: get().inventory,
+                        handId: updatedHand.id,
+                        handCards: updatedHand.cards,
+                        highlightRelic: async (id, options) => {
+                            const { preDelay = 0, duration = 500, postDelay = 0, trigger } = options || {};
+                            await new Promise(resolve => setTimeout(resolve, preDelay));
+                            set({ activeRelicId: id });
+                            if (trigger) await trigger();
+                            await new Promise(resolve => setTimeout(resolve, duration));
+                            set({ activeRelicId: null });
+                            await new Promise(resolve => setTimeout(resolve, postDelay));
+                        },
+                        modifyHand: (cards) => {
+                            set(state => ({
+                                playerHands: state.playerHands.map(h => {
+                                    if (h.id === updatedHand.id) {
+                                        const val = getBlackjackScore(cards, state.inventory);
+                                        return { ...h, cards, blackjackValue: val, isBust: val > 21 };
+                                    }
+                                    return h;
+                                })
+                            }));
+                        }
+                    });
+                }
+                return;
+            }
+
+            const cardIndex = dealer.cards.findIndex(c => c.id === payload.cardId);
+            if (cardIndex === -1) return;
+            const targetCard = dealer.cards[cardIndex];
+            if (!dealer.isRevealed && !targetCard.isFaceUp) return;
+            if (dealer.blackjackValue >= 21) return;
+
+            const nextDealerCards = dealer.cards.filter((_, idx) => idx !== cardIndex);
+            const nextDealer: DealerHand = {
+                ...dealer,
+                cards: nextDealerCards,
+                blackjackValue: getDealerDisplayValue({ ...dealer, cards: nextDealerCards }, inventory)
+            };
+
+            set({
+                dealer: nextDealer,
+                discardPile: [...discardPile, targetCard],
+                tableActionCharges: {
+                    ...tableActionCharges,
+                    [activeTableActionId]: Math.max(0, charges - action.chargeCost)
+                },
+                interactionMode: 'default',
+                activeTableActionId: null
+            });
+            return;
+        }
+
+        if (activeTableActionId === 'switch') {
+            const { playerHands, dealer, tableActionCharges, inventory } = get();
+            const charges = tableActionCharges[activeTableActionId] ?? 0;
+            if (charges < action.chargeCost) return;
+            if (payload.target !== 'player' || payload.handIndex === undefined) return;
+
+            const hand = playerHands[payload.handIndex];
+            if (!hand || hand.isBust || hand.blackjackValue === 21 || hand.cards.length === 0) return;
+
+            const playerCardIndex = hand.cards.findIndex(c => c.id === payload.cardId);
+            if (playerCardIndex === -1) return;
+
+            const dealerCardIndex = dealer.cards.findIndex(c => c.isFaceUp);
+            if (dealerCardIndex === -1) return;
+
+            const playerCard = hand.cards[playerCardIndex];
+            const dealerCard = dealer.cards[dealerCardIndex];
+
+            const newHandCards = [...hand.cards];
+            newHandCards[playerCardIndex] = { ...dealerCard, isFaceUp: true, origin: 'none' };
+
+            const newDealerCards = [...dealer.cards];
+            newDealerCards[dealerCardIndex] = { ...playerCard, isFaceUp: true, origin: 'none' };
+
+            const newHandValue = getBlackjackScore(newHandCards, inventory);
+            const updatedHands = playerHands.map((h, idx) => {
+                if (idx !== payload.handIndex) return h;
+                return {
+                    ...h,
+                    cards: newHandCards,
+                    blackjackValue: newHandValue,
+                    isBust: newHandValue > 21
+                };
+            });
+
+            const updatedDealer: DealerHand = {
+                ...dealer,
+                cards: newDealerCards,
+                blackjackValue: getDealerDisplayValue({ ...dealer, cards: newDealerCards }, inventory)
+            };
+
+            set({
+                playerHands: updatedHands,
+                dealer: updatedDealer,
+                tableActionCharges: {
+                    ...tableActionCharges,
+                    [activeTableActionId]: Math.max(0, charges - action.chargeCost)
+                },
+                interactionMode: 'default',
+                activeTableActionId: null
+            });
+
+            const updatedHand = updatedHands[payload.handIndex];
+            if (updatedHand.isBust && !hand.isBust) {
+                sfxEngine.play('bust');
+                addTableActionCharge('bust');
+                await RelicManager.executeInterruptHook('onHandBust', {
+                    inventory: get().inventory,
+                    handId: updatedHand.id,
+                    handCards: updatedHand.cards,
+                    highlightRelic: async (id, options) => {
+                        const { preDelay = 0, duration = 500, postDelay = 0, trigger } = options || {};
+                        await new Promise(resolve => setTimeout(resolve, preDelay));
+                        set({ activeRelicId: id });
+                        if (trigger) await trigger();
+                        await new Promise(resolve => setTimeout(resolve, duration));
+                        set({ activeRelicId: null });
+                        await new Promise(resolve => setTimeout(resolve, postDelay));
+                    },
+                    modifyHand: (cards) => {
+                        set(state => ({
+                            playerHands: state.playerHands.map(h => {
+                                if (h.id === updatedHand.id) {
+                                    const val = getBlackjackScore(cards, state.inventory);
+                                    return { ...h, cards, blackjackValue: val, isBust: val > 21 };
+                                }
+                                return h;
+                            })
+                        }));
+                    }
+                });
+            }
+            const allUnplayable = updatedHands.every(h => h.isBust || h.isHeld || h.blackjackValue === 21);
+            const hasRemainingCards = get().drawnCards.some(c => c !== null);
+            if (allUnplayable && !hasRemainingCards) {
+                setTimeout(() => {
+                    get().holdReturns();
+                }, 1000);
+            }
+        }
+    },
+
+    selectTableActionDrawCard: async (drawIndex: number) => {
+        const { interactionMode, activeTableActionId, drawnCards, deck, tableActionCharges, tableActionHeldCards } = get();
+        if (interactionMode !== 'select_draw' || !activeTableActionId) return;
+
+        const action = getTableActionConfig(activeTableActionId);
+        if (!action) return;
+
+        const targetCard = drawnCards[drawIndex];
+        if (!targetCard) return;
+
+        const charges = tableActionCharges[activeTableActionId] ?? 0;
+        if (charges < action.chargeCost) return;
+
+        if (activeTableActionId === 'redraw') {
+            const nextDeck = [...deck];
+            const newCard = nextDeck.pop() || null;
+            if (newCard) {
+                newCard.isFaceUp = true;
+                newCard.origin = 'deck';
+            }
+
+            const nextDrawn = [...drawnCards];
+            nextDrawn[drawIndex] = null;
+
+            set({
+                deck: nextDeck,
+                drawnCards: nextDrawn,
+                redrawDiscard: { card: targetCard, index: drawIndex },
+                isRedrawAnimating: true,
+                tableActionCharges: {
+                    ...tableActionCharges,
+                    [activeTableActionId]: Math.max(0, charges - action.chargeCost)
+                },
+                interactionMode: 'default',
+                activeTableActionId: null
+            });
+
+            await new Promise(resolve => setTimeout(resolve, 320));
+
+            set(state => {
+                const updatedDrawn = [...state.drawnCards];
+                updatedDrawn[drawIndex] = newCard;
+                return {
+                    drawnCards: updatedDrawn,
+                    discardPile: [...state.discardPile, targetCard],
+                    redrawDiscard: null,
+                    isRedrawAnimating: false
+                };
+            });
+            return;
+        }
+
+        if (activeTableActionId === 'hold') {
+            const nextDeck = [...deck];
+            const newCard = nextDeck.pop() || null;
+            if (newCard) {
+                newCard.isFaceUp = true;
+                newCard.origin = 'deck';
+            }
+
+            const nextDrawn = [...drawnCards];
+            nextDrawn[drawIndex] = newCard;
+
+            set({
+                deck: nextDeck,
+                drawnCards: nextDrawn,
+                tableActionHeldCards: {
+                    ...tableActionHeldCards,
+                    [activeTableActionId]: targetCard
+                },
+                tableActionCharges: {
+                    ...tableActionCharges,
+                    [activeTableActionId]: Math.max(0, charges - action.chargeCost)
+                },
+                interactionMode: 'default',
+                activeTableActionId: null
+            });
+        }
     },
 
     assignCard: async (handIndex) => {
@@ -851,8 +1374,7 @@ export const useGameStore = create<GameState>((set, get) => ({
          if (finalHand.isBust && !playerHands[handIndex].isBust) { // Compare against ORIGINAL start of turn state? 
             sfxEngine.play('bust');
             
-            // Inject Doubledown Logic: Add Charge on Bust
-            set(state => ({ doubleDownCharges: Math.min(3, state.doubleDownCharges + 1) }));
+            addTableActionCharge('bust');
 
             await RelicManager.executeInterruptHook('onHandBust', {
                 inventory: get().inventory,
@@ -1126,7 +1648,6 @@ export const useGameStore = create<GameState>((set, get) => ({
             set({ dealerMessage: null, dealerMessageExiting: false });
         } else if (dVal === 21) {
             // Exact 21 -> No longer gives +2 Charges per user request
-            // set(state => ({ doubleDownCharges: Math.min(3, state.doubleDownCharges + 2) }));
         }
 
         if (dealerTurnTriggered) {
@@ -1151,7 +1672,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
             if (!win && !h.isBust && h.cards.length > 0) {
                 // Loss (Standing but beat by dealer) -> +1 Charge
-                set(state => ({ doubleDownCharges: Math.min(3, state.doubleDownCharges + 1) }));
+                addTableActionCharge('loss');
             }
 
             if (win) {
@@ -1195,6 +1716,13 @@ export const useGameStore = create<GameState>((set, get) => ({
                 outcome: hand.finalScore ? 'win' : 'loss'
             };
             set({ playerHands: [...currentHands] });
+            if (!hand.isBust && hand.cards.length > 0) {
+                if (currentHands[i].outcome === 'win') {
+                    sfxEngine.play('win');
+                } else {
+                    sfxEngine.play('loss');
+                }
+            }
             // Pause only if we're showing a new label (Win/Loss)
             if (!isBustOrViginti && i < currentHands.length - 1) {
                 await wait(400);
@@ -1331,6 +1859,7 @@ export const useGameStore = create<GameState>((set, get) => ({
             manager.setContext(context);
             manager.signalEvent('scoring_sequence_complete', context);
             await waitForTutorialStep('win_money_first');
+            await waitForTutorialStep('hud_debt');
         }
 
         // Continue to collection if there are any chips to collect
@@ -1382,6 +1911,13 @@ export const useGameStore = create<GameState>((set, get) => ({
             // Don't reset dealerVisible/allWinnersEnlarged here, 
             // the user wants them to stay until Deal/Next Casino/Game Over
         });
+
+        if (totalScore < targetScore && handsRemaining > 0) {
+            const manager = TutorialManager.getInstance();
+            const context = buildTutorialContext(get());
+            manager.setContext(context);
+            manager.signalEvent('deal_action_available', context);
+        }
     },
 
     completeRoundEarly: () => {
@@ -1437,7 +1973,9 @@ export const useGameStore = create<GameState>((set, get) => ({
                         i.id === idToConfirm ? { ...i, purchased: true } : i
                     ),
                     inventory: newInventory,
-                    selectedShopItemId: null
+                    selectedShopItemId: null,
+                    tableActionCharges: buildTableActionCharges(newInventory, state.tableActionCharges),
+                    tableActionHeldCards: buildTableActionHeldCards(newInventory, state.tableActionHeldCards)
                 }));
             }
         }
@@ -1445,7 +1983,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
 
     leaveShop: () => {
-        const { inventory } = get();
+        const { inventory, tableActionHeldCards, tableActionCharges } = get();
         // Trigger the actual Casino Transition now
         const { round, totalScore, targetScore, comps, deck, discardPile, dealer, playerHands, drawnCards } = get();
 
@@ -1485,12 +2023,14 @@ export const useGameStore = create<GameState>((set, get) => ({
 
         // Preserve and shuffle ALL cards in play to prevent loss
         // Collect from: Remaining Deck, Discard Pile, Dealer Hand, Player Hands, Drawn/Active Cards
+        const heldCards = Object.values(tableActionHeldCards).filter((card): card is Card => !!card);
         const allCards = [
             ...deck,
             ...discardPile,
             ...dealer.cards,
             ...playerHands.flatMap(h => h.cards),
-            ...drawnCards.filter((c): c is Card => c !== null)
+            ...drawnCards.filter((c): c is Card => c !== null),
+            ...heldCards
         ];
 
         // Ensure all cards are reset to face down / no origin
@@ -1525,7 +2065,12 @@ export const useGameStore = create<GameState>((set, get) => ({
             drawnCards: [], // Clear drawn area
             selectedDrawIndex: null, 
             cardsPlacedThisTurn: 0,
-            surrenders: inventory.some(r => r.id === 'surrender') ? 3 : 0, 
+            redrawDiscard: null,
+            isRedrawAnimating: false,
+            interactionMode: 'default',
+            activeTableActionId: null,
+            tableActionCharges: buildTableActionCharges(inventory, tableActionCharges, { resetPerCasino: true }),
+            tableActionHeldCards: buildTableActionHeldCards(inventory, {}, { resetPerCasino: true }),
             dealerMessage: null,
             runningSummary: null,
             roundSummary: null,
@@ -1555,12 +2100,12 @@ export const useGameStore = create<GameState>((set, get) => ({
             // GO TO GIFT SHOP PHASE
 
             // Calculate Rewards
-            const { surrenders, doubleDownCharges, handsRemaining, comps, inventory, selectedCityId, round } = currentState;
+            const { tableActionCharges, handsRemaining, comps, inventory, selectedCityId, round } = currentState;
             const dealsBonus = handsRemaining * 2;
             const hasDoubleDownRelic = inventory.some(r => r.id === 'double_down');
-            const doubleDownBonus = hasDoubleDownRelic ? (doubleDownCharges * 1) : 0;
+            const doubleDownBonus = hasDoubleDownRelic ? ((tableActionCharges['double_down'] ?? 0) * 1) : 0;
             const hasSurrenderRelic = inventory.some(r => r.id === 'surrender');
-            const surrenderBonus = hasSurrenderRelic ? (surrenders * 1) : 0;
+            const surrenderBonus = hasSurrenderRelic ? ((tableActionCharges['surrender'] ?? 0) * 1) : 0;
             const winBonus = 2;
             const totalBonus = dealsBonus + doubleDownBonus + surrenderBonus + winBonus;
 
@@ -1687,7 +2232,11 @@ export const useGameStore = create<GameState>((set, get) => ({
             drawnCards: [],
             selectedDrawIndex: null,
             cardsPlacedThisTurn: 0,
+            redrawDiscard: null,
+            isRedrawAnimating: false,
             phase: 'playing',
+            interactionMode: 'default',
+            activeTableActionId: null,
             dealsTaken: newDealsTaken,
             handsRemaining: newHandsRemaining,
             discardPile: newDiscardPile,
@@ -1699,6 +2248,13 @@ export const useGameStore = create<GameState>((set, get) => ({
             isDealerPlaying: false,
             animationSpeed: 1
         });
+
+        if (newHandsRemaining < currentState.handsRemaining) {
+            const manager = TutorialManager.getInstance();
+            const context = buildTutorialContext(get());
+            manager.setContext(context);
+            manager.signalEvent('hud_draws_decremented', context);
+        }
 
         // After animations complete, isInitialDeal will be cleared via onInitialDealAnimationsComplete.
     },
@@ -1733,17 +2289,22 @@ export const useGameStore = create<GameState>((set, get) => ({
             drawnCards: [],
             selectedDrawIndex: null,
             cardsPlacedThisTurn: 0,
+            redrawDiscard: null,
+            isRedrawAnimating: false,
             modifiers: { drawCountMod: 0, placeCountMod: 0 }, // Reset just in case
             deck: [...deck, ...cardsToReturn]
         });
     },
 
-    debugFillDoubleDown: () => {
-        set({ doubleDownCharges: 3 });
-    },
-
-    debugFillSurrender: () => {
-        set({ surrenders: 3 });
+    debugFillTableAction: (relicId: string) => {
+        const action = getTableActionConfig(relicId);
+        if (!action) return;
+        set(state => ({
+            tableActionCharges: {
+                ...state.tableActionCharges,
+                [relicId]: action.maxCharges
+            }
+        }));
     },
 
     drawSpecificCard: (cardId: string) => {
@@ -1763,7 +2324,8 @@ export const useGameStore = create<GameState>((set, get) => ({
             deck: newDeck,
             drawnCards: [card],
             selectedDrawIndex: 0,
-            interactionMode: 'default'
+            interactionMode: 'default',
+            activeTableActionId: null
         });
     },
 
@@ -1781,7 +2343,9 @@ export const useGameStore = create<GameState>((set, get) => ({
             const dealsPerCasino = RelicManager.executeValueHook('getDealsPerCasino', BASE_DEALS_PER_CASINO, { inventory: newInventory });
             return {
                 inventory: newInventory,
-                handsRemaining: dealsPerCasino - state.dealsTaken
+                handsRemaining: dealsPerCasino - state.dealsTaken,
+                tableActionCharges: buildTableActionCharges(newInventory, state.tableActionCharges),
+                tableActionHeldCards: buildTableActionHeldCards(newInventory, state.tableActionHeldCards)
             };
         });
     },
@@ -1792,7 +2356,9 @@ export const useGameStore = create<GameState>((set, get) => ({
             const dealsPerCasino = RelicManager.executeValueHook('getDealsPerCasino', BASE_DEALS_PER_CASINO, { inventory: newInventory });
             return {
                 inventory: newInventory,
-                handsRemaining: dealsPerCasino - state.dealsTaken
+                handsRemaining: dealsPerCasino - state.dealsTaken,
+                tableActionCharges: buildTableActionCharges(newInventory, state.tableActionCharges),
+                tableActionHeldCards: buildTableActionHeldCards(newInventory, state.tableActionHeldCards)
             };
         });
     },
@@ -1842,7 +2408,10 @@ export const useGameStore = create<GameState>((set, get) => ({
         const item = shopItems.find(i => i.id === itemId);
         if (!item || item.purchased) return;
 
-        const cost = item.cost || (item.type === 'Card' ? (item.id.includes('special') ? 2 : 1) : item.type === 'Angle' ? 8 : 5);
+        const fallbackCost = item.type === 'Card'
+            ? (item.card?.specialEffect ? 2 : 1)
+            : getRelicCompCost(item.id);
+        const cost = item.cost ?? fallbackCost;
 
         if (comps < cost) {
             return;
@@ -1868,7 +2437,9 @@ export const useGameStore = create<GameState>((set, get) => ({
 
                 set(state => ({
                     inventory: newInventory,
-                    handsRemaining: dealsPerCasino - state.dealsTaken
+                    handsRemaining: dealsPerCasino - state.dealsTaken,
+                    tableActionCharges: buildTableActionCharges(newInventory, state.tableActionCharges),
+                    tableActionHeldCards: buildTableActionHeldCards(newInventory, state.tableActionHeldCards)
                 }));
             }
         }
@@ -1878,4 +2449,5 @@ export const useGameStore = create<GameState>((set, get) => ({
             shopItems: shopItems.map(i => i.id === itemId ? { ...i, purchased: true } : i)
         });
     }
-}));
+    });
+});

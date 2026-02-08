@@ -190,7 +190,7 @@ export const GiftShop: React.FC = () => {
 
             <div className={styles.choicesContainer} style={{ maxWidth: '90vw' }}>
                 {shopItems.map((item) => {
-                    const cost = item.cost || 0;
+                    const cost = item.cost;
                     const canAfford = comps >= cost && !item.purchased;
 
                     // Determine content based on type

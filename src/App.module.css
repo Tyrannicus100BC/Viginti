@@ -309,6 +309,38 @@
     z-index: 0;
 }
 
+.actionSpot {
+    border: 2px solid var(--action-color, #ffd700);
+    box-shadow: 0 0 18px var(--action-color, #ffd700);
+}
+
+.swapOverlay {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 2500;
+}
+
+.swapCard {
+    position: absolute;
+    offset-path: var(--path);
+    offset-anchor: 0 0;
+    offset-distance: 0%;
+    offset-rotate: 0deg;
+    animation: swapBezier 0.65s cubic-bezier(0.33, 0, 0.2, 1) forwards;
+    pointer-events: none;
+    will-change: offset-distance;
+}
+
+@keyframes swapBezier {
+    from {
+        offset-distance: 0%;
+    }
+    to {
+        offset-distance: 100%;
+    }
+}
+
 .infoTextContainer {
     margin-top: 6px;
     min-height: 30px;

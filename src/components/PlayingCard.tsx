@@ -5,7 +5,7 @@ import '../styles/animations.css';
 
 interface CardProps {
   card: CardType;
-  onClick?: () => void;
+  onClick?: (event: React.MouseEvent<HTMLDivElement>) => void;
   className?: string; // For additional styles if needed
   isDrawn?: boolean;
   origin?: CardOrigin | 'discard' | 'none';
@@ -153,6 +153,7 @@ export const PlayingCard: React.FC<CardProps> = ({
     <div
       className={`${styles.scene} ${className} ${isDrawn ? styles.drawn : ''}`}
       onClick={onClick}
+      data-card-id={card.id}
       style={{ ...style, animationDelay: `${delay}s` }} // Apply delay to container if needed, or pass directly to card
     >
       <div

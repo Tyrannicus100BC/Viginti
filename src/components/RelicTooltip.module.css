@@ -104,6 +104,22 @@
     white-space: nowrap;
 }
 
+.titleBlock {
+    position: relative;
+    display: inline-block;
+}
+
+.rarity {
+    position: absolute;
+    top: 100%;
+    font-size: 0.62rem;
+    line-height: 1;
+    letter-spacing: 0.02em;
+    opacity: 0.95;
+    pointer-events: none;
+    white-space: nowrap;
+}
+
 .flexible .title {
     white-space: normal;
 }

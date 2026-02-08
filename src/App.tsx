@@ -17,13 +17,13 @@ import { RelicInventory } from './components/RelicInventory';
 
 import { RelicStore } from './components/RelicStore';
 import { GiftShop } from './components/GiftShop';
-import { DoubleDownButton } from './components/DoubleDownButton';
-import { SurrenderButton } from './components/SurrenderButton';
+import { TableActionButton } from './components/TableActionButton';
 
 import type { PlayerHand, Card } from './types';
 import { useLayout } from './components/ResponsiveLayout';
 import { CasinosButton, DeckButton } from './components/HeaderButtons';
 import { CITY_DEFINITIONS } from './logic/cities/definitions';
+import { RelicManager } from './logic/relics/manager';
 import { AudioControls } from './components/AudioControls';
 import { sfxEngine } from './utils/sfxEngine';
 
@@ -57,6 +57,29 @@ import { STAND_TUTORIAL_ID, TUTORIAL_STEPS, shouldPromptStandNow } from './logic
 
 // Constants for layout
 const POT_TOP_Y = 380; // Anchor pots to this Y value
+const MUSIC_FADE_MS = 800;
+const MUSIC_VOLUME_SCALE = 0.5;
+const MENU_MUSIC = '/sounds/Music-Menu.mp3';
+const GIFT_SHOP_MUSIC = '/sounds/Music-GiftShop.mp3';
+const GAME_MUSIC_TRACKS = [
+    '/sounds/Music-Game-01.mp3',
+    '/sounds/Music-Game-02.mp3',
+    '/sounds/Music-Game-03.mp3',
+    '/sounds/Music-Game-04.mp3'
+];
+
+type SwapAnimationItem = {
+    key: string;
+    card: Card;
+    from: { x: number; y: number; width: number; height: number };
+    to: { x: number; y: number; width: number; height: number };
+    path: string;
+};
+
+type SwapAnimation = {
+    items: SwapAnimationItem[];
+    durationMs: number;
+};
 
 export default function App() {
     const {
@@ -82,6 +105,8 @@ export default function App() {
         dealerMessageExiting,
         drawnCards,
         selectedDrawIndex,
+        redrawDiscard,
+        isRedrawAnimating,
         selectDrawnCard,
         discardPile,
         dealsTaken,
@@ -101,10 +126,8 @@ export default function App() {
         // showFinalScore removed
         // continueFromFinalScore removed
 
-        // Double Down Actions
-        startDoubleDown,
-        cancelDoubleDown,
         interactionMode,
+        activeTableActionId,
         debugWin,
         debugUndo,
         drawSpecificCard,
@@ -120,19 +143,17 @@ export default function App() {
         cardsPlacedThisTurn,
         getProjectedPlaceCount,
 
-        // New Double Down Props
-        doubleDownCharges,
-        doubleDownHand,
-
-        // Surrender Props
-        surrenders,
-        startSurrender,
-        cancelSurrender,
-        surrenderHand,
+        // Table Actions
+        tableActionCharges,
+        tableActionHeldCards,
+        startTableAction,
+        cancelTableAction,
+        selectTableActionHand,
+        selectTableActionCard,
+        selectTableActionDrawCard,
 
         // Debug Functions
-        debugFillDoubleDown,
-        debugFillSurrender,
+        debugFillTableAction,
         isReshuffling,
         goToTitle,
         winGame,
@@ -149,13 +170,26 @@ export default function App() {
 
     const { scale, viewportWidth, viewportHeight } = useLayout();
 
-    const hasDoubleDownRelic = inventory.some(r => r.id === 'double_down');
-    const hasSurrenderRelic = inventory.some(r => r.id === 'surrender');
+    const tableActionSlots = inventory.flatMap(instance => {
+        const config = RelicManager.getRelicConfig(instance.id);
+        if (!config?.tableAction) return [];
+        return [{ relicId: instance.id, config, action: config.tableAction }];
+    }).slice(0, 2);
+
+    const activeActionConfig = activeTableActionId ? RelicManager.getRelicConfig(activeTableActionId)?.tableAction : null;
+    const activeActionColor = activeActionConfig?.accentColor;
+    const activeActionPrompt = activeActionConfig
+        ? (activeTableActionId === 'hold' && tableActionHeldCards[activeTableActionId]
+            ? (activeActionConfig.promptWhenHeld || activeActionConfig.prompt)
+            : activeActionConfig.prompt)
+        : null;
 
     const [showDeck, setShowDeck] = useState(false);
     const [isRemovingCards, setIsRemovingCards] = useState(false);
     const [isEnhancingCards, setIsEnhancingCards] = useState(false);
     const [isSelectingDebugCard, setIsSelectingDebugCard] = useState(false);
+    const [swapAnimation, setSwapAnimation] = useState<SwapAnimation | null>(null);
+    const [hiddenCardIds, setHiddenCardIds] = useState<string[]>([]);
     // showHandRankings removed
     const [showCasinoListing, setShowCasinoListing] = useState(false);
     const [showCompsWindow, setShowCompsWindow] = useState(false);
@@ -171,6 +205,7 @@ export default function App() {
     const [standWarningStyle, setStandWarningStyle] = useState<React.CSSProperties | null>(null);
     const standWarningTimeoutRef = useRef<number | null>(null);
     const standButtonRef = useRef<HTMLButtonElement | null>(null);
+    const swapTimeoutRef = useRef<number | null>(null);
 
     const drawAreaRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -180,7 +215,14 @@ export default function App() {
     const [sfxVolume, setSfxVolume] = useState(() => getPersistedSfxVolume());
     const [musicMuted, setMusicMuted] = useState(() => getPersistedMusicMuted());
     const [sfxMuted, setSfxMuted] = useState(() => getPersistedSfxMuted());
+    const [audioUnlocked, setAudioUnlocked] = useState(false);
     const musicRef = useRef<HTMLAudioElement | null>(null);
+    const musicTrackRef = useRef<string | null>(null);
+    const musicFadeRef = useRef<number | null>(null);
+    const phaseRef = useRef(phase);
+    const roundRef = useRef(round);
+    const musicVolumeRef = useRef(musicVolume);
+    const musicMutedRef = useRef(musicMuted);
     const vigintiSoundKey = useGameStore(state => state.vigintiSoundKey);
     const lastVigintiKey = useRef(vigintiSoundKey);
 
@@ -219,43 +261,172 @@ export default function App() {
         }
     }, []);
 
-    useEffect(() => {
-        const music = new Audio('/sounds/Music_Main.mp3');
-        music.loop = true;
-        music.volume = musicMuted ? 0 : musicVolume;
-        musicRef.current = music;
+    const stopMusicFade = () => {
+        if (musicFadeRef.current !== null) {
+            cancelAnimationFrame(musicFadeRef.current);
+            musicFadeRef.current = null;
+        }
+    };
 
-        const tryPlay = () => {
-            if (!musicRef.current) return;
-            if (musicRef.current.paused) {
-                musicRef.current.play().catch(() => {});
+    const fadeMusicTo = (
+        audio: HTMLAudioElement,
+        from: number,
+        to: number,
+        durationMs: number,
+        onComplete?: () => void
+    ) => {
+        stopMusicFade();
+        if (durationMs <= 0) {
+            audio.volume = to;
+            onComplete?.();
+            return;
+        }
+        const start = performance.now();
+        const tick = (now: number) => {
+            const progress = Math.min(1, (now - start) / durationMs);
+            const nextVolume = from + (to - from) * progress;
+            audio.volume = Math.max(0, Math.min(1, nextVolume));
+            if (progress < 1) {
+                musicFadeRef.current = requestAnimationFrame(tick);
+            } else {
+                musicFadeRef.current = null;
+                onComplete?.();
             }
         };
+        musicFadeRef.current = requestAnimationFrame(tick);
+    };
 
-        tryPlay();
+    const getGameMusicForRound = (casinoRound: number) => {
+        const total = GAME_MUSIC_TRACKS.length;
+        const safeRound = Math.max(1, casinoRound || 1);
+        const index = (safeRound - 1) % total;
+        return GAME_MUSIC_TRACKS[index];
+    };
+
+    const getDesiredMusicTrack = (currentPhase: string, casinoRound: number) => {
+        if (currentPhase === 'init') return MENU_MUSIC;
+        if (currentPhase === 'gift_shop') return GIFT_SHOP_MUSIC;
+        return getGameMusicForRound(casinoRound);
+    };
+
+    const getScaledMusicVolume = (rawVolume: number, isMuted: boolean) => {
+        if (isMuted) return 0;
+        return Math.max(0, Math.min(1, rawVolume * MUSIC_VOLUME_SCALE));
+    };
+
+    useEffect(() => {
+        phaseRef.current = phase;
+    }, [phase]);
+
+    useEffect(() => {
+        roundRef.current = round;
+    }, [round]);
+
+    useEffect(() => {
+        musicVolumeRef.current = musicVolume;
+    }, [musicVolume]);
+
+    useEffect(() => {
+        musicMutedRef.current = musicMuted;
+    }, [musicMuted]);
+
+    useEffect(() => {
+        const music = new Audio();
+        music.loop = true;
+        music.volume = 0;
+        musicRef.current = music;
+
         const resumeOnGesture = () => {
-            tryPlay();
+            setAudioUnlocked(true);
             void sfxEngine.resume();
+            const currentMusic = musicRef.current;
+            if (!currentMusic) return;
+            const desiredTrack = getDesiredMusicTrack(phaseRef.current, roundRef.current);
+            const desiredVolume = getScaledMusicVolume(musicVolumeRef.current, musicMutedRef.current);
+            if (desiredVolume <= 0) return;
+
+            if (musicTrackRef.current !== desiredTrack) {
+                stopMusicFade();
+                musicTrackRef.current = desiredTrack;
+                currentMusic.src = desiredTrack;
+                currentMusic.currentTime = 0;
+                currentMusic.volume = 0;
+                currentMusic.play().catch(() => {});
+                fadeMusicTo(currentMusic, 0, desiredVolume, MUSIC_FADE_MS);
+                return;
+            }
+
+            if (currentMusic.paused) {
+                currentMusic.volume = 0;
+                currentMusic.play().catch(() => {});
+                fadeMusicTo(currentMusic, 0, desiredVolume, MUSIC_FADE_MS);
+            } else {
+                currentMusic.volume = desiredVolume;
+            }
         };
         window.addEventListener('pointerdown', resumeOnGesture, { once: true });
         void sfxEngine.preloadAll();
 
         return () => {
             window.removeEventListener('pointerdown', resumeOnGesture);
+            stopMusicFade();
             music.pause();
             music.src = '';
         };
     }, []);
 
-
     useEffect(() => {
-        if (musicRef.current) {
-            musicRef.current.volume = musicMuted ? 0 : musicVolume;
-            if (!musicMuted && musicRef.current.paused) {
-                musicRef.current.play().catch(() => {});
+        const music = musicRef.current;
+        if (!music) return;
+
+        const desiredTrack = getDesiredMusicTrack(phase, round);
+        const desiredVolume = getScaledMusicVolume(musicVolume, musicMuted);
+
+        const startTrack = () => {
+            musicTrackRef.current = desiredTrack;
+            music.src = desiredTrack;
+            music.currentTime = 0;
+            music.volume = 0;
+            music.play().catch(() => {});
+            fadeMusicTo(music, 0, desiredVolume, MUSIC_FADE_MS);
+        };
+
+        if (musicTrackRef.current === desiredTrack) {
+            if (!audioUnlocked || desiredVolume === 0) {
+                stopMusicFade();
+                music.volume = 0;
+                if (!music.paused) music.pause();
+                return;
             }
+            if (music.paused) {
+                music.volume = 0;
+                music.play().catch(() => {});
+                fadeMusicTo(music, 0, desiredVolume, MUSIC_FADE_MS);
+                return;
+            }
+            music.volume = desiredVolume;
+            return;
         }
-    }, [musicVolume, musicMuted]);
+
+        if (!audioUnlocked || desiredVolume === 0) {
+            stopMusicFade();
+            musicTrackRef.current = desiredTrack;
+            music.src = desiredTrack;
+            music.currentTime = 0;
+            music.volume = 0;
+            music.pause();
+            return;
+        }
+
+        if (!music.paused) {
+            const from = music.volume;
+            fadeMusicTo(music, from, 0, MUSIC_FADE_MS, () => {
+                startTrack();
+            });
+        } else {
+            startTrack();
+        }
+    }, [phase, round, audioUnlocked, musicMuted, musicVolume]);
 
     useEffect(() => {
         sfxEngine.setSfxVolume(sfxVolume);
@@ -363,11 +534,13 @@ export default function App() {
             const rect = button.getBoundingClientRect();
             const wrapperRect = wrapper.getBoundingClientRect();
             const left = (rect.left - wrapperRect.left) / scale + rect.width / scale / 2;
-            const top = (rect.top - wrapperRect.top) / scale - 20;
+            const gap = 12;
+            const top = (rect.top - wrapperRect.top) / scale - gap;
 
             setStandWarningStyle({
                 left: `${left}px`,
-                top: `${top}px`
+                top: `${top}px`,
+                transform: 'translate(-50%, -100%)'
             });
         };
 
@@ -439,6 +612,8 @@ export default function App() {
 
     // Track discarded cards for animation
     const [discardingCards, setDiscardingCards] = useState<{ card: any, offset: number, index: number }[]>([]);
+    const [redrawDiscardingCards, setRedrawDiscardingCards] = useState<{ card: any, offset: number, index: number }[]>([]);
+    const redrawDiscardTimeouts = useRef<number[]>([]);
     const prevDrawnCards = useRef<any[]>([]);
     const prevSelectedDrawIndex = useRef<number | null>(null);
 
@@ -495,6 +670,28 @@ export default function App() {
         };
     }, [drawnCards, selectedDrawIndex, playCardPlace]);
 
+    useEffect(() => {
+        if (!redrawDiscard) return;
+        const count = drawnCards.length;
+        const spacing = 120;
+        const offset = (redrawDiscard.index - (count - 1) / 2) * spacing;
+        setRedrawDiscardingCards(prev => [
+            ...prev,
+            { card: redrawDiscard.card, offset, index: redrawDiscard.index }
+        ]);
+        const timeoutId = window.setTimeout(() => {
+            setRedrawDiscardingCards(prev => prev.filter(entry => entry.card.id !== redrawDiscard.card.id));
+        }, 350);
+        redrawDiscardTimeouts.current.push(timeoutId);
+    }, [redrawDiscard, drawnCards.length]);
+
+    useEffect(() => {
+        return () => {
+            redrawDiscardTimeouts.current.forEach(timeoutId => window.clearTimeout(timeoutId));
+            redrawDiscardTimeouts.current = [];
+        };
+    }, []);
+
     // Visual Draw Count Logic
     const [visualDrawCount, setVisualDrawCount] = useState(1);
 
@@ -515,15 +712,28 @@ export default function App() {
         if ((phase === 'round_over' || roundSummary || isCollectingChips) && runningSummary && runningSummary.chips > 0 && !confettiFiredRef.current) {
             if (canvasRef.current) {
                 confettiFiredRef.current = true;
-                canvasRef.current.width = viewportWidth;
-                canvasRef.current.height = viewportHeight;
+                const canvas = canvasRef.current;
+                canvas.width = viewportWidth;
+                canvas.height = viewportHeight;
 
-                fireConfetti(canvasRef.current, {
+                let originX = viewportWidth / 2;
+                const labelNode = totalWinningsLabelRef.current;
+                if (labelNode) {
+                    const targetNode = labelNode.querySelector(`.${styles.valueAndTitle}`) ?? labelNode;
+                    const canvasRect = canvas.getBoundingClientRect();
+                    const labelRect = targetNode.getBoundingClientRect();
+                    if (canvasRect.width > 0) {
+                        const scaleX = canvas.width / canvasRect.width;
+                        originX = (labelRect.left + labelRect.width / 2 - canvasRect.left) * scaleX;
+                    }
+                }
+
+                fireConfetti(canvas, {
                     elementCount: 150,
                     spread: 130,
                     startVelocity: 55,
                     decay: 0.96,
-                    originX: viewportWidth / 2,
+                    originX,
                     originY: POT_TOP_Y - 50
                 });
             }
@@ -659,23 +869,144 @@ export default function App() {
     };
 
     const handleHandClick = (index: number) => {
-        if (interactionMode === 'double_down_select') {
-            doubleDownHand(index);
-        } else if (interactionMode === 'surrender_select') {
-            surrenderHand(index);
-        } else if (drawnCards.length > 0) {
+        if (interactionMode === 'select_hand' && activeTableActionId) {
+            selectTableActionHand(index);
+        } else if (interactionMode === 'default' && drawnCards.length > 0) {
             assignCard(index);
         }
     };
 
+    const triggerSwitchAnimation = (playerCard: Card, dealerCard: Card) => {
+        const playerEl = document.querySelector(`[data-card-id="${playerCard.id}"]`) as HTMLElement | null;
+        const dealerEl = document.querySelector(`[data-card-id="${dealerCard.id}"]`) as HTMLElement | null;
+        const wrapper = document.getElementById('game-scale-wrapper');
+        if (!playerEl || !dealerEl || !wrapper) return;
+
+        const playerRect = playerEl.getBoundingClientRect();
+        const dealerRect = dealerEl.getBoundingClientRect();
+        const wrapperRect = wrapper.getBoundingClientRect();
+        const durationMs = 650;
+
+        if (swapTimeoutRef.current) {
+            window.clearTimeout(swapTimeoutRef.current);
+        }
+
+        const toWrapperSpace = (rect: DOMRect) => ({
+            x: (rect.left - wrapperRect.left) / scale,
+            y: (rect.top - wrapperRect.top) / scale,
+            width: rect.width / scale,
+            height: rect.height / scale
+        });
+
+        const buildBezierPath = (
+            from: { x: number; y: number },
+            to: { x: number; y: number },
+            normal: { x: number; y: number },
+            curveSign: number
+        ) => {
+            const dx = to.x - from.x;
+            const dy = to.y - from.y;
+            const distance = Math.hypot(dx, dy) || 1;
+            const curve = Math.min(140, Math.max(60, distance * 0.35)) * curveSign;
+            const c1x = dx * 0.33 + normal.x * curve;
+            const c1y = dy * 0.33 + normal.y * curve;
+            const c2x = dx * 0.66 + normal.x * curve;
+            const c2y = dy * 0.66 + normal.y * curve;
+            return `path("M 0 0 C ${c1x.toFixed(2)} ${c1y.toFixed(2)} ${c2x.toFixed(2)} ${c2y.toFixed(2)} ${dx.toFixed(2)} ${dy.toFixed(2)}")`;
+        };
+
+        const playerPos = toWrapperSpace(playerRect);
+        const dealerPos = toWrapperSpace(dealerRect);
+        const baseDx = dealerPos.x - playerPos.x;
+        const baseDy = dealerPos.y - playerPos.y;
+        const baseDist = Math.hypot(baseDx, baseDy) || 1;
+        const baseNormal = { x: -baseDy / baseDist, y: baseDx / baseDist };
+
+        setHiddenCardIds([playerCard.id, dealerCard.id]);
+        setSwapAnimation({
+            durationMs,
+            items: [
+                {
+                    key: `${playerCard.id}-to-dealer`,
+                    card: playerCard,
+                    from: { x: playerPos.x, y: playerPos.y, width: playerPos.width, height: playerPos.height },
+                    to: { x: dealerPos.x, y: dealerPos.y, width: dealerPos.width, height: dealerPos.height },
+                    path: buildBezierPath(playerPos, dealerPos, baseNormal, 1)
+                },
+                {
+                    key: `${dealerCard.id}-to-player`,
+                    card: dealerCard,
+                    from: { x: dealerPos.x, y: dealerPos.y, width: dealerPos.width, height: dealerPos.height },
+                    to: { x: playerPos.x, y: playerPos.y, width: playerPos.width, height: playerPos.height },
+                    path: buildBezierPath(dealerPos, playerPos, baseNormal, -1)
+                }
+            ]
+        });
+
+        swapTimeoutRef.current = window.setTimeout(() => {
+            setSwapAnimation(null);
+            setHiddenCardIds([]);
+            swapTimeoutRef.current = null;
+        }, durationMs);
+    };
+
+    const handleCardSelect = (target: 'player' | 'dealer', handIndex: number | undefined, cardId: string) => {
+        if (interactionMode !== 'select_card' || !activeTableActionId) return;
+
+        if (activeTableActionId === 'switch') {
+            if (target !== 'player' || handIndex === undefined) return;
+            const dealerFaceUp = dealer.cards.find(card => card.isFaceUp);
+            const playerCard = playerHands[handIndex]?.cards.find(card => card.id === cardId);
+            if (!dealerFaceUp || !playerCard) return;
+            triggerSwitchAnimation(playerCard, dealerFaceUp);
+        }
+
+        selectTableActionCard({ target, handIndex, cardId });
+    };
+
     const areAllHandsUnplayable = playerHands.every(h => h.isBust || h.isHeld || h.blackjackValue === 21);
-    const isDrawAreaClear = drawnCards.length === 0 || drawnCards.every(c => c === null);
-    const canDraw = phase === 'playing' && isDrawAreaClear && !isDealerPlaying && !isInitialDeal && interactionMode === 'default' && !areAllHandsUnplayable;
+    const hasDrawnCards = drawnCards.some(c => c !== null);
+    const isDrawAreaClear = !hasDrawnCards;
+    const canDraw = phase === 'playing' && isDrawAreaClear && !isDealerPlaying && !isInitialDeal && interactionMode === 'default' && !areAllHandsUnplayable && !isRedrawAnimating;
     const canDrawNow = canDraw && !shouldBlockForStandTutorial();
-    const canDoubleDown = phase === 'playing' && isDrawAreaClear && !isDealerPlaying && !isInitialDeal && !areAllHandsUnplayable; // Can start flow
-    const canSurrender = phase === 'playing' && isDrawAreaClear && !isDealerPlaying && !isInitialDeal && !areAllHandsUnplayable;
-    const canHold = phase === 'playing' && isDrawAreaClear && !isDealerPlaying && !isInitialDeal && interactionMode === 'default' && !areAllHandsUnplayable;
-    const isDrawAreaVisible = phase === 'playing' && !isDealerPlaying && !isInitialDeal && interactionMode !== 'double_down_select' && interactionMode !== 'surrender_select';
+    const canHold = phase === 'playing' && isDrawAreaClear && !isDealerPlaying && !isInitialDeal && interactionMode === 'default' && !areAllHandsUnplayable && !isRedrawAnimating;
+    const isDrawAreaVisible = phase === 'playing' && !isDealerPlaying && !isInitialDeal && (interactionMode === 'default' || interactionMode === 'select_draw' || hasDrawnCards);
+    const showTableActions = phase === 'playing' && !dealer.isRevealed && !isInitialDeal;
+    const hasDealerFaceUpCard = dealer.cards.some(card => card.isFaceUp);
+    const hasPlayableHandForActions = playerHands.some(h => !h.isBust && !h.isHeld && h.blackjackValue !== 21 && h.cards.length > 0);
+    const hasSurrenderTarget = playerHands.some(h => !h.isBust && !h.isHeld && h.blackjackValue !== 21 && h.cards.length > 0);
+    const hasDiscardPlayerTargets = playerHands.some(h => !h.isBust && h.blackjackValue !== 21 && h.cards.length > 0);
+    const hasDiscardDealerTargets = hasDealerFaceUpCard && dealer.blackjackValue < 21;
+    const hasHoldPlacementTargets = playerHands.some(h => !h.isBust && !h.isHeld && h.blackjackValue !== 21);
+    const hasSwitchTargets = hasDealerFaceUpCard && playerHands.some(h => !h.isBust && h.blackjackValue !== 21 && h.cards.length > 0);
+    const dealerSelectableCardIds = (interactionMode === 'select_card' && activeTableActionId === 'discard' && hasDiscardDealerTargets)
+        ? dealer.cards.filter(card => card.isFaceUp).map(card => card.id)
+        : undefined;
+
+    const isTableActionUsable = (relicId: string, cost: number, hasHeldCard: boolean) => {
+        if (!showTableActions || isDealerPlaying) return false;
+        if (isRedrawAnimating) return false;
+        if (interactionMode !== 'default' && activeTableActionId !== relicId) return false;
+        const charges = tableActionCharges[relicId] ?? 0;
+        const hasCharge = charges >= cost;
+
+        switch (relicId) {
+            case 'double_down':
+                return hasCharge && isDrawAreaClear && hasPlayableHandForActions;
+            case 'surrender':
+                return hasCharge && isDrawAreaClear && hasSurrenderTarget;
+            case 'discard':
+                return hasCharge && (hasDiscardPlayerTargets || hasDiscardDealerTargets);
+            case 'redraw':
+                return hasCharge && hasDrawnCards;
+            case 'hold':
+                return hasHeldCard ? hasHoldPlacementTargets : (hasCharge && hasDrawnCards);
+            case 'switch':
+                return hasCharge && hasSwitchTargets;
+            default:
+                return false;
+        }
+    };
 
     const areHandsVisible = phase !== 'gift_shop';
 
@@ -684,6 +1015,9 @@ export default function App() {
             window.clearTimeout(standWarningTimeoutRef.current);
         }
         setStandWarningMessage('You should keep hitting');
+        if (!sfxMuted && sfxVolume > 0) {
+            sfxEngine.play('tutorial');
+        }
         standWarningTimeoutRef.current = window.setTimeout(() => {
             setStandWarningMessage(null);
             standWarningTimeoutRef.current = null;
@@ -713,10 +1047,20 @@ export default function App() {
         }
     }, [isDrawAreaVisible]);
 
+    useEffect(() => {
+        return () => {
+            if (swapTimeoutRef.current) {
+                window.clearTimeout(swapTimeoutRef.current);
+                swapTimeoutRef.current = null;
+            }
+        };
+    }, []);
+
     const activeCards = [
         ...dealer.cards.filter((_, idx) => idx !== 0 || dealer.isRevealed),
         ...playerHands.flatMap(h => h.cards),
         ...drawnCards.filter((c): c is Card => c !== null),
+        ...Object.values(tableActionHeldCards).filter((card): card is Card => !!card),
         ...discardPile
     ];
 
@@ -1069,6 +1413,7 @@ export default function App() {
                 <div className={styles.headerPlaceholder} />
 
                 <header
+                    id="hud-bar"
                     className={`${styles.header} ${isOverlayMode ? styles.headerCentered : ''} ${(isOverlayMode && round === 1 && !hasSettledFirstOverlay) ? styles.noTransition : ''}`}
                     style={isOverlayMode ? { top: 460 } : {}}
                 >
@@ -1138,6 +1483,7 @@ export default function App() {
                 variant="chips"
                 isCollecting={isCollectingChips}
                 center={{ x: centerX - currentPotOffset, y: POT_TOP_Y }}
+                labelId="total-winnings"
                 onCollectionComplete={() => { }}
                 onItemArrived={() => { }}
                 labelPrefix="$"
@@ -1248,7 +1594,7 @@ export default function App() {
                     <div className={styles.topContent}>
                         <div id="dealer-hand-zone" className={`${styles.dealerZone} ${!dealerVisible ? styles.dealerZoneHidden : ''}`}>
                             <div className={styles.zoneLabel}>Dealer</div>
-                            <div style={{ pointerEvents: 'none', position: 'relative' }}>
+                            <div style={{ pointerEvents: dealerSelectableCardIds && dealerSelectableCardIds.length > 0 ? 'auto' : 'none', position: 'relative' }}>
                                 <Hand
                                     key={`dealer-${dealerHandProps.id}-${round}-${dealsTaken}`}
                                     hand={dealerHandProps}
@@ -1257,6 +1603,10 @@ export default function App() {
                                     onDealAnimationComplete={isInitialDeal ? onInitialDealAnimationsComplete : undefined}
                                     onCardDealSound={handleCardDealSound}
                                     onCardFlipSound={handleCardFlipSound}
+                                    selectableCardIds={dealerSelectableCardIds}
+                                    onCardSelect={(cardId) => handleCardSelect('dealer', undefined, cardId)}
+                                    tableActionColor={interactionMode === 'select_card' ? activeActionColor : undefined}
+                                    hiddenCardIds={hiddenCardIds}
                                 />
                             </div>
                             {/* Win Button */}
@@ -1363,6 +1713,7 @@ export default function App() {
                                                 ${styles.drawnCardSpot} 
                                                 ${showHitText ? styles.hitSpot : ''} 
                                                 ${!isDrawAreaVisible ? styles.hiddenSpot : ''}
+                                                ${interactionMode === 'select_draw' && card ? styles.actionSpot : ''}
                                                 ${isSelected && isMultiple ? styles.selectedSpot : ''}
                                             `}
                                                 style={{
@@ -1371,11 +1722,18 @@ export default function App() {
                                                     top: '50%',
                                                     transform: `translate(calc(-50% + ${offset}px), -50%)`,
                                                     zIndex: isSelected ? 20 : 10 + idx,
-                                                    opacity: !isDrawAreaVisible ? 0 : 1
-                                                }}
+                                                    opacity: !isDrawAreaVisible ? 0 : 1,
+                                                    ...(interactionMode === 'select_draw' && activeActionColor ? { '--action-color': activeActionColor } : {})
+                                                } as React.CSSProperties}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    if (card) {
+                                                    if (interactionMode === 'select_draw' && activeTableActionId) {
+                                                        if (card) {
+                                                            selectTableActionDrawCard(idx);
+                                                        }
+                                                    } else if (interactionMode !== 'default') {
+                                                        return;
+                                                    } else if (card) {
                                                         selectDrawnCard(idx);
                                                     } else if (canDrawNow) {
                                                         handleDraw();
@@ -1442,114 +1800,101 @@ export default function App() {
                                         </div>
                                     ))}
 
-                                    {/* Debug Charge Buttons - Above Double Down and Surrender */}
-                                    {debugEnabled && (
-                                        <>
-                                            {/* Surrender Charge Button (Left) */}
-                                            {hasSurrenderRelic && (
-                                                <button 
-                                                    className={`${styles.subtleDebugBtn} ${styles.debugFade} ${isDrawAreaVisible ? styles.debugVisible : styles.debugHidden}`}
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        debugFillSurrender();
-                                                    }}
-                                                    style={{
-                                                        position: 'absolute',
-                                                        left: '50%',
-                                                        top: -40,
-                                                        transform: `translate(calc(-50% - ${buttonOffset}px), 0)`,
-                                                        width: '100px',
-                                                        zIndex: 10
-                                                    }}
-                                                >
-                                                    CHARGE
-                                                </button>
-                                            )}
-                                            {/* Double Down Charge Button (Right) */}
-                                            {hasDoubleDownRelic && (
-                                                <button 
-                                                    className={`${styles.subtleDebugBtn} ${styles.debugFade} ${isDrawAreaVisible ? styles.debugVisible : styles.debugHidden}`}
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        debugFillDoubleDown();
-                                                    }}
-                                                    style={{
-                                                        position: 'absolute',
-                                                        left: '50%',
-                                                        top: -40,
-                                                        transform: `translate(calc(-50% + ${buttonOffset}px), 0)`,
-                                                        width: '100px',
-                                                        zIndex: 10
-                                                    }}
-                                                >
-                                                    CHARGE
-                                                </button>
-                                            )}
-                                        </>
-                                    )}
-
-                                    {/* Double Down Button - Moved to Draw Area */}
-                                    {(phase === 'playing' && !dealer.isRevealed && !isInitialDeal && hasDoubleDownRelic) && (
-                                        <DoubleDownButton
-                                            charges={doubleDownCharges}
-                                            isActive={canDoubleDown}
-                                            isSelectionMode={interactionMode === 'double_down_select'}
-                                            hasSelectedHands={false}
-                                            onClick={() => {
-                                                if (interactionMode === 'double_down_select') {
-                                                    cancelDoubleDown();
-                                                } else {
-                                                    startDoubleDown();
-                                                }
-                                            }}
-                                            onCancel={cancelDoubleDown}
+                                    {redrawDiscardingCards.map(({ card, offset }) => (
+                                        <div
+                                            key={`redraw-discard-${card.id}`}
+                                            className={`${styles.drawnCardSpot} ${styles.discardingCard}`}
                                             style={{
+                                                position: 'absolute',
                                                 left: '50%',
                                                 top: '50%',
-                                                transform: `translate(calc(-50% + ${buttonOffset}px), -50%)`
+                                                transform: `translate(calc(-50% + ${offset}px), -50%)`,
+                                                zIndex: 5,
+                                                // @ts-ignore
+                                                '--startX': `${offset}px`
                                             }}
-                                        />
-                                    )}
+                                        >
+                                            <PlayingCard
+                                                card={card}
+                                                isDrawn
+                                                origin="discard"
+                                            />
+                                        </div>
+                                    ))}
 
-                                    {/* Surrender Button - Moved to Draw Area */}
-                                    {(phase === 'playing' && !dealer.isRevealed && !isInitialDeal && hasSurrenderRelic) && (
-                                        <SurrenderButton
-                                            surrenders={surrenders}
-                                            isActive={canSurrender}
-                                            isSelectionMode={interactionMode === 'surrender_select'}
-                                            hasSelectedHands={false}
-                                            onClick={() => {
-                                                if (interactionMode === 'surrender_select') {
-                                                    cancelSurrender();
-                                                } else {
-                                                    startSurrender();
-                                                }
-                                            }}
-                                            onCancel={cancelSurrender}
-                                            style={{
-                                                left: '50%',
-                                                top: '50%',
-                                                transform: `translate(calc(-50% - ${buttonOffset}px), -50%)`
-                                            }}
-                                        />
-                                    )}
+                                    {/* Debug Charge Buttons - Above Table Actions */}
+                                    {debugEnabled && tableActionSlots.map((slot, slotIndex) => {
+                                        const slotOffset = slotIndex === 0 ? buttonOffset : -buttonOffset;
+                                        return (
+                                            <button
+                                                key={`debug-charge-${slot.relicId}`}
+                                                className={`${styles.subtleDebugBtn} ${styles.debugFade} ${isDrawAreaVisible ? styles.debugVisible : styles.debugHidden}`}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    debugFillTableAction(slot.relicId);
+                                                }}
+                                                style={{
+                                                    position: 'absolute',
+                                                    left: '50%',
+                                                    top: -40,
+                                                    transform: `translate(calc(-50% + ${slotOffset}px), 0)`,
+                                                    width: '100px',
+                                                    zIndex: 10
+                                                }}
+                                            >
+                                                CHARGE
+                                            </button>
+                                        );
+                                    })}
+
+                                    {/* Table Action Buttons */}
+                                    {showTableActions && tableActionSlots.map((slot, slotIndex) => {
+                                        const slotOffset = slotIndex === 0 ? buttonOffset : -buttonOffset;
+                                        const charges = tableActionCharges[slot.relicId] ?? 0;
+                                        const heldCard = tableActionHeldCards[slot.relicId] || null;
+                                        const label = slot.relicId === 'hold' && heldCard ? 'PLACE' : slot.action.label;
+                                        const isSelectionMode = activeTableActionId === slot.relicId && interactionMode !== 'default';
+                                        const isActive = isTableActionUsable(slot.relicId, slot.action.chargeCost, !!heldCard);
+
+                                        return (
+                                            <TableActionButton
+                                                key={`table-action-${slot.relicId}`}
+                                                label={label}
+                                                charges={charges}
+                                                maxCharges={slot.action.maxCharges}
+                                                cost={slot.action.chargeCost}
+                                                accentColor={slot.action.accentColor}
+                                                isActive={isActive}
+                                                isSelectionMode={isSelectionMode}
+                                                heldCard={heldCard || undefined}
+                                                onClick={() => {
+                                                    if (isSelectionMode) {
+                                                        cancelTableAction();
+                                                    } else {
+                                                        startTableAction(slot.relicId);
+                                                    }
+                                                }}
+                                                style={{
+                                                    left: '50%',
+                                                    top: '50%',
+                                                    transform: `translate(calc(-50% + ${slotOffset}px), -50%)`
+                                                }}
+                                            />
+                                        );
+                                    })}
                                 </div>
                                 <div className={styles.infoTextContainer}>
-                                    <div className={`${styles.instructions} ${showSelectionUI && drawnCards.some(c => c !== null) ? styles.textVisible : ''}`}>
+                                    <div className={`${styles.instructions} ${showSelectionUI && drawnCards.some(c => c !== null) && interactionMode === 'default' ? styles.textVisible : ''}`}>
                                         {getProjectedPlaceCount() - cardsPlacedThisTurn > 1 ? `PLACE ${getProjectedPlaceCount() - cardsPlacedThisTurn} CARDS` : 'PLACE CARD'}
                                     </div>
-                                    <div 
-                                        className={`${styles.instructions} ${interactionMode === 'double_down_select' ? styles.textVisible : ''}`} 
-                                        style={{ color: '#ffd700' }}
-                                    >
-                                        Select hand to Double Down
-                                    </div>
-                                    <div 
-                                        className={`${styles.instructions} ${interactionMode === 'surrender_select' ? styles.textVisible : ''}`} 
-                                        style={{ color: '#ffffff' }}
-                                    >
-                                        Select hand to Surrender
-                                    </div>
+                                    {activeActionPrompt && (
+                                        <div
+                                            className={`${styles.instructions} ${interactionMode !== 'default' ? styles.textVisible : ''}`}
+                                            style={{ color: activeActionColor || '#ffd700' }}
+                                        >
+                                            {activeActionPrompt}
+                                        </div>
+                                    )}
                                     <div className={`${styles.clickAnywhere} ${canDrawNow ? styles.textVisible : ''}`}>
                                         Click Anywhere
                                     </div>
@@ -1560,12 +1905,27 @@ export default function App() {
                     <div className={styles.playerZone} style={{ opacity: areHandsVisible ? 1 : 0, transition: 'opacity 0.5s', pointerEvents: areHandsVisible ? 'auto' : 'none' }}>
                             <div id="player-hands-zone" className={styles.playerHandsContainer}>
                                 {playerHands.map((hand, idx) => {
-                                    const canSelectHand = (showSelectionUI && drawnCards.length > 0) || interactionMode === 'double_down_select' || interactionMode === 'surrender_select';
+                                    const isHandActionMode = interactionMode === 'select_hand' && activeTableActionId !== null;
+                                    const isAssignMode = interactionMode === 'default' && showSelectionUI && drawnCards.length > 0;
+                                    const canSelectForAction = (() => {
+                                        if (!isHandActionMode || !activeTableActionId) return false;
+                                        if (activeTableActionId === 'double_down' || activeTableActionId === 'surrender') {
+                                            return !hand.isBust && !hand.isHeld && hand.blackjackValue !== 21 && hand.cards.length > 0;
+                                        }
+                                        if (activeTableActionId === 'hold') {
+                                            return !hand.isBust && !hand.isHeld && hand.blackjackValue !== 21;
+                                        }
+                                        return false;
+                                    })();
+                                    const canSelectHand = isAssignMode || canSelectForAction;
+                                    const selectableCardIds = (interactionMode === 'select_card' && activeTableActionId && (activeTableActionId === 'discard' || activeTableActionId === 'switch') && !hand.isBust && hand.blackjackValue !== 21)
+                                        ? hand.cards.map(card => card.id)
+                                        : undefined;
                                     return (
                                         <Hand
                                             key={`${hand.id}-${round}`}
                                             hand={hand}
-                                            canSelect={canSelectHand && !hand.isBust && !hand.isHeld && hand.blackjackValue !== 21}
+                                            canSelect={canSelectHand}
                                             isSelected={false}
                                             onSelect={() => handleHandClick(idx)}
                                             baseDelay={idx === 1 ? 0 : 0.3}
@@ -1575,6 +1935,10 @@ export default function App() {
                                             onCardDealSound={handleCardDealSound}
                                             onCardFlipSound={handleCardFlipSound}
                                             onCardDiscardSound={handleCardDiscardSound}
+                                            selectableCardIds={selectableCardIds}
+                                            onCardSelect={(cardId) => handleCardSelect('player', idx, cardId)}
+                                            tableActionColor={interactionMode === 'select_card' ? activeActionColor : undefined}
+                                            hiddenCardIds={hiddenCardIds}
                                         />
                                     );
                                 })}
@@ -1715,6 +2079,33 @@ export default function App() {
                     onClose={() => setShowRelicStore(false)}
                     filterCategory={relicStoreFilter}
                 />
+            )}
+
+            {swapAnimation && (
+                <div className={styles.swapOverlay}>
+                    {swapAnimation.items.map(item => (
+                        <div
+                            key={item.key}
+                            className={styles.swapCard}
+                            style={{
+                                left: item.from.x,
+                                top: item.from.y,
+                                width: item.from.width,
+                                height: item.from.height,
+                                // @ts-ignore
+                                '--path': item.path,
+                                animationDuration: `${swapAnimation.durationMs}ms`
+                            }}
+                        >
+                            <PlayingCard
+                                card={item.card}
+                                origin="none"
+                                suppressEnterAnimation
+                                style={{ width: '100%', height: '100%' }}
+                            />
+                        </div>
+                    ))}
+                </div>
             )}
 
             {/* FinalScoreOverlay removed */}

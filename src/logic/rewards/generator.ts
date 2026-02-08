@@ -3,16 +3,30 @@ import type { RewardConfig } from '../cities/types';
 import { RelicManager } from '../relics/manager';
 import { createStandardDeck } from '../deck';
 import type { Card } from '../../types';
-import type { RelicInstance } from '../relics/types';
+import type { RelicInstance, RelicRarity } from '../relics/types';
 
 export interface ShopItem {
     id: string;
     type: 'Charm' | 'Angle' | 'Card';
     card?: Card;
     purchased?: boolean;
-    cost?: number;
+    cost: number;
     nameOverride?: string;
 }
+
+const RELIC_COMP_COSTS: Record<RelicRarity, number> = {
+    Common: 4,
+    Uncommon: 7,
+    Rare: 10
+};
+
+export const getRelicCompCost = (relicId: string): number => {
+    const config = RelicManager.getRelicConfig(relicId);
+    if (!config) return RELIC_COMP_COSTS.Uncommon;
+    return RELIC_COMP_COSTS[config.rarity] ?? RELIC_COMP_COSTS.Uncommon;
+};
+
+const getCardCompCost = (isSpecial: boolean): number => (isSpecial ? 2 : 1);
 
 export function generateShopItems(configList: RewardConfig[], currentInventory: RelicInstance[]): ShopItem[] {
     const items: ShopItem[] = [];
@@ -27,7 +41,7 @@ export function generateShopItems(configList: RewardConfig[], currentInventory: 
                 card.isFaceUp = true;
                 card.origin = 'shop';
 
-                let itemCost = config.cost ?? 1;
+                let itemCost = getCardCompCost(false);
                 let itemName = 'Standard Card';
                 let itemId = `shop_card_${config.forceSpecialCard ? 'special' : 'standard'}_${items.length}_${i}`;
 
@@ -37,7 +51,7 @@ export function generateShopItems(configList: RewardConfig[], currentInventory: 
                         { type: 'chip' as const, value: 5 }, { type: 'chip' as const, value: 10 }
                     ];
                     card.specialEffect = effects[Math.floor(Math.random() * effects.length)];
-                    itemCost = config.cost ?? 2;
+                    itemCost = getCardCompCost(true);
                     itemName = 'Special Card';
                 }
 
@@ -108,7 +122,7 @@ export function generateShopItems(configList: RewardConfig[], currentInventory: 
                     items.push({
                         id: pick.id,
                         type: config.type,
-                        cost: config.cost ?? (config.type === 'Angle' ? 8 : 5),
+                        cost: getRelicCompCost(pick.id),
                         nameOverride: pick.name
                     });
 
@@ -158,7 +172,7 @@ export function generateShopItems(configList: RewardConfig[], currentInventory: 
                     items.push({
                         id: pick.id,
                         type: 'Charm', // Treat action as Charm in ShopItem
-                        cost: config.cost ?? 5,
+                        cost: getRelicCompCost(pick.id),
                         nameOverride: pick.name
                     });
                      // Remove pick from future candidates in this loop if we want unique items
