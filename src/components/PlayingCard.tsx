@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import type { Card as CardType, CardOrigin } from '../types';
 import styles from './Card.module.css';
 import '../styles/animations.css';
@@ -13,6 +13,9 @@ interface CardProps {
   style?: React.CSSProperties;
   suppressSpecialVisuals?: boolean;
   suppressEnterAnimation?: boolean;
+  onEnterAnimationEnd?: (cardId: string) => void;
+  onDealSound?: (cardId: string) => void;
+  onFlipSound?: (cardId: string) => void;
 }
 
 const SUIT_ICONS: Record<string, string> = {
@@ -31,8 +34,91 @@ export const PlayingCard: React.FC<CardProps> = ({
   delay = 0,
   style = {},
   suppressSpecialVisuals = false,
-  suppressEnterAnimation = false
+  suppressEnterAnimation = false,
+  onEnterAnimationEnd,
+  onDealSound,
+  onFlipSound
 }) => {
+  const dealSoundScheduledRef = React.useRef(false);
+  const dealSoundTimeoutRef = React.useRef<number | null>(null);
+  const flipSoundScheduledRef = React.useRef(false);
+  const flipSoundTimeoutRef = React.useRef<number | null>(null);
+  const prevFaceUpRef = React.useRef(card.isFaceUp ?? false);
+
+  React.useEffect(() => {
+    dealSoundScheduledRef.current = false;
+    if (dealSoundTimeoutRef.current !== null) {
+      window.clearTimeout(dealSoundTimeoutRef.current);
+      dealSoundTimeoutRef.current = null;
+    }
+    flipSoundScheduledRef.current = false;
+    if (flipSoundTimeoutRef.current !== null) {
+      window.clearTimeout(flipSoundTimeoutRef.current);
+      flipSoundTimeoutRef.current = null;
+    }
+    prevFaceUpRef.current = card.isFaceUp ?? false;
+  }, [card.id]);
+
+  React.useEffect(() => {
+    if (!onDealSound) return;
+    if (dealSoundScheduledRef.current) return;
+    if (suppressEnterAnimation) return;
+
+    const isDealAnimation = origin === 'deck' || origin === 'double_down';
+    if (!isDealAnimation) return;
+
+    dealSoundScheduledRef.current = true;
+
+    const delayMs = Math.max(0, delay) * 1000;
+    dealSoundTimeoutRef.current = window.setTimeout(() => {
+      onDealSound(card.id);
+    }, delayMs);
+
+    return () => {
+      if (dealSoundTimeoutRef.current !== null) {
+        window.clearTimeout(dealSoundTimeoutRef.current);
+        dealSoundTimeoutRef.current = null;
+      }
+    };
+  }, [card.id, delay, onDealSound, origin, suppressEnterAnimation]);
+
+  React.useEffect(() => {
+    if (!onFlipSound) return;
+    if (flipSoundScheduledRef.current) return;
+    if (suppressEnterAnimation) return;
+
+    const isDealAnimation = origin === 'deck' || origin === 'double_down';
+    if (!isDealAnimation) return;
+    if (!card.isFaceUp) return;
+
+    flipSoundScheduledRef.current = true;
+
+    const FLIP_OFFSET_MS = 250;
+    const delayMs = Math.max(0, delay) * 1000;
+    const timeoutMs = delayMs + FLIP_OFFSET_MS;
+
+    flipSoundTimeoutRef.current = window.setTimeout(() => {
+      onFlipSound(card.id);
+    }, timeoutMs);
+
+    return () => {
+      if (flipSoundTimeoutRef.current !== null) {
+        window.clearTimeout(flipSoundTimeoutRef.current);
+        flipSoundTimeoutRef.current = null;
+      }
+    };
+  }, [card.id, card.isFaceUp, delay, onFlipSound, origin, suppressEnterAnimation]);
+
+  React.useEffect(() => {
+    if (!onFlipSound) return;
+    const wasFaceUp = prevFaceUpRef.current;
+    const isFaceUp = card.isFaceUp ?? false;
+    prevFaceUpRef.current = isFaceUp;
+    if (wasFaceUp) return;
+    if (!isFaceUp) return;
+    onFlipSound(card.id);
+  }, [card.id, card.isFaceUp, onFlipSound]);
+
   // Determine animation class directly from props to handle dynamic changes (e.g. origin changing to 'discard')
   const getAnimClass = () => {
     if (suppressEnterAnimation) return '';
@@ -77,6 +163,13 @@ export const PlayingCard: React.FC<CardProps> = ({
             ${origin === 'discard' ? styles.discarding : ''}
         `}
         style={{ animationDelay: `${delay}s` }}
+        onAnimationEnd={(e) => {
+          if (e.currentTarget !== e.target) return;
+          if (!onEnterAnimationEnd) return;
+          if (suppressEnterAnimation) return;
+          if (origin !== 'deck' && origin !== 'double_down') return;
+          onEnterAnimationEnd(card.id);
+        }}
       >
         {/* Front */}
         <div className={`${styles.face} ${styles.front} ${isRed ? styles.red : styles.black}`}

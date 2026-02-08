@@ -239,8 +239,8 @@
 /* Scoring List Area */
 .scoringList {
     position: absolute;
-    bottom: 100%;
-    /* Sits directly on top */
+    bottom: calc(100% + 20px);
+    /* Sits directly on top with spacing from hand */
     left: 50%;
     transform: translateX(-50%);
     display: flex;
@@ -252,8 +252,7 @@
     /* Match hand width */
     pointer-events: none;
     z-index: 200;
-    padding-bottom: 20px;
-    /* Spacing from hand */
+    /* Spacing handled by bottom offset to keep highlight tight */
 }
 
 .scoringItem {

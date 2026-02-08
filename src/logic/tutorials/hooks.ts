@@ -1,5 +1,5 @@
 
-import type { RelicHooks, GameContext, CardPlacedContext } from '../relics/types';
+import type { RelicHooks, CardPlacedContext } from '../relics/types';
 import { TutorialManager } from './tutorials';
 
 export const TutorialHooks = {

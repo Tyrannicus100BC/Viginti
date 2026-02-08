@@ -1,64 +1,124 @@
 
 .container {
-    position: fixed;
+    position: absolute;
     top: 0;
     left: 0;
-    width: 100vw;
-    height: 100vh;
+    width: 100%;
+    height: 100%;
     z-index: 5000;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    /* transition: opacity 0.3s; */
+    opacity: 0;
+    animation: tutorialOverlayFadeIn 220ms ease-out forwards;
+}
+
+.fading {
+    animation: none;
+    opacity: 0;
+    transition: opacity 220ms ease-in;
+}
+
+.dimmed {
+    background: rgba(0, 0, 0, 0.55);
+}
+
+.noDim {
+    background: transparent;
 }
 
 /* Modal text box */
 .messageBox {
-    background: rgba(20, 20, 25, 0.95);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 12px;
-    padding: 24px 32px;
-    max-width: 500px;
-    color: #fff;
-    text-align: center;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
     pointer-events: auto;
     position: relative;
     z-index: 5010;
-    backdrop-filter: blur(10px);
+    opacity: 0;
+    transform: translateY(14px) scale(0.75);
+    animation: tutorialMessageEnter 420ms cubic-bezier(0.18, 0.9, 0.22, 1.25) forwards;
 }
+
+.exiting .messageBox {
+    animation: tutorialMessageExit 220ms ease-in forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .container,
+    .messageBox {
+        animation: none;
+        opacity: 1;
+        transform: none;
+    }
+
+    .highlightHole {
+        animation: none;
+        opacity: 1;
+    }
+}
+
 
 .messageText {
-    font-size: 1.2rem;
-    line-height: 1.6;
-    margin-bottom: 16px;
-    white-space: pre-line;
+    margin: 0;
 }
 
-.continueHint {
-    font-size: 0.9rem;
-    color: #aaa;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    animation: pulse 2s infinite;
+
+@keyframes tutorialMessageEnter {
+    0% {
+        opacity: 0;
+        transform: translateY(16px) scale(0.75);
+    }
+    70% {
+        opacity: 1;
+        transform: translateY(-6px) scale(1.03);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
 }
 
-@keyframes pulse {
-    0% { opacity: 0.5; }
-    50% { opacity: 1; }
-    100% { opacity: 0.5; }
+@keyframes tutorialMessageExit {
+    0% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+    100% {
+        opacity: 0;
+        transform: translateY(14px) scale(0.85);
+    }
+}
+
+@keyframes tutorialOverlayFadeIn {
+    0% {
+        opacity: 0;
+    }
+    100% {
+        opacity: 1;
+    }
 }
 
 /* Highlight "Hole" implementation */
 .highlightHole {
     position: absolute;
     border-radius: 8px;
-    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.75);
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55);
     pointer-events: none; /* Allow clicks through to the target */
     z-index: 5005;
-    transition: all 0.3s ease-out;
+    transition: opacity 220ms ease-out, transform 220ms ease-out, box-shadow 220ms ease-out, border-color 220ms ease-out;
+    opacity: 0;
     border: 2px solid rgba(255, 215, 0, 0.5);
+}
+
+.highlightVisible {
+    opacity: 1;
+}
+
+.fading .highlightHole {
+    opacity: 0;
+}
+
+.highlightNoScrim {
+    box-shadow: none;
 }
 
 .highlightHole::after {
@@ -69,6 +129,16 @@
     border-radius: 12px;
     animation: borderPulse 2s infinite;
 }
+
+.highlightTight {
+    border-radius: 6px;
+}
+
+.highlightTight::after {
+    inset: -2px;
+    border-radius: 8px;
+}
+
 
 @keyframes borderPulse {
     0% { transform: scale(1); opacity: 1; }
@@ -92,8 +162,17 @@
 
 .blockingMode {
     pointer-events: auto;
-    background: rgba(0, 0, 0, 0.75); /* Fallback if no highlight */
 }
 
 /* If we have a highlight in blocking mode, we rely on the highlight's box-shadow for dimming, so blocking overlay checks that */
 
+.messageBoxPositioned {
+}
+
+.messageBoxWrapper {
+    position: absolute;
+    z-index: 5010;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}

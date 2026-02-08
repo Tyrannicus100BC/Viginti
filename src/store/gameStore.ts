@@ -15,7 +15,26 @@ import { CITY_DEFINITIONS } from '../logic/cities/definitions';
 import { generateShopItems } from '../logic/rewards/generator';
 // import type { RoundSummary } from '../logic/relics/types';
 import { TutorialManager } from '../logic/tutorials/tutorials';
-import { TUTORIAL_STEPS } from '../logic/tutorials/definitions';
+import { ATLANTIC_CITY_TUTORIAL_STEPS, GLOBAL_TUTORIAL_STEPS, TUTORIAL_STEPS } from '../logic/tutorials/definitions';
+import { getDebugSettingsEnabled, setDebugSettingsEnabled } from './persistence';
+import { recordCityCleared } from '../logic/progression';
+import { sfxEngine } from '../utils/sfxEngine';
+
+const SCORE_ROW_RATE_BASE = 1;
+const SCORE_ROW_RATE_STEP = 0.04;
+const SCORE_ROW_RATE_MAX = 1.3;
+
+const buildTutorialContext = (state: GameState) => ({
+    phase: state.phase,
+    round: state.round,
+    isInitialDeal: state.isInitialDeal,
+    isDealerPlaying: state.isDealerPlaying,
+    dealerCards: state.dealer.cards,
+    drawnCards: state.drawnCards,
+    playerHands: state.playerHands,
+    cardsPlacedThisTurn: state.cardsPlacedThisTurn,
+    interactionMode: state.interactionMode
+});
 
 interface GameState {
     deck: Card[];
@@ -58,13 +77,16 @@ interface GameState {
     dealerMessageExiting: boolean;
     dealerMessage: string | null;
     isDealerPlaying: boolean;
+    drawTutorialReady: boolean;
+    vigintiSoundKey: number;
+    scoreSfxStep: number;
 
 
 
     debugEnabled: boolean;
     
     // Actions
-    startGame: (gamblerId?: string, cityId?: string) => void;
+    startGame: (gamblerId?: string, cityId?: string, options?: { skipAtlanticTutorials?: boolean }) => void;
     dealFirstHand: () => void;
     drawCard: () => void;
     assignCard: (handIndex: number) => Promise<void>;
@@ -95,6 +117,8 @@ interface GameState {
     incrementScore: (amount: number) => void;
     triggerDebugChips: () => void;
     triggerScoringRow: (chips: number, mult: number) => void;
+    resetScoreRowPitch: () => void;
+    playScoreRowSfx: () => void;
     debugWin: () => Promise<void>;
     debugUndo: () => void;
     debugFillDoubleDown: () => void;
@@ -113,8 +137,14 @@ interface GameState {
     goToTitle: () => void;
     winGame: () => void;
     isReshuffling: boolean;
-    registerTutorials: () => void;
+    registerTutorials: (options?: { includeAtlanticCity?: boolean }) => void;
     checkTutorials: () => void;
+    onTutorialContinue: (actionId: string, handler: (context?: any) => Promise<void> | void) => void;
+    isTutorialInputLocked: () => boolean;
+    onInitialDealAnimationsComplete: () => void;
+    signalTotalWinningsAnimationComplete: () => void;
+    setDrawTutorialReady: (ready: boolean) => void;
+    triggerVigintiSound: () => void;
 }
 
 
@@ -152,6 +182,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     activeRelicId: null,
     shopItems: [],
     selectedShopItemId: null,
+    vigintiSoundKey: 0,
     doubleDownCharges: 0,
     surrenders: 0,
     isInitialDeal: true,
@@ -160,43 +191,99 @@ export const useGameStore = create<GameState>((set, get) => ({
     allWinnersEnlarged: false,
     dealerVisible: true,
     isDealerPlaying: false,
-    debugEnabled: localStorage.getItem('viginti_debug') === 'true',
+    drawTutorialReady: false,
+    debugEnabled: getDebugSettingsEnabled(),
     animationSpeed: 1,
+    scoreSfxStep: 0,
     setAnimationSpeed: (speed) => set({ animationSpeed: speed }),
+    triggerVigintiSound: () => set(state => ({ vigintiSoundKey: state.vigintiSoundKey + 1 })),
+    resetScoreRowPitch: () => set({ scoreSfxStep: 0 }),
+    playScoreRowSfx: () =>
+        set(state => {
+            const playbackRate = Math.min(
+                SCORE_ROW_RATE_BASE + state.scoreSfxStep * SCORE_ROW_RATE_STEP,
+                SCORE_ROW_RATE_MAX
+            );
+            sfxEngine.play('score', { playbackRate });
+            return { scoreSfxStep: state.scoreSfxStep + 1 };
+        }),
 
-    registerTutorials: () => {
-         TutorialManager.getInstance().registerSteps(TUTORIAL_STEPS);
+    registerTutorials: (options) => {
+         const includeAtlanticCity = options?.includeAtlanticCity ?? true;
+         const manager = TutorialManager.getInstance();
+         manager.registerSteps([
+             ...GLOBAL_TUTORIAL_STEPS,
+             ...(includeAtlanticCity ? ATLANTIC_CITY_TUTORIAL_STEPS : [])
+         ]);
+        manager.registerActions({
+            deal_first_hand: async () => {
+                get().dealFirstHand();
+            },
+            mark_draw_tutorial_ready: () => {
+                get().setDrawTutorialReady(true);
+            }
+        });
     },
 
     checkTutorials: () => {
         const state = get();
         const manager = TutorialManager.getInstance();
-        const context = {
-            phase: state.phase,
-            round: state.round,
-            isInitialDeal: state.isInitialDeal,
-            dealerCards: state.dealer.cards,
-            drawnCards: state.drawnCards,
-            playerHands: state.playerHands,
-            cardsPlacedThisTurn: state.cardsPlacedThisTurn
-        };
+        const context = buildTutorialContext(state);
+
+        manager.setContext(context);
         
         // Trigger generic check
         if (!manager.getActiveStep()) {
              TUTORIAL_STEPS.forEach(step => {
-                 manager.tryTriggerStep(step.id, context);
+                 manager.tryTriggerStep(step.id, context, 'auto');
              });
         }
     },
 
-    goToTitle: () => set({ phase: 'init' }),
+    onTutorialContinue: (actionId, handler) => {
+        TutorialManager.getInstance().registerActions({ [actionId]: handler });
+    },
 
-    winGame: () => set({ phase: 'victory' }),
+    isTutorialInputLocked: () => {
+        return TutorialManager.getInstance().isInputLocked();
+    },
+
+    onInitialDealAnimationsComplete: () => {
+        const current = get();
+        if (!current.isInitialDeal) return;
+
+        set({ isInitialDeal: false });
+
+        const updated = get();
+        const context = buildTutorialContext(updated);
+        const manager = TutorialManager.getInstance();
+        manager.setContext(context);
+        manager.signalEvent('dealer_initial_deal_complete', context);
+    },
+
+    signalTotalWinningsAnimationComplete: () => {
+        const state = get();
+        const manager = TutorialManager.getInstance();
+        const context = buildTutorialContext(state);
+        manager.setContext(context);
+        manager.signalEvent('total_winnings_shown', context);
+    },
+
+    goToTitle: () => set({ phase: 'init' }),
+    setDrawTutorialReady: (ready) => set({ drawTutorialReady: ready }),
+
+    winGame: () => {
+        const { selectedCityId } = get();
+        if (selectedCityId) {
+            recordCityCleared(selectedCityId);
+        }
+        set({ phase: 'victory' });
+    },
 
     toggleDebug: () => {
         set(state => {
             const newValue = !state.debugEnabled;
-            localStorage.setItem('viginti_debug', String(newValue));
+            setDebugSettingsEnabled(newValue);
             return { debugEnabled: newValue };
         });
     },
@@ -247,9 +334,21 @@ export const useGameStore = create<GameState>((set, get) => ({
         });
     },
 
-    startGame: (gamblerId: string = 'newbie', cityId: string = 'las_vegas') => {
+    startGame: (gamblerId: string = 'newbie', cityId: string = 'atlantic_city', options?: { skipAtlanticTutorials?: boolean }) => {
         const gambler = GAMBLER_DEFINITIONS.find(g => g.id === gamblerId) || GAMBLER_DEFINITIONS[0];
         const city = CITY_DEFINITIONS.find(c => c.id === cityId) || CITY_DEFINITIONS[0];
+
+        const tutorialManager = TutorialManager.getInstance();
+        const isAtlanticCity = city.id === 'atlantic_city';
+        const skipAtlanticTutorials = options?.skipAtlanticTutorials ?? false;
+        const includeAtlanticCityTutorials = isAtlanticCity && !skipAtlanticTutorials;
+
+        get().registerTutorials({ includeAtlanticCity: includeAtlanticCityTutorials });
+
+        tutorialManager.setSessionTutorialsEnabled(includeAtlanticCityTutorials);
+        if (includeAtlanticCityTutorials) {
+            tutorialManager.resetSessionTutorials();
+        }
         
         const deck = shuffleDeck(gambler.getInitialDeck());
 
@@ -295,6 +394,7 @@ export const useGameStore = create<GameState>((set, get) => ({
             shopItems: [],
             selectedShopItemId: null,
             isDealerPlaying: false,
+            drawTutorialReady: false,
             doubleDownCharges: 0,
             surrenders: initialInventory.some(r => r.id === 'surrender') ? 3 : 0,
             animationSpeed: 1,
@@ -426,11 +526,7 @@ export const useGameStore = create<GameState>((set, get) => ({
             animationSpeed: 1
         });
 
-        // After animations complete (Dealer cards only now)
-        const delay = get().debugEnabled ? 0 : 1500;
-        setTimeout(() => {
-            set({ isInitialDeal: false });
-        }, delay / get().animationSpeed);
+        // After animations complete, isInitialDeal will be cleared via onInitialDealAnimationsComplete.
     },
 
     drawCard: async () => {
@@ -564,6 +660,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         // Handle Bust Side Effects
         const postHand = updatedHands[handIndex];
         if (postHand.isBust) {
+            sfxEngine.play('bust');
             set(state => ({
                 doubleDownCharges: Math.min(3, state.doubleDownCharges + 1)
             }));
@@ -669,6 +766,18 @@ export const useGameStore = create<GameState>((set, get) => ({
             playerHands: newHands,
             drawnCards: initialDrawnUpdate
         });
+        sfxEngine.play('cardPlace');
+
+        // Signal placement animation completion for tutorials (after animation duration).
+        // This decouples tutorial timing from the click that triggered placement.
+        const placementSignalDelayMs = 600;
+        window.setTimeout(() => {
+            const state = get();
+            const context = buildTutorialContext(state);
+            const manager = TutorialManager.getInstance();
+            manager.setContext(context);
+            manager.signalEvent('player_place_animation_complete', context);
+        }, placementSignalDelayMs);
 
         // 2. Trigger onCardPlaced Hook (Async)
         const placedHandInitial = newHands[handIndex];
@@ -740,6 +849,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
         // 3. Trigger onHandBust if applicable post-hook
          if (finalHand.isBust && !playerHands[handIndex].isBust) { // Compare against ORIGINAL start of turn state? 
+            sfxEngine.play('bust');
             
             // Inject Doubledown Logic: Add Charge on Bust
             set(state => ({ doubleDownCharges: Math.min(3, state.doubleDownCharges + 1) }));
@@ -841,7 +951,77 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     holdReturns: async (forceDealerBust = false) => {
         // Reset speed to normal at start of sequence
-        set({ animationSpeed: 1, isDealerPlaying: true });
+        set({ animationSpeed: 1 });
+        sfxEngine.play('stand');
+
+        const manager = TutorialManager.getInstance();
+
+        const waitForTutorialStep = async (stepId: string) => {
+            if (manager.isCompleted(stepId)) return;
+
+            const context = buildTutorialContext(get());
+            manager.setContext(context);
+
+            const active = manager.getActiveStep();
+            if (active?.id === stepId) {
+                await new Promise<void>(resolve => {
+                    const unsubscribe = manager.subscribe(() => {
+                        if (manager.isCompleted(stepId)) {
+                            unsubscribe();
+                            resolve();
+                        }
+                    });
+                });
+                return;
+            }
+
+            const triggered = manager.tryTriggerStep(stepId, context, 'chain');
+            if (!triggered) return;
+
+            await new Promise<void>(resolve => {
+                const unsubscribe = manager.subscribe(() => {
+                    if (manager.isCompleted(stepId)) {
+                        unsubscribe();
+                        resolve();
+                    }
+                });
+            });
+        };
+
+        const triggerTutorialStep = (stepId: string) => {
+            if (manager.isCompleted(stepId)) return;
+            const context = buildTutorialContext(get());
+            manager.setContext(context);
+            if (manager.getActiveStep()?.id === stepId) return;
+            manager.tryTriggerStep(stepId, context, 'chain');
+        };
+
+        const minDealerTurnMs = 3000;
+        let dealerTurnTriggered = false;
+        let dealerTurnStart = 0;
+
+        const triggerDealerTurnTutorial = () => {
+            if (manager.isCompleted('dealer_turn')) return false;
+
+            const context = buildTutorialContext(get());
+            manager.setContext(context);
+
+            const active = manager.getActiveStep();
+            if (active?.id === 'dealer_turn') {
+                dealerTurnStart = performance.now();
+                return true;
+            }
+
+            const triggered = manager.tryTriggerStep('dealer_turn', context, 'chain');
+            if (triggered) {
+                dealerTurnStart = performance.now();
+            }
+
+            return triggered;
+        };
+
+        dealerTurnTriggered = triggerDealerTurnTutorial();
+        set({ isDealerPlaying: true });
 
         // Helper to wait with dynamic speed
         const wait = async (ms: number) => {
@@ -854,6 +1034,8 @@ export const useGameStore = create<GameState>((set, get) => ({
                 await new Promise(resolve => setTimeout(resolve, interval));
             }
         };
+
+        const waitReal = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
 
         // 1. Reveal Phase
         const { dealer, deck } = get();
@@ -891,6 +1073,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         const { inventory } = get();
         const baseStopValue = 17;
         const dealerStopValue = forceDealerBust ? 22 : RelicManager.executeValueHook('getDealerStopValue', baseStopValue, { inventory });
+        let dealerBustPlayed = false;
         while (dVal < dealerStopValue) {
             set({ dealerMessage: "Hit!", dealerMessageExiting: false });
 
@@ -919,6 +1102,10 @@ export const useGameStore = create<GameState>((set, get) => ({
             
             dCards = nextCards;
             dVal = nextVal;
+            if (dVal > 21 && !dealerBustPlayed) {
+                dealerBustPlayed = true;
+                sfxEngine.play('bust');
+            }
 
             await wait(500); // Match --anim-deal-duration (wait for card to fly/flip)
 
@@ -931,6 +1118,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
         // 3. Final Result Message
         if (dVal < 21) {
+            sfxEngine.play('stand');
             set({ dealerMessage: "Stand!", dealerMessageExiting: false });
             await wait(500);
             set({ dealerMessageExiting: true });
@@ -939,6 +1127,14 @@ export const useGameStore = create<GameState>((set, get) => ({
         } else if (dVal === 21) {
             // Exact 21 -> No longer gives +2 Charges per user request
             // set(state => ({ doubleDownCharges: Math.min(3, state.doubleDownCharges + 2) }));
+        }
+
+        if (dealerTurnTriggered) {
+            const elapsed = performance.now() - dealerTurnStart;
+            if (elapsed < minDealerTurnMs) {
+                await waitReal(minDealerTurnMs - elapsed);
+            }
+            manager.completeStep('dealer_turn');
         }
 
         // 4. Score Logic And Aggregation
@@ -980,6 +1176,10 @@ export const useGameStore = create<GameState>((set, get) => ({
             allWinnersEnlarged: false,
             dealerVisible: true
         });
+        const hasWinningHand = scoredHands.some(hand => hand.finalScore);
+        if (hasWinningHand) {
+            triggerTutorialStep('win_money_first');
+        }
 
         // Stagger reveal of player outcomes
         const currentHands = [...scoredHands];
@@ -995,11 +1195,16 @@ export const useGameStore = create<GameState>((set, get) => ({
                 outcome: hand.finalScore ? 'win' : 'loss'
             };
             set({ playerHands: [...currentHands] });
-
             // Pause only if we're showing a new label (Win/Loss)
             if (!isBustOrViginti && i < currentHands.length - 1) {
                 await wait(400);
             }
+        }
+
+        const allHandsLost = currentHands.length > 0 &&
+            currentHands.every(hand => hand.outcome === 'loss');
+        if (allHandsLost) {
+            await waitForTutorialStep('lost_all_hands');
         }
 
         // STEP 1 COMPLETE: Fade out dealer
@@ -1012,6 +1217,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         // Allow user to digest outcomes before scoring starts
         await wait(400);
 
+        get().resetScoreRowPitch();
         set({ runningSummary: { chips: 0, mult: 0 } });
 
         // 5. Animation Sequence (Reveal Chips/Mults per hand)
@@ -1120,6 +1326,13 @@ export const useGameStore = create<GameState>((set, get) => ({
         set({ allWinnersEnlarged: false });
         await wait(300);
 
+        if (hasWinningHand) {
+            const context = buildTutorialContext(get());
+            manager.setContext(context);
+            manager.signalEvent('scoring_sequence_complete', context);
+            await waitForTutorialStep('win_money_first');
+        }
+
         // Continue to collection if there are any chips to collect
         const currentSummary = get().runningSummary;
         if (currentSummary && (currentSummary.chips > 0 || currentSummary.mult > 0)) {
@@ -1134,6 +1347,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
         // 1. Show the total winnings label in the center immediately
         set({ isCollectingChips: true });
+        // Tutorial event is fired when the total winnings animation finishes.
 
         // 2. Wait 1000ms (1s) before updating the HUD, as requested
         await new Promise(resolve => setTimeout(resolve, 1000));
@@ -1486,10 +1700,7 @@ export const useGameStore = create<GameState>((set, get) => ({
             animationSpeed: 1
         });
 
-        // After animations complete
-        setTimeout(() => {
-            set({ isInitialDeal: false });
-        }, 1500 / get().animationSpeed);
+        // After animations complete, isInitialDeal will be cleared via onInitialDealAnimationsComplete.
     },
 
     debugWin: async () => {

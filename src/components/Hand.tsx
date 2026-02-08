@@ -15,12 +15,18 @@ interface HandProps {
   isEnlarged?: boolean;
   isSelected?: boolean;
   id?: string;
+  onDealAnimationComplete?: () => void;
+  onCardDealSound?: (cardId: string) => void;
+  onCardFlipSound?: (cardId: string) => void;
+  onCardDiscardSound?: (cardId: string) => void;
 }
 
 import { useGameStore } from '../store/gameStore';
 
-export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay = 0, stagger = true, isScoringFocus = false, isEnlarged = false, isSelected = false, id }) => {
+export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay = 0, stagger = true, isScoringFocus = false, isEnlarged = false, isSelected = false, id, onDealAnimationComplete, onCardDealSound, onCardFlipSound, onCardDiscardSound }) => {
   const triggerScoringRow = useGameStore(state => state.triggerScoringRow);
+  const triggerVigintiSound = useGameStore(state => state.triggerVigintiSound);
+  const playScoreRowSfx = useGameStore(state => state.playScoreRowSfx);
   // Determine if we should show overlay (bust or result revealed)
   const isViginti = hand.blackjackValue === 21;
   const showOverlay = (hand.isBust || isViginti || hand.isDoubled || (hand.finalScore !== undefined && hand.resultRevealed)) && hand.cards.length > 0;
@@ -52,6 +58,26 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
   // Store posIndex to lock position during discard
   const [visualCards, setVisualCards] = useState<Array<{ card: any, isDiscarding: boolean, posIndex: number, hasEntered: boolean }>>([]);
   const prevHandId = useRef(hand.id);
+  const dealCompleteSentRef = useRef(false);
+  const dealAnimationDoneRef = useRef<Set<string>>(new Set());
+  const vigintiPlayedRef = useRef(false);
+  const discardSoundPlayedRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (hand.id === -1) return;
+    if (hand.cards.length === 0) {
+      vigintiPlayedRef.current = false;
+      return;
+    }
+    if (!isViginti || hand.isBust) {
+      vigintiPlayedRef.current = false;
+      return;
+    }
+    if (!vigintiPlayedRef.current) {
+      vigintiPlayedRef.current = true;
+      triggerVigintiSound();
+    }
+  }, [hand.id, hand.cards.length, hand.isBust, isViginti, triggerVigintiSound]);
 
   // Sync hand.cards to visualCards
   useEffect(() => {
@@ -59,8 +85,11 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
     if (hand.id !== prevHandId.current) {
         setVisualCards(hand.cards.map((c, i) => ({ card: c, isDiscarding: false, posIndex: i, hasEntered: false })));
         prevHandId.current = hand.id;
+        discardSoundPlayedRef.current.clear();
         return;
     }
+
+    const newlyDiscarded: string[] = [];
 
     setVisualCards(prev => {
         const nextVisuals = [...prev];
@@ -77,6 +106,10 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
                 // Was present, now removed. Mark discarding.
                 // Keep existing posIndex!
                 nextVisuals[idx] = { ...vc, isDiscarding: true };
+                if (!discardSoundPlayedRef.current.has(vc.card.id)) {
+                    discardSoundPlayedRef.current.add(vc.card.id);
+                    newlyDiscarded.push(vc.card.id);
+                }
             }
         });
 
@@ -109,7 +142,10 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
         return nextVisuals;
     });
 
-  }, [hand.cards, hand.id]);
+    if (onCardDiscardSound && newlyDiscarded.length > 0) {
+        newlyDiscarded.forEach(cardId => onCardDiscardSound(cardId));
+    }
+  }, [hand.cards, hand.id, onCardDiscardSound]);
 
   // Cleanup discarding cards
   useEffect(() => {
@@ -160,6 +196,42 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
           return () => clearTimeout(timer);
       }
   }, [visualCards, baseDelay, stagger]);
+
+  const maybeNotifyDealComplete = () => {
+      if (!onDealAnimationComplete) return;
+      if (dealCompleteSentRef.current) return;
+
+      const expectedIds = hand.cards
+          .filter(c => c.origin === 'deck')
+          .map(c => c.id);
+
+      if (expectedIds.length === 0) return;
+
+      const allDone = expectedIds.every(id => dealAnimationDoneRef.current.has(id));
+      if (allDone) {
+          dealCompleteSentRef.current = true;
+          onDealAnimationComplete();
+      }
+  };
+
+  const handleDealAnimationEnd = (cardId: string) => {
+      dealAnimationDoneRef.current.add(cardId);
+      maybeNotifyDealComplete();
+  };
+
+  useEffect(() => {
+      if (hand.cards.length === 0) {
+          dealAnimationDoneRef.current.clear();
+          dealCompleteSentRef.current = false;
+      }
+      maybeNotifyDealComplete();
+  }, [hand.cards.length]);
+
+  useEffect(() => {
+      dealAnimationDoneRef.current.clear();
+      dealCompleteSentRef.current = false;
+      discardSoundPlayedRef.current.clear();
+  }, [hand.id]);
 
   // Reset state when hand ID changes (new hand slot content)
   useEffect(() => {
@@ -239,6 +311,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
           // Reveal Row Frame and Label
           setVisibleItems(prev => [...prev, i]);
           setActiveCriteriaIdx(i);
+          playScoreRowSfx();
 
           // Default start values
           setRowValues(prev => ({
@@ -397,7 +470,10 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
     >
       {/* Scoring List */}
       {isWin && hand.finalScore && (
-        <div className={styles.scoringList}>
+        <div
+          id={isScoringFocus ? 'score-rows-zone' : undefined}
+          className={styles.scoringList}
+        >
           {hand.finalScore.criteria.map((item, idx) => (
             <div
               key={`${item.id}-${idx}`}
@@ -535,6 +611,9 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
                         } as React.CSSProperties}
                         suppressSpecialVisuals={hand.id === -1}
                         suppressEnterAnimation={hasEntered}
+                        onEnterAnimationEnd={handleDealAnimationEnd}
+                        onDealSound={onCardDealSound}
+                        onFlipSound={onCardFlipSound}
                       />
                     </div>
                   ) : (
@@ -549,6 +628,9 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
                       } as React.CSSProperties}
                       suppressSpecialVisuals={hand.id === -1}
                       suppressEnterAnimation={hasEntered}
+                      onEnterAnimationEnd={handleDealAnimationEnd}
+                      onDealSound={onCardDealSound}
+                      onFlipSound={onCardFlipSound}
                       card={card} // Ensure card reference is correct
                     />
                   )}

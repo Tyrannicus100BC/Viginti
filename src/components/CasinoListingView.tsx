@@ -10,7 +10,7 @@ interface CasinoListingViewProps {
 
 export const CasinoListingView: React.FC<CasinoListingViewProps> = ({ currentRound, onClose }) => {
     const selectedCityId = useGameStore(state => state.selectedCityId);
-    const cityId = selectedCityId || 'las_vegas';
+    const cityId = selectedCityId || 'atlantic_city';
     const city = CITY_DEFINITIONS.find(c => c.id === cityId) || CITY_DEFINITIONS[0];
 
     const casinos = Array.from({ length: city.casinoTargets.length }, (_, i) => i + 1);

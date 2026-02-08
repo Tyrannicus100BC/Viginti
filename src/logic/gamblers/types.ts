@@ -1,6 +1,7 @@
 
 import type { Card } from '../../types';
 import type { RelicInstance } from '../relics/types';
+import type { UnlockCondition } from '../progression';
 
 export interface GamblerDefinition {
     id: string;
@@ -12,4 +13,5 @@ export interface GamblerDefinition {
     };
     getInitialDeck: () => Card[];
     getInitialRelics: () => RelicInstance[];
+    unlockCondition: UnlockCondition;
 }

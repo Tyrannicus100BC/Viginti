@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import Matter from 'matter-js';
 import styles from './TitlePhysics.module.css';
 import { useLayout } from './ResponsiveLayout';
+import { useGameStore } from '../store/gameStore';
 
 interface ChipData {
   value: number;
@@ -23,12 +24,16 @@ const CARD_HEIGHT = 70;
 
 export const TitlePhysics: React.FC = () => {
   const { viewportWidth, viewportHeight, scale } = useLayout();
+  const debugEnabled = useGameStore(state => state.debugEnabled);
+  const debugVisualizationEnabled = false;
   
   // Refs for Matter.js instances
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<Matter.Engine | null>(null);
   const renderRef = useRef<Matter.Render | null>(null);
   const runnerRef = useRef<Matter.Runner | null>(null);
+  const debugEnabledRef = useRef(debugEnabled);
+  const lastImpulseRef = useRef(new Map<number, number>());
   
   // Refs for tracking bodies and layout across closures
   const staticBodiesRef = useRef<Matter.Body[]>([]);
@@ -56,6 +61,13 @@ export const TitlePhysics: React.FC = () => {
         // and update static bodies in the next frame.
     }
   }, [viewportWidth, viewportHeight, scale]);
+
+  useEffect(() => {
+    debugEnabledRef.current = debugEnabled && debugVisualizationEnabled;
+    if (renderRef.current) {
+        renderRef.current.options.wireframes = debugEnabled && debugVisualizationEnabled;
+    }
+  }, [debugEnabled, debugVisualizationEnabled]);
 
   // Main Matter.js Initialization and Animation Loop
   useEffect(() => {
@@ -88,7 +100,11 @@ export const TitlePhysics: React.FC = () => {
     // 2. Helper Functions (defined inside effect to access closure variables if needed, 
     //    but mostly using refs to stay fresh)
 
-    const updateStaticBodies = (buttonRotation = 0, currentRadii: number[] = []) => {
+    const updateStaticBodies = (
+        buttonRotation = 0,
+        currentRadii: number[] = [],
+        currentRestitution: number[] = []
+    ) => {
         if (!engineRef.current) return;
         const { scale } = layoutRef.current;
         
@@ -103,28 +119,32 @@ export const TitlePhysics: React.FC = () => {
             const rect = el.getBoundingClientRect();
             // Convert screen coordinates to virtual coordinates
             const cx = (rect.left + rect.width / 2) / scale;
-            let cy = (rect.top + rect.height / 2) / scale;
+            const baseCy = (rect.top + rect.height / 2) / scale;
+            let cy = baseCy;
             
             const rectBaseRadius = (Math.min(rect.width, rect.height) / scale) / 2;
             const radius = currentRadii[i] || rectBaseRadius;
+            const restitution = currentRestitution[i] ?? 0.3;
 
             if (char === 'I') {
-                cy -= (radius * 0.8);
+                cy = baseCy - (radius * 0.8);
             }
             
             const letterBody = Matter.Bodies.circle(cx, cy, radius, { 
                 isStatic: true, 
-                restitution: 0.3,
+                restitution,
                 friction: 0.01, 
                 frictionStatic: 0,
                 render: { 
-                    visible: false,
+                    visible: debugEnabledRef.current,
                     fillStyle: 'rgba(255, 215, 0, 0.05)',
                     strokeStyle: '#ffd700',
                     lineWidth: 1
                 } 
             });
+            letterBody.label = `title-letter-${i}-top`;
             staticBodiesRef.current.push(letterBody);
+
         });
 
         // Add Collision for Start Button
@@ -132,8 +152,8 @@ export const TitlePhysics: React.FC = () => {
         if (buttonEl) {
             const el = buttonEl as HTMLElement;
             const rect = el.getBoundingClientRect();
-            const scaledW = rect.width / scale;
-            const scaledH = rect.height / scale;
+            const scaledW = el.offsetWidth / scale;
+            const scaledH = el.offsetHeight / scale;
 
             const cx = (rect.left + rect.width / 2) / scale;
             const cy = (rect.top + rect.height / 2) / scale;
@@ -144,7 +164,7 @@ export const TitlePhysics: React.FC = () => {
                 friction: 0.01,
                 frictionStatic: 0,
                 render: { 
-                    visible: false,
+                    visible: debugEnabledRef.current,
                     fillStyle: 'rgba(255, 255, 255, 0.1)',
                     strokeStyle: '#fff',
                     lineWidth: 1
@@ -172,7 +192,7 @@ export const TitlePhysics: React.FC = () => {
                 friction: 0.01,
                 frictionStatic: 0,
                 render: { 
-                    visible: false,
+                    visible: debugEnabledRef.current,
                     fillStyle: 'rgba(255, 215, 0, 0.15)',
                     strokeStyle: '#ffd700',
                     lineWidth: 1
@@ -207,10 +227,12 @@ export const TitlePhysics: React.FC = () => {
                 const speed = 0.003;
                 
                 const scaleAmplitude = 0.25; 
-                const scaleSpeed = 0.004; 
+                const scaleSpeed = 0.0075; 
                 const pulseCycle = Math.PI * 4; 
 
                 const collisionRadii: number[] = [];
+                const collisionRestitution: number[] = [];
+                const collisionImpulse: number[] = [];
                 
                 const wordRect = els[0].parentElement?.getBoundingClientRect();
                 const wordTop = wordRect ? (wordRect.top / scale) : 0; // Use scaled top? Actually rect.top is screen coords.
@@ -261,20 +283,68 @@ export const TitlePhysics: React.FC = () => {
                     const theta = (time * scaleSpeed + sPhase) % pulseCycle;
                     
                     const scaleSin = (theta > 0 && theta < Math.PI) ? Math.sin(theta) : 0;
-                    const visualScale = 1.0 + scaleAmplitude * scaleSin;
+                const visualScale = 1.0 + (scaleAmplitude * 1.3) * scaleSin;
 
                     const impulseFactor = Math.min(1.0, scaleSin * 1.5);
-                    const currentRadius = baseRadius + (targetPeakRadius - baseRadius) * impulseFactor;
+                    const reducedGrowthRadius = baseRadius + (targetPeakRadius - baseRadius) * impulseFactor * 0.2625;
+                    const boostedRestitution = 0.3 + (0.7 * impulseFactor);
 
                     el.style.transform = `translateY(${yOffset}px) scale(${visualScale})`;
-                    collisionRadii.push(currentRadius);
+                    collisionRadii.push(reducedGrowthRadius);
+                    collisionRestitution.push(boostedRestitution);
+                    collisionImpulse.push(impulseFactor);
                 });
 
                 const buttonRotationAmplitude = 5.25 * (Math.PI / 180); 
                 const buttonRotationSpeed = 0.001;
                 const buttonRotation = Math.sin(time * buttonRotationSpeed) * buttonRotationAmplitude;
 
-                updateStaticBodies(buttonRotation, collisionRadii);
+                updateStaticBodies(buttonRotation, collisionRadii, collisionRestitution);
+
+                // Impulse nearby dynamic bodies during peak growth to fling chips off letters
+                if (engineRef.current) {
+                    const dynamicBodies = Matter.Composite.allBodies(engineRef.current.world)
+                        .filter(body => !body.isStatic);
+
+                    staticBodiesRef.current
+                        .filter(body => body.label.startsWith('title-letter-'))
+                        .forEach(letterBody => {
+                            const match = letterBody.label.match(/^title-letter-(\d+)-/);
+                            const index = match ? Number(match[1]) : -1;
+                            const impulseStrength = collisionImpulse[index] ?? 0;
+                            if (impulseStrength < 0.65) return;
+                            const now = time;
+                            const last = lastImpulseRef.current.get(letterBody.id) || 0;
+                            if (now - last < 80) return;
+                            lastImpulseRef.current.set(letterBody.id, now);
+
+                            const radius = letterBody.circleRadius || 0;
+                            const lx = letterBody.position.x - (radius * 0.35);
+                            const ly = letterBody.position.y;
+                            const maxRange = radius + 80;
+                            const forceScale = 0.0012 * impulseStrength * 0.7;
+
+                            dynamicBodies.forEach(body => {
+                                const dx = body.position.x - lx;
+                                const dy = body.position.y - ly;
+                                const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                                if (dist > maxRange) return;
+                                const nx = dx / dist;
+                                const ny = dy / dist;
+                                const isCardLike = body.density >= 0.05 || (body.bounds.max.x - body.bounds.min.x) >= 45;
+                                const cardBoost = isCardLike ? 1.5 : 1.0;
+                                const massBoost = Math.max(1, body.mass) * cardBoost;
+                                const jitter = (Math.random() - 0.5) * 0.35;
+                                const tx = -ny;
+                                const ty = nx;
+                                Matter.Body.applyForce(body, body.position, {
+                                    x: (nx + tx * jitter) * forceScale * massBoost,
+                                    y: (ny + ty * jitter) * forceScale * massBoost
+                                });
+                                Matter.Body.setAngularVelocity(body, body.angularVelocity + (Math.random() - 0.5) * 0.02);
+                            });
+                        });
+                }
             }
         }
         animationFrameId = requestAnimationFrame(animateLetters);

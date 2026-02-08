@@ -1,0 +1,124 @@
+.audioControls {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    z-index: 1200;
+    pointer-events: auto;
+}
+
+.audioControl {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.iconButton {
+    width: 68px;
+    height: 68px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    position: relative;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.icon {
+    width: 52px;
+    height: 52px;
+    display: block;
+    fill: #ffffff;
+    stroke: #000000;
+    stroke-width: 0.85;
+    paint-order: stroke fill;
+    margin: 0 auto;
+}
+
+.muteSlash {
+    position: absolute;
+    width: 50%;
+    height: 6px;
+    background: #000000;
+    left: 25%;
+    top: 50%;
+    transform: translateY(-50%) rotate(-35deg);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.iconButton .muteSlash {
+    background: #d11b1b;
+}
+
+.isMuted .muteSlash {
+    opacity: 1;
+}
+
+.expander {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 0;
+    opacity: 0;
+    overflow: hidden;
+    transform: translateX(-6px);
+    transition: max-width 0.35s ease, opacity 0.2s ease, transform 0.35s ease;
+    pointer-events: none;
+}
+
+.audioControl:hover .expander,
+.audioControl:focus-within .expander {
+    max-width: 220px;
+    opacity: 1;
+    transform: translateX(0);
+    pointer-events: auto;
+}
+
+.label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #ffffff;
+    min-width: 52px;
+}
+
+.slider {
+    width: 130px;
+    accent-color: #000000;
+}
+
+.slider::-webkit-slider-runnable-track {
+    height: 4px;
+    background: #ffffff;
+    border-radius: 999px;
+}
+
+.slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #000000;
+    border: 2px solid #ffffff;
+    margin-top: -5px;
+}
+
+.slider::-moz-range-track {
+    height: 4px;
+    background: #ffffff;
+    border-radius: 999px;
+}
+
+.slider::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #000000;
+    border: 2px solid #ffffff;
+}

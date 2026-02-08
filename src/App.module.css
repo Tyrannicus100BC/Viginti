@@ -214,6 +214,17 @@
     position: relative;
 }
 
+.drawHitSpotAnchor {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 100px;
+    height: 132px;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    opacity: 0;
+}
+
 .drawnCardSpot {
     width: 100px;
     height: 132px;
@@ -371,6 +382,77 @@
     background: #34495e;
     color: #7f8c8d;
     cursor: not-allowed;
+}
+
+.skipTutorialContainer {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-size: 0.95rem;
+    color: rgba(236, 240, 241, 0.85);
+    user-select: none;
+}
+
+.skipTutorialContainer input {
+    width: 18px;
+    height: 18px;
+    accent-color: #f1c40f;
+    cursor: pointer;
+}
+
+.skipTutorialContainer input:disabled {
+    accent-color: #34495e;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.skipTutorialContainer label {
+    cursor: pointer;
+}
+
+.skipTutorialContainer input:disabled + label {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.skipTutorialInline {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-size: 0.95rem;
+    color: rgba(236, 240, 241, 0.85);
+    user-select: none;
+}
+
+.skipTutorialInline input {
+    width: 18px;
+    height: 18px;
+    accent-color: #f1c40f;
+    cursor: pointer;
+}
+
+.skipTutorialInline input:disabled {
+    accent-color: #34495e;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.skipTutorialInline label {
+    cursor: pointer;
+}
+
+.skipTutorialInline input:disabled + label {
+    cursor: not-allowed;
+    opacity: 0.6;
 }
 
 .startRunButton {
@@ -751,6 +833,23 @@
     pointer-events: none;
 }
 
+.dealerActionAnchor {
+    position: absolute;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.popupLayer {
+    position: absolute;
+    inset: 0;
+    z-index: 1200;
+    pointer-events: none;
+}
+
 @keyframes popIn {
     0% {
         opacity: 0;
@@ -1089,6 +1188,39 @@
 .debugHidden {
     opacity: 0;
     pointer-events: none;
+}
+
+.debugMenu {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-end;
+}
+
+.debugMenuLeft {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+}
+
+.debugMenuButton {
+    font-size: 0.8rem;
+    padding: 8px 12px;
+    width: auto;
+    opacity: 0.85;
+}
+
+.debugMenuButton:hover {
+    opacity: 1;
 }
 
 /* Value Formatting - Matching RelicTooltip colors */

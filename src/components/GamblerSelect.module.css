@@ -173,6 +173,18 @@
     transform: scale(1.01) translateX(10px);
 }
 
+.overlayCardLocked {
+    opacity: 0.55;
+    cursor: not-allowed;
+    border-style: dashed;
+}
+
+.overlayCardLocked:hover {
+    background: #252525;
+    border-color: #333;
+    transform: none;
+}
+
 .overlaySelected {
     border-color: #ffd700;
     background: rgba(255, 215, 0, 0.08);
@@ -197,4 +209,13 @@
     color: #ccc;
     line-height: 1.5;
     max-width: 90%;
+}
+
+.lockTag {
+    margin-top: 10px;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #f1c40f;
+    font-weight: 700;
 }

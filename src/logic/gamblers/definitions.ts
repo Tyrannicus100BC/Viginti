@@ -22,6 +22,7 @@ export const GAMBLER_DEFINITIONS: GamblerDefinition[] = [
         id: 'newbie',
         name: 'The Newbie',
         description: 'Fresh off the bus. Starts with a standard 52-card deck and only the Viginti angle.',
+        unlockCondition: { type: 'always' },
         getInitialDeck: () => createStandardDeck(),
         getInitialRelics: () => [
             getRelicInstance('viginti')
@@ -31,6 +32,7 @@ export const GAMBLER_DEFINITIONS: GamblerDefinition[] = [
         id: 'default',
         name: 'The Tourist',
         description: 'Just here for a good time. Starts with a standard 52-card deck and a balanced set of scoring relics.',
+        unlockCondition: { type: 'beat_city', cityId: 'atlantic_city' },
         getInitialDeck: () => createStandardDeck(),
         getInitialRelics: () => [
 
@@ -47,6 +49,7 @@ export const GAMBLER_DEFINITIONS: GamblerDefinition[] = [
         id: 'mathematician',
         name: 'The Mathematician',
         description: 'Calculated and precise. Removes all face cards for a number-heavy deck, starting with powerful Straight synergies.',
+        unlockCondition: { type: 'beat_city', cityId: 'atlantic_city' },
         getInitialDeck: () => {
             const deck = createStandardDeck();
             // Remove Face Cards (J, Q, K)
@@ -63,6 +66,7 @@ export const GAMBLER_DEFINITIONS: GamblerDefinition[] = [
         id: 'wild',
         name: 'The Wildcard',
         description: 'Chaos incarnate. A distorted deck heavy on high cards in black suits and low red cards. Starts with 8 random Special Cards.',
+        unlockCondition: { type: 'beat_city', cityId: 'atlantic_city' },
         getInitialDeck: () => {
             const deck: Card[] = [];
 
@@ -126,6 +130,7 @@ export const GAMBLER_DEFINITIONS: GamblerDefinition[] = [
         id: 'maniac',
         name: 'The Maniac',
         description: 'Driven by high stakes and royalty. Starts with action-oriented charms and a broad range of scoring potential.',
+        unlockCondition: { type: 'beat_city', cityId: 'atlantic_city' },
         getInitialDeck: () => createStandardDeck(),
         getInitialRelics: () => {
             const fixed = [

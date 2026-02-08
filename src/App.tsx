@@ -24,9 +24,36 @@ import type { PlayerHand, Card } from './types';
 import { useLayout } from './components/ResponsiveLayout';
 import { CasinosButton, DeckButton } from './components/HeaderButtons';
 import { CITY_DEFINITIONS } from './logic/cities/definitions';
+import { AudioControls } from './components/AudioControls';
+import { sfxEngine } from './utils/sfxEngine';
 
 import { TutorialOverlay } from './components/TutorialOverlay';
 import { TutorialManager } from './logic/tutorials/tutorials';
+import {
+    getPersistedState,
+    getSelectedCityId,
+    getSelectedGamblerId,
+    getUnlockedCityIds,
+    getUnlockedGamblerIds,
+    isCityUnlocked,
+    isCityCleared,
+    isGamblerUnlocked,
+    resetPersistedState,
+    setSelectedCityId as setPersistedCityId,
+    setSelectedGamblerId as setPersistedGamblerId,
+    getMusicVolume as getPersistedMusicVolume,
+    getSfxVolume as getPersistedSfxVolume,
+    getMusicMuted as getPersistedMusicMuted,
+    getSfxMuted as getPersistedSfxMuted,
+    setMusicVolume as setPersistedMusicVolume,
+    setSfxVolume as setPersistedSfxVolume,
+    setMusicMuted as setPersistedMusicMuted,
+    setSfxMuted as setPersistedSfxMuted,
+    getSkipAtlanticTutorials as getPersistedSkipAtlanticTutorials,
+    setSkipAtlanticTutorials as setPersistedSkipAtlanticTutorials
+} from './store/persistence';
+import { ensureUnlocksUpToDate, unlockAllContent } from './logic/progression';
+import { STAND_TUTORIAL_ID, TUTORIAL_STEPS, shouldPromptStandNow } from './logic/tutorials/definitions';
 
 // Constants for layout
 const POT_TOP_Y = 380; // Anchor pots to this Y value
@@ -112,11 +139,15 @@ export default function App() {
         selectedCityId: storeCityId,
 
         // Tutorial Actions
-        registerTutorials,
         checkTutorials,
+        isTutorialInputLocked,
+        onTutorialContinue,
+        onInitialDealAnimationsComplete,
+        signalTotalWinningsAnimationComplete,
+        drawTutorialReady,
     } = useGameStore();
 
-    const { viewportWidth, viewportHeight } = useLayout();
+    const { scale, viewportWidth, viewportHeight } = useLayout();
 
     const hasDoubleDownRelic = inventory.some(r => r.id === 'double_down');
     const hasSurrenderRelic = inventory.some(r => r.id === 'surrender');
@@ -134,22 +165,160 @@ export default function App() {
     // scoreAnimate removed
 
     const [hasClickedWin, setHasClickedWin] = useState(false);
+    const [skipAtlanticTutorials, setSkipAtlanticTutorials] = useState(() => getPersistedSkipAtlanticTutorials());
+    const [skipTutorialToggleEnabled, setSkipTutorialToggleEnabled] = useState(false);
+    const [standWarningMessage, setStandWarningMessage] = useState<string | null>(null);
+    const [standWarningStyle, setStandWarningStyle] = useState<React.CSSProperties | null>(null);
+    const standWarningTimeoutRef = useRef<number | null>(null);
+    const standButtonRef = useRef<HTMLButtonElement | null>(null);
 
     const drawAreaRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    const totalWinningsAnimationSignaled = useRef(false);
 
-    const [selectedGamblerId, setSelectedGamblerId] = useState(() => localStorage.getItem('viginti_gambler') || 'newbie');
+    const [musicVolume, setMusicVolume] = useState(() => getPersistedMusicVolume());
+    const [sfxVolume, setSfxVolume] = useState(() => getPersistedSfxVolume());
+    const [musicMuted, setMusicMuted] = useState(() => getPersistedMusicMuted());
+    const [sfxMuted, setSfxMuted] = useState(() => getPersistedSfxMuted());
+    const musicRef = useRef<HTMLAudioElement | null>(null);
+    const vigintiSoundKey = useGameStore(state => state.vigintiSoundKey);
+    const lastVigintiKey = useRef(vigintiSoundKey);
+
+    const [selectedGamblerId, setSelectedGamblerId] = useState(() => getSelectedGamblerId());
 
     useEffect(() => {
-        localStorage.setItem('viginti_gambler', selectedGamblerId);
+        setPersistedGamblerId(selectedGamblerId);
     }, [selectedGamblerId]);
 
-    const [selectedCityId, setSelectedCityId] = useState(() => localStorage.getItem('viginti_city') || 'las_vegas');
+    useEffect(() => {
+        setPersistedSkipAtlanticTutorials(skipAtlanticTutorials);
+    }, [skipAtlanticTutorials]);
+
+    const [selectedCityId, setSelectedCityId] = useState(() => getSelectedCityId());
 
     useEffect(() => {
-        localStorage.setItem('viginti_city', selectedCityId);
+        setPersistedCityId(selectedCityId);
     }, [selectedCityId]);
 
+    useEffect(() => {
+        ensureUnlocksUpToDate();
+        const persisted = getPersistedState();
+        const unlockedCities = getUnlockedCityIds();
+        const unlockedGamblers = getUnlockedGamblerIds();
+
+        if (!isCityUnlocked(persisted.selectedCityId)) {
+            const fallbackCity = unlockedCities[0] || 'atlantic_city';
+            setSelectedCityId(fallbackCity);
+            setPersistedCityId(fallbackCity);
+        }
+
+        if (!isGamblerUnlocked(persisted.selectedGamblerId)) {
+            const fallbackGambler = unlockedGamblers[0] || 'newbie';
+            setSelectedGamblerId(fallbackGambler);
+            setPersistedGamblerId(fallbackGambler);
+        }
+    }, []);
+
+    useEffect(() => {
+        const music = new Audio('/sounds/Music_Main.mp3');
+        music.loop = true;
+        music.volume = musicMuted ? 0 : musicVolume;
+        musicRef.current = music;
+
+        const tryPlay = () => {
+            if (!musicRef.current) return;
+            if (musicRef.current.paused) {
+                musicRef.current.play().catch(() => {});
+            }
+        };
+
+        tryPlay();
+        const resumeOnGesture = () => {
+            tryPlay();
+            void sfxEngine.resume();
+        };
+        window.addEventListener('pointerdown', resumeOnGesture, { once: true });
+        void sfxEngine.preloadAll();
+
+        return () => {
+            window.removeEventListener('pointerdown', resumeOnGesture);
+            music.pause();
+            music.src = '';
+        };
+    }, []);
+
+
+    useEffect(() => {
+        if (musicRef.current) {
+            musicRef.current.volume = musicMuted ? 0 : musicVolume;
+            if (!musicMuted && musicRef.current.paused) {
+                musicRef.current.play().catch(() => {});
+            }
+        }
+    }, [musicVolume, musicMuted]);
+
+    useEffect(() => {
+        sfxEngine.setSfxVolume(sfxVolume);
+        sfxEngine.setSfxMuted(sfxMuted);
+    }, [sfxVolume, sfxMuted]);
+
+    useEffect(() => {
+        setPersistedMusicVolume(musicVolume);
+    }, [musicVolume]);
+
+    useEffect(() => {
+        setPersistedSfxVolume(sfxVolume);
+    }, [sfxVolume]);
+
+    useEffect(() => {
+        setPersistedMusicMuted(musicMuted);
+    }, [musicMuted]);
+
+    useEffect(() => {
+        setPersistedSfxMuted(sfxMuted);
+    }, [sfxMuted]);
+
+    useEffect(() => {
+        if (vigintiSoundKey === lastVigintiKey.current) return;
+        lastVigintiKey.current = vigintiSoundKey;
+        if (sfxMuted || sfxVolume <= 0) return;
+        sfxEngine.play('viginti');
+    }, [vigintiSoundKey, sfxMuted, sfxVolume]);
+
+    const playClick = React.useCallback(() => {
+        if (sfxMuted || sfxVolume <= 0) return;
+        sfxEngine.play('click');
+    }, [sfxMuted, sfxVolume]);
+
+    const playCardFlip = React.useCallback(() => {
+        if (sfxMuted || sfxVolume <= 0) return;
+        sfxEngine.play('cardFlip');
+    }, [sfxMuted, sfxVolume]);
+
+    const playCardDeal = React.useCallback(() => {
+        if (sfxMuted || sfxVolume <= 0) return;
+        sfxEngine.play('cardDeal');
+    }, [sfxMuted, sfxVolume]);
+
+    const playCardPlace = React.useCallback(() => {
+        if (sfxMuted || sfxVolume <= 0) return;
+        sfxEngine.play('cardPlace');
+    }, [sfxMuted, sfxVolume]);
+
+    const handleCardFlipSound = React.useCallback((_cardId: string) => {
+        playCardFlip();
+    }, [playCardFlip]);
+
+    const handleCardDealSound = React.useCallback((_cardId: string) => {
+        playCardDeal();
+    }, [playCardDeal]);
+
+    const handleCardDiscardSound = React.useCallback((_cardId: string) => {
+        playCardPlace();
+    }, [playCardPlace]);
+
+    const hasClearedAtlanticCity = isCityCleared('atlantic_city');
+    const shouldShowSkipTutorial = selectedCityId === 'atlantic_city';
 
 
     const [displayRound, setDisplayRound] = useState(round);
@@ -169,6 +338,48 @@ export default function App() {
 
     const [showSelectionUI, setShowSelectionUI] = useState(false);
     const [hasSettledFirstOverlay, setHasSettledFirstOverlay] = useState(false);
+    const [, setProgressionRevision] = useState(0);
+    const pendingDrawAnimationIds = useRef<Set<string>>(new Set());
+    const isDrawAnimationActive = useRef(false);
+    useEffect(() => {
+        return () => {
+            if (standWarningTimeoutRef.current !== null) {
+                window.clearTimeout(standWarningTimeoutRef.current);
+            }
+        };
+    }, []);
+
+    useEffect(() => {
+        if (!standWarningMessage) {
+            setStandWarningStyle(null);
+            return;
+        }
+
+        const updatePosition = () => {
+            const button = standButtonRef.current;
+            const wrapper = document.getElementById('game-scale-wrapper');
+            if (!button || !wrapper) return;
+
+            const rect = button.getBoundingClientRect();
+            const wrapperRect = wrapper.getBoundingClientRect();
+            const left = (rect.left - wrapperRect.left) / scale + rect.width / scale / 2;
+            const top = (rect.top - wrapperRect.top) / scale - 20;
+
+            setStandWarningStyle({
+                left: `${left}px`,
+                top: `${top}px`
+            });
+        };
+
+        updatePosition();
+        const interval = window.setInterval(updatePosition, 80);
+        window.addEventListener('resize', updatePosition);
+
+        return () => {
+            window.clearInterval(interval);
+            window.removeEventListener('resize', updatePosition);
+        };
+    }, [standWarningMessage, scale, viewportWidth, viewportHeight]);
 
     // Watch for phase change to handle initial overlay transition
     useEffect(() => {
@@ -193,6 +404,39 @@ export default function App() {
         }
     }, [drawnCards]);
 
+    // Track draw animations so tutorial steps can wait for them to finish
+    useEffect(() => {
+        const activeDrawn = drawnCards.filter((c): c is Card => c !== null);
+
+        if (activeDrawn.length === 0) {
+            pendingDrawAnimationIds.current.clear();
+            isDrawAnimationActive.current = false;
+            return;
+        }
+
+        if (!isDrawAnimationActive.current) {
+            isDrawAnimationActive.current = true;
+        }
+
+        const pending = pendingDrawAnimationIds.current;
+        activeDrawn.forEach(card => {
+            if (card.origin === 'deck') {
+                pending.add(card.id);
+            }
+        });
+    }, [drawnCards]);
+
+    const handleDrawAnimationEnd = (cardId: string) => {
+        const pending = pendingDrawAnimationIds.current;
+        if (!pending.has(cardId)) return;
+
+        pending.delete(cardId);
+        if (pending.size === 0 && isDrawAnimationActive.current) {
+            isDrawAnimationActive.current = false;
+            TutorialManager.getInstance().signalEvent('player_draw_animation_complete');
+        }
+    };
+
     // Track discarded cards for animation
     const [discardingCards, setDiscardingCards] = useState<{ card: any, offset: number, index: number }[]>([]);
     const prevDrawnCards = useRef<any[]>([]);
@@ -200,6 +444,9 @@ export default function App() {
 
     useEffect(() => {
         // If cards were cleared (length 0) and we had cards before (length > 0)
+        let discardTimeouts: number[] = [];
+        let discardClearTimeout: number | null = null;
+
         if (drawnCards.length === 0 && prevDrawnCards.current.length > 0) {
             // Determine which cards were NOT placed
             // Logic: The card at selectedDrawIndex was placed (or 0 if single). Rest are discards.
@@ -223,8 +470,15 @@ export default function App() {
 
                 setDiscardingCards(cardsToAnimate);
 
+                discards.forEach((_, discardIndex) => {
+                    const timeoutId = window.setTimeout(() => {
+                        playCardPlace();
+                    }, discardIndex * 40);
+                    discardTimeouts.push(timeoutId);
+                });
+
                 // Clear after animation
-                setTimeout(() => {
+                discardClearTimeout = window.setTimeout(() => {
                     setDiscardingCards([]);
                 }, 350);
             }
@@ -232,7 +486,14 @@ export default function App() {
 
         prevDrawnCards.current = drawnCards;
         prevSelectedDrawIndex.current = selectedDrawIndex;
-    }, [drawnCards, selectedDrawIndex]);
+
+        return () => {
+            discardTimeouts.forEach(timeoutId => window.clearTimeout(timeoutId));
+            if (discardClearTimeout !== null) {
+                window.clearTimeout(discardClearTimeout);
+            }
+        };
+    }, [drawnCards, selectedDrawIndex, playCardPlace]);
 
     // Visual Draw Count Logic
     const [visualDrawCount, setVisualDrawCount] = useState(1);
@@ -378,7 +639,22 @@ export default function App() {
 
     const isOverlayMode = phase === 'entering_casino' && !overlayComplete;
 
+    const shouldBlockForStandTutorial = () => {
+        const tutorialManager = TutorialManager.getInstance();
+        if (!tutorialManager.areSessionTutorialsEnabled()) return false;
+        if (tutorialManager.isCompleted(STAND_TUTORIAL_ID)) return false;
+        return shouldPromptStandNow({
+            phase,
+            isInitialDeal,
+            isDealerPlaying,
+            interactionMode,
+            playerHands,
+            drawnCards
+        });
+    };
+
     const handleDraw = () => {
+        if (shouldBlockForStandTutorial()) return;
         drawCard();
     };
 
@@ -395,12 +671,40 @@ export default function App() {
     const areAllHandsUnplayable = playerHands.every(h => h.isBust || h.isHeld || h.blackjackValue === 21);
     const isDrawAreaClear = drawnCards.length === 0 || drawnCards.every(c => c === null);
     const canDraw = phase === 'playing' && isDrawAreaClear && !isDealerPlaying && !isInitialDeal && interactionMode === 'default' && !areAllHandsUnplayable;
+    const canDrawNow = canDraw && !shouldBlockForStandTutorial();
     const canDoubleDown = phase === 'playing' && isDrawAreaClear && !isDealerPlaying && !isInitialDeal && !areAllHandsUnplayable; // Can start flow
     const canSurrender = phase === 'playing' && isDrawAreaClear && !isDealerPlaying && !isInitialDeal && !areAllHandsUnplayable;
     const canHold = phase === 'playing' && isDrawAreaClear && !isDealerPlaying && !isInitialDeal && interactionMode === 'default' && !areAllHandsUnplayable;
     const isDrawAreaVisible = phase === 'playing' && !isDealerPlaying && !isInitialDeal && interactionMode !== 'double_down_select' && interactionMode !== 'surrender_select';
 
     const areHandsVisible = phase !== 'gift_shop';
+
+    const showStandWarning = () => {
+        if (standWarningTimeoutRef.current !== null) {
+            window.clearTimeout(standWarningTimeoutRef.current);
+        }
+        setStandWarningMessage('You should keep hitting');
+        standWarningTimeoutRef.current = window.setTimeout(() => {
+            setStandWarningMessage(null);
+            standWarningTimeoutRef.current = null;
+        }, 1100);
+    };
+
+    useEffect(() => {
+        if (phase !== 'init' || hasClearedAtlanticCity) {
+            setSkipTutorialToggleEnabled(false);
+            return;
+        }
+
+        setSkipTutorialToggleEnabled(false);
+        const timer = window.setTimeout(() => {
+            setSkipTutorialToggleEnabled(true);
+        }, 800);
+
+        return () => {
+            window.clearTimeout(timer);
+        };
+    }, [phase, hasClearedAtlanticCity]);
 
     // Reset debug button state when draw area reappears
     React.useEffect(() => {
@@ -416,20 +720,83 @@ export default function App() {
         ...discardPile
     ];
 
-    // Tutorial Logic
     useEffect(() => {
-        registerTutorials();
-    }, [registerTutorials]);
+        onTutorialContinue('deal_first_hand', async () => {
+            dealFirstHand();
+        });
+    }, [onTutorialContinue, dealFirstHand]);
 
     useEffect(() => {
         checkTutorials();
-    }, [phase, round, isInitialDeal, dealer.cards.length, playerHands, drawnCards, checkTutorials]);
+    }, [phase, round, isInitialDeal, isDealerPlaying, interactionMode, dealer.cards.length, playerHands, drawnCards, checkTutorials]);
 
+    useEffect(() => {
+        if (!drawTutorialReady || !canDraw) return;
+        TutorialManager.getInstance().signalEvent('draw_available_after_debt');
+    }, [drawTutorialReady, canDraw]);
+
+    const isTotalWinningsVisible = ((phase === 'scoring' && (isCollectingChips || roundSummary || allWinnersEnlarged)) || phase === 'round_over') && runningSummary && runningSummary.chips > 0;
+    const totalWinningsSoundPlayedRef = useRef(false);
+
+    useEffect(() => {
+        if (!isTotalWinningsVisible) {
+            totalWinningsAnimationSignaled.current = false;
+            totalWinningsSoundPlayedRef.current = false;
+        }
+    }, [isTotalWinningsVisible, runningSummary?.chips, runningSummary?.mult]);
+
+    const totalWinningsLabelRef = useRef<HTMLDivElement>(null);
+
+    const signalTotalWinningsOnce = () => {
+        if (totalWinningsAnimationSignaled.current) return;
+        totalWinningsAnimationSignaled.current = true;
+        signalTotalWinningsAnimationComplete();
+    };
+
+    useEffect(() => {
+        if (!isTotalWinningsVisible) return;
+        if (!totalWinningsSoundPlayedRef.current && !sfxMuted && sfxVolume > 0) {
+            totalWinningsSoundPlayedRef.current = true;
+            sfxEngine.play('totalWinnings');
+        }
+        const node = totalWinningsLabelRef.current;
+        if (!node) return;
+        const styles = window.getComputedStyle(node);
+        const duration = styles.animationDuration;
+        const name = styles.animationName;
+        const isZeroDuration = duration === '0s' || duration === '0ms' || duration === '0' || duration === '0.0s';
+        if (name === 'none' || isZeroDuration) {
+            signalTotalWinningsOnce();
+        }
+    }, [isTotalWinningsVisible, signalTotalWinningsAnimationComplete]);
+
+    const handleTotalWinningsAnimationEnd = (event: React.AnimationEvent<HTMLDivElement>) => {
+        if (event.target !== event.currentTarget) return;
+        signalTotalWinningsOnce();
+    };
 
     if (phase === 'init') {
+        const canStartRun = isCityUnlocked(selectedCityId) && isGamblerUnlocked(selectedGamblerId);
+
         return (
             <div className={styles.container} style={{ justifyContent: 'center', cursor: 'default' }}>
                 <TitlePhysics />
+                <AudioControls
+                    musicVolume={musicVolume}
+                    sfxVolume={sfxVolume}
+                    musicMuted={musicMuted}
+                    sfxMuted={sfxMuted}
+                    onMusicVolumeChange={(value) => {
+                        setMusicVolume(value);
+                        if (value > 0 && musicMuted) setMusicMuted(false);
+                    }}
+                    onSfxVolumeChange={(value) => {
+                        setSfxVolume(value);
+                        if (value > 0 && sfxMuted) setSfxMuted(false);
+                    }}
+                    onToggleMusicMute={() => setMusicMuted(muted => !muted)}
+                    onToggleSfxMute={() => setSfxMuted(muted => !muted)}
+                />
                 <div className={styles.titleContainer} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 10 }}>
                     <h1 className={titleStyles.titleText}>
                         {"VIGINTI".split('').map((char, i) => (
@@ -439,27 +806,67 @@ export default function App() {
                     <button
                         className={`${styles.button} ${styles.startRunButton}`}
                         style={{ zIndex: 1, marginBottom: 40 }}
-                        onClick={() => startGame(selectedGamblerId, selectedCityId)}
+                        onClick={() => {
+                            playClick();
+                            startGame(selectedGamblerId, selectedCityId, { skipAtlanticTutorials });
+                        }}
+                        disabled={!canStartRun}
+                        title={canStartRun ? 'Start Run' : 'Select unlocked city and gambler'}
                     >
                         Start Run
                     </button>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 20, position: 'absolute', bottom: 60, left: '50%', transform: 'translateX(-50%)', alignItems: 'center', zIndex: 100 }}>
-                    {/* We render them in a flex column so they stack naturally without absolute positioning conflicts */}
-                    <div style={{ position: 'relative', bottom: 'auto', left: 'auto', transform: 'none' }}>
-                        <CitySelect
-                            selectedId={selectedCityId}
-                            onSelect={setSelectedCityId}
-                        />
+                {hasClearedAtlanticCity ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)', alignItems: 'center', zIndex: 100 }}>
+                        {/* We render them in a flex column so they stack naturally without absolute positioning conflicts */}
+                        <div style={{ position: 'relative', bottom: 'auto', left: 'auto', transform: 'none' }}>
+                            <CitySelect
+                                selectedId={selectedCityId}
+                                onSelect={setSelectedCityId}
+                                onClickSound={playClick}
+                            />
+                        </div>
+                        <div style={{ position: 'relative', bottom: 'auto', left: 'auto', transform: 'none' }}>
+                             <GamblerSelect
+                                selectedId={selectedGamblerId}
+                                onSelect={setSelectedGamblerId}
+                                onClickSound={playClick}
+                            />
+                        </div>
+                        {shouldShowSkipTutorial && (
+                            <div className={styles.skipTutorialInline}>
+                                <input
+                                    id="skip-atlantic-city-tutorials"
+                                    type="checkbox"
+                                    checked={skipAtlanticTutorials}
+                                    onChange={(e) => {
+                                        playClick();
+                                        setSkipAtlanticTutorials(e.target.checked);
+                                    }}
+                                    disabled={!skipTutorialToggleEnabled}
+                                />
+                                <label htmlFor="skip-atlantic-city-tutorials">Skip Tutorial</label>
+                            </div>
+                        )}
                     </div>
-                    <div style={{ position: 'relative', bottom: 'auto', left: 'auto', transform: 'none' }}>
-                         <GamblerSelect
-                            selectedId={selectedGamblerId}
-                            onSelect={setSelectedGamblerId}
-                        />
-                    </div>
-                </div>
+                ) : (
+                    shouldShowSkipTutorial && (
+                        <div className={styles.skipTutorialContainer}>
+                            <input
+                                id="skip-atlantic-city-tutorials"
+                                type="checkbox"
+                                checked={skipAtlanticTutorials}
+                                onChange={(e) => {
+                                    playClick();
+                                    setSkipAtlanticTutorials(e.target.checked);
+                                }}
+                                disabled={!skipTutorialToggleEnabled}
+                            />
+                            <label htmlFor="skip-atlantic-city-tutorials">Skip Tutorial</label>
+                        </div>
+                    )
+                )}
                 <button
                     className={styles.debugToggle}
                     onClick={(e) => {
@@ -474,25 +881,61 @@ export default function App() {
                     </svg>
                 )}
                 {debugEnabled && (
-                    <button
-                        className={styles.button}
-                        style={{ 
-                            position: 'absolute', 
-                            bottom: 20, 
-                            right: 20, 
-                            zIndex: 100, 
-                            fontSize: '0.8rem', 
-                            padding: '8px 12px', 
-                            width: 'auto',
-                            opacity: 0.8
-                        }}
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            TutorialManager.getInstance().reset();
-                        }}
-                    >
-                        Reset Tutorials
-                    </button>
+                    <>
+                        <div className={styles.debugMenu}>
+                            <button
+                                className={`${styles.button} ${styles.debugMenuButton}`}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    playClick();
+                                    resetPersistedState({ preserveDebug: true });
+                                    TutorialManager.getInstance().reset();
+                                    const persisted = getPersistedState();
+                                    setSelectedCityId(persisted.selectedCityId);
+                                    setSelectedGamblerId(persisted.selectedGamblerId);
+                                    setProgressionRevision(v => v + 1);
+                                }}
+                            >
+                                Reset Everything
+                            </button>
+                            <button
+                                className={`${styles.button} ${styles.debugMenuButton}`}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    playClick();
+                                    unlockAllContent();
+                                    ensureUnlocksUpToDate();
+                                    setProgressionRevision(v => v + 1);
+                                }}
+                            >
+                                Unlock Everything
+                            </button>
+                        </div>
+                        <div className={styles.debugMenuLeft}>
+                            <button
+                                className={`${styles.button} ${styles.debugMenuButton}`}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    playClick();
+                                    TutorialManager.getInstance().reset();
+                                }}
+                            >
+                                Reset Tutorials
+                            </button>
+                            <button
+                                className={`${styles.button} ${styles.debugMenuButton}`}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    playClick();
+                                    const allTutorialIds = TUTORIAL_STEPS.map(step => step.id);
+                                    TutorialManager.getInstance().setCompletedSteps(allTutorialIds);
+                                    setProgressionRevision(v => v + 1);
+                                }}
+                            >
+                                Clear Tutorials
+                            </button>
+                        </div>
+                    </>
                 )}
             </div>
         );
@@ -542,6 +985,7 @@ export default function App() {
     // Click anywhere to hit (draw) or advance to next round
     const handleGlobalClick = (e: React.MouseEvent) => {
         if (showDeck || showCasinoListing || showCompsWindow || showRelicStore) return;
+        if (isTutorialInputLocked()) return;
 
         // Ignore clicks on buttons or interactive elements
         const target = e.target as HTMLElement;
@@ -558,7 +1002,7 @@ export default function App() {
             if (phase === 'entering_casino') return;
         }
 
-        if (canDraw) {
+        if (canDrawNow) {
             handleDraw();
         } else if (phase === 'round_over') {
             nextRound();
@@ -567,8 +1011,6 @@ export default function App() {
             dealFirstHand();
         }
     };
-
-    const isTotalWinningsVisible = ((phase === 'scoring' && (isCollectingChips || roundSummary || allWinnersEnlarged)) || phase === 'round_over') && runningSummary && runningSummary.chips > 0;
 
     // Logic for pot placement relative to the game board (800px max)
     // The user's "1/3 and 1/4 across the screen" refers to the literal coordinates of the play board.
@@ -619,7 +1061,10 @@ export default function App() {
         >
             <div className={styles.topNavContainer}>
 
-                <CasinosButton onClick={() => setShowCasinoListing(true)} />
+                <CasinosButton onClick={() => {
+                    playClick();
+                    setShowCasinoListing(true);
+                }} />
 
                 <div className={styles.headerPlaceholder} />
 
@@ -651,14 +1096,14 @@ export default function App() {
                         <span className={styles.statLabel}>Casino</span>
                         <span key={displayRound} className={`${styles.statValue} ${roundAnimate ? styles.statValueAnimate : ''}`}>{displayRound}</span>
                     </div>
-                    <div className={styles.stat}>
+                    <div id="hud-debt" className={styles.stat}>
                         <span className={styles.statLabel}>Debt</span>
                         <span key={displayTarget} className={`${styles.statValue} ${targetAnimate ? styles.statValueAnimate : ''}`}>
                             {"$" + delayedRemainingTarget.toLocaleString()}
                         </span>
                     </div>
-                    <div className={`${styles.stat} ${isOverlayMode ? styles.statHidden : ''}`}>
-                        <span className={styles.statLabel}>Deals</span>
+                    <div id="hud-draws" className={`${styles.stat} ${isOverlayMode ? styles.statHidden : ''}`}>
+                        <span className={styles.statLabel}>Draws</span>
                         <span key={handsRemaining} className={`${styles.statValue} ${handsAnimate ? styles.statValueAnimate : ''}`}>{handsRemaining}</span>
                     </div>
                     <div className={styles.stat}>
@@ -672,6 +1117,7 @@ export default function App() {
                 <div className={styles.rightButtons}>
                     <DeckButton 
                         onClick={() => {
+                            playClick();
                             setIsRemovingCards(false);
                             setShowDeck(true);
                         }} 
@@ -713,11 +1159,14 @@ export default function App() {
             {/* Total Winnings Label (Center) - Only visible when we have a full summary */}
             {isTotalWinningsVisible && runningSummary && runningSummary.chips > 0 && (
                 <div
+                    ref={totalWinningsLabelRef}
                     className={styles.totalWinningsLabel}
                     style={{
                         left: centerX,
                         top: POT_TOP_Y - 135
                     }}
+                    onAnimationEnd={handleTotalWinningsAnimationEnd}
+                    onAnimationEnd={handleTotalWinningsAnimationEnd}
                 >
                     <div className={styles.winningsWrapper}>
                         <span className={styles.currency}>$</span>
@@ -784,6 +1233,17 @@ export default function App() {
                     </div>
                 </div>
 
+                {standWarningMessage && standWarningStyle && (
+                    <div className={styles.popupLayer}>
+                        <div
+                            className="tutorial-popup tutorial-popup--floating"
+                            style={standWarningStyle}
+                        >
+                            <div className="tutorial-popup-text">{standWarningMessage}</div>
+                        </div>
+                    </div>
+                )}
+
                 <div className={styles.board}>
                     <div className={styles.topContent}>
                         <div id="dealer-hand-zone" className={`${styles.dealerZone} ${!dealerVisible ? styles.dealerZoneHidden : ''}`}>
@@ -794,6 +1254,9 @@ export default function App() {
                                     hand={dealerHandProps}
                                     baseDelay={dealer.isRevealed ? 0 : 0.4}
                                     stagger={!dealer.isRevealed}
+                                    onDealAnimationComplete={isInitialDeal ? onInitialDealAnimationsComplete : undefined}
+                                    onCardDealSound={handleCardDealSound}
+                                    onCardFlipSound={handleCardFlipSound}
                                 />
                             </div>
                             {/* Win Button */}
@@ -828,6 +1291,11 @@ export default function App() {
                                 {dealerMessage}
                             </div>
                         )}
+                        <div
+                            id="dealer-action-anchor"
+                            className={styles.dealerActionAnchor}
+                            style={{ top: POT_TOP_Y }}
+                        />
                     </div>
 
                     <div className={styles.bottomContent}>
@@ -866,7 +1334,8 @@ export default function App() {
                                     </div>
                                 )}
 
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', width: '100%', height: '140px' }}>
+                                <div id="draw-indicator-zone" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', width: '100%', height: '140px' }}>
+                                    <div className={styles.drawHitSpotAnchor} id="draw-hit-spot-anchor" />
                                     {/* Render dynamic draw spots */}
                                     {Array.from({ length: Math.max(drawnCards.length, visualDrawCount) }).map((_, idx) => {
                                         // Calculate Offset
@@ -876,12 +1345,20 @@ export default function App() {
 
                                         const card = drawnCards[idx];
                                         const isSelected = idx === selectedDrawIndex;
-                                        const showHitText = !card && canDraw;
+                                        const showHitText = !card && canDrawNow;
                                         const isMultiple = drawnCards.length > 1;
+                                        const isPrimaryHitSpot = showHitText && idx === Math.floor(count / 2);
 
                                         return (
                                             <div
                                                 key={`draw-spot-${idx}`}
+                                                id={
+                                                    isSelected && card
+                                                        ? 'selected-drawn-card'
+                                                        : isPrimaryHitSpot
+                                                            ? 'draw-hit-spot'
+                                                            : undefined
+                                                }
                                                 className={`
                                                 ${styles.drawnCardSpot} 
                                                 ${showHitText ? styles.hitSpot : ''} 
@@ -900,7 +1377,7 @@ export default function App() {
                                                     e.stopPropagation();
                                                     if (card) {
                                                         selectDrawnCard(idx);
-                                                    } else if (canDraw) {
+                                                    } else if (canDrawNow) {
                                                         handleDraw();
                                                     }
                                                 }}
@@ -910,6 +1387,9 @@ export default function App() {
                                                         card={card}
                                                         isDrawn
                                                         origin={card.origin}
+                                                        onEnterAnimationEnd={handleDrawAnimationEnd}
+                                                        onDealSound={handleCardDealSound}
+                                                        onFlipSound={handleCardFlipSound}
                                                     />
                                                 ) : (
                                                     showHitText && <span className={styles.hitText} style={{ opacity: 1, position: 'relative', transform: 'none', left: 'auto', top: 'auto' }}>HIT</span>
@@ -1070,7 +1550,7 @@ export default function App() {
                                     >
                                         Select hand to Surrender
                                     </div>
-                                    <div className={`${styles.clickAnywhere} ${canDraw ? styles.textVisible : ''}`}>
+                                    <div className={`${styles.clickAnywhere} ${canDrawNow ? styles.textVisible : ''}`}>
                                         Click Anywhere
                                     </div>
                                 </div>
@@ -1092,6 +1572,9 @@ export default function App() {
                                             isScoringFocus={idx === scoringHandIndex}
                                             isEnlarged={allWinnersEnlarged && hand.outcome === 'win'}
                                             id={`player-hand-${idx}`}
+                                            onCardDealSound={handleCardDealSound}
+                                            onCardFlipSound={handleCardFlipSound}
+                                            onCardDiscardSound={handleCardDiscardSound}
                                         />
                                     );
                                 })}
@@ -1108,8 +1591,30 @@ export default function App() {
                             {((phase === 'playing' && !isInitialDeal) || phase === 'scoring') ? (
                                 <button
                                     className={styles.standButton}
+                                    id="stand-button"
+                                    ref={standButtonRef}
                                     onClick={(e) => {
                                         e.stopPropagation();
+                                        const tutorialManager = TutorialManager.getInstance();
+                                        const standContext = {
+                                            phase,
+                                            isInitialDeal,
+                                            isDealerPlaying,
+                                            interactionMode,
+                                            playerHands,
+                                            drawnCards
+                                        };
+
+                                        if (tutorialManager.areSessionTutorialsEnabled() && !tutorialManager.isCompleted(STAND_TUTORIAL_ID)) {
+                                            if (!shouldPromptStandNow(standContext)) {
+                                                showStandWarning();
+                                                return;
+                                            }
+                                        }
+
+                                        if (tutorialManager.getActiveStep()?.id === STAND_TUTORIAL_ID) {
+                                            tutorialManager.completeStep(STAND_TUTORIAL_ID);
+                                        }
                                         holdReturns(false);
                                     }}
                                     disabled={!canHold}
@@ -1168,6 +1673,7 @@ export default function App() {
                     activeCards={activeCards}
 
                     onClose={() => {
+                        playClick();
                         setShowDeck(false);
                         setIsRemovingCards(false);
                         setIsSelectingDebugCard(false);
@@ -1188,7 +1694,10 @@ export default function App() {
             {showCasinoListing && (
                 <CasinoListingView
                     currentRound={round}
-                    onClose={() => setShowCasinoListing(false)}
+                    onClose={() => {
+                        playClick();
+                        setShowCasinoListing(false);
+                    }}
                 />
             )}
 
