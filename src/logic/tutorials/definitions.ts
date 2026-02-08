@@ -185,7 +185,7 @@ export const ATLANTIC_CITY_TUTORIAL_STEPS: TutorialStep[] = [
     },
     {
         id: 'bust_first',
-        text: "You B this Hand\n\nDon't go over 21",
+        text: "You Busted this Hand\n\nDon't go over 21",
         completionType: 'click',
         scope: 'session',
         startDelayMs: 520,
