@@ -1,6 +1,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { TutorialManager, type TutorialStep } from '../logic/tutorials/tutorials';
+import { NEXT_CASINO_TUTORIAL_ID } from '../logic/tutorials/definitions';
 import { useLayout } from './ResponsiveLayout';
 import { sfxEngine } from '../utils/sfxEngine';
 import styles from './TutorialOverlay.module.css';
@@ -462,7 +463,7 @@ export const TutorialOverlay: React.FC = () => {
         };
     }, [activeStep, scale]);
 
-    const defaultPositionSteps = new Set(['welcome', 'win_money_first', 'hud_debt', 'hud_draws']);
+    const defaultPositionSteps = new Set(['welcome', 'win_money_first', 'hud_debt', 'hud_draws', NEXT_CASINO_TUTORIAL_ID]);
     const shouldAnchorAbovePlayerHands = Boolean(
         activeStep &&
         !defaultPositionSteps.has(activeStep.id) &&
@@ -529,6 +530,7 @@ export const TutorialOverlay: React.FC = () => {
     const isWinMoneyStep = activeStep.id === 'win_money_first';
     const isHudDebtStep = activeStep.id === 'hud_debt';
     const isHudDrawsStep = activeStep.id === 'hud_draws';
+    const safeLeft = (viewportWidth - idealWidth) / 2;
     
     // Calculate highlight style
     const highlightStyle: React.CSSProperties = renderedHighlightRect ? {
@@ -540,8 +542,6 @@ export const TutorialOverlay: React.FC = () => {
     } : {};
 
     const messageBoxStyle: React.CSSProperties | undefined = isDrawIndicator ? (() => {
-        const safeWidth = idealWidth;
-        const safeLeft = (viewportWidth - safeWidth) / 2;
         const padding = 2;
         const paddedLeft = indicatorRect!.left - padding;
         const paddedTop = indicatorRect!.top - padding;
@@ -552,23 +552,15 @@ export const TutorialOverlay: React.FC = () => {
         const gapRight = paddedLeft;
         const available = Math.max(0, gapRight - gapLeft);
         const maxWidth = Math.min(360, Math.max(0, available - 16));
-        const effectiveWidth = maxWidth > 0 ? Math.min(messageBoxSize.width, maxWidth) : messageBoxSize.width;
-        const halfWidth = effectiveWidth / 2;
-        const targetCenterX = gapLeft + available / 2;
-        const minCenterX = gapLeft + halfWidth + 8;
-        const maxCenterX = gapRight - halfWidth - 8;
-        const centerX = minCenterX <= maxCenterX ? Math.min(Math.max(targetCenterX, minCenterX), maxCenterX) : targetCenterX;
 
         return {
             position: 'absolute',
-            left: `${centerX}px`,
+            left: `${safeLeft}px`,
             top: `${drawCenterY}px`,
-            transform: 'translate(-50%, -50%)',
+            transform: 'translate(0, -50%)',
             maxWidth: maxWidth > 0 ? `${maxWidth}px` : undefined
         };
     })() : isPlaceCardStep && indicatorRect ? (() => {
-        const safeWidth = idealWidth;
-        const safeLeft = (viewportWidth - safeWidth) / 2;
         const padding = 2;
         const paddedLeft = indicatorRect.left - padding;
         const paddedTop = indicatorRect.top - padding;
@@ -579,18 +571,12 @@ export const TutorialOverlay: React.FC = () => {
         const gapRight = paddedLeft;
         const available = Math.max(0, gapRight - gapLeft);
         const maxWidth = Math.min(360, Math.max(0, available - 16));
-        const effectiveWidth = maxWidth > 0 ? Math.min(messageBoxSize.width, maxWidth) : messageBoxSize.width;
-        const halfWidth = effectiveWidth / 2;
-        const targetCenterX = gapLeft + available / 2;
-        const minCenterX = gapLeft + halfWidth + 8;
-        const maxCenterX = gapRight - halfWidth - 8;
-        const centerX = minCenterX <= maxCenterX ? Math.min(Math.max(targetCenterX, minCenterX), maxCenterX) : targetCenterX;
 
         return {
             position: 'absolute',
-            left: `${centerX}px`,
+            left: `${safeLeft}px`,
             top: `${drawCenterY}px`,
-            transform: 'translate(-50%, -50%)',
+            transform: 'translate(0, -50%)',
             maxWidth: maxWidth > 0 ? `${maxWidth}px` : undefined
         };
     })() : isDealerTurnStep ? (() => {
@@ -607,14 +593,12 @@ export const TutorialOverlay: React.FC = () => {
         const maxCenterY = viewportHeight - safeMargin - halfHeight;
         const centerY = Math.min(Math.max(targetCenterY, minCenterY), maxCenterY);
 
-        const safeLeft = (viewportWidth - idealWidth) / 2;
-        const leftEdge = safeLeft + safeMargin;
         const availableWidth = Math.max(0, idealWidth - safeMargin * 2);
         const maxWidth = Math.min(360, availableWidth);
 
         return {
             position: 'absolute',
-            left: `${leftEdge}px`,
+            left: `${safeLeft}px`,
             top: `${centerY}px`,
             transform: 'translate(0, -50%)',
             maxWidth: maxWidth > 0 ? `${maxWidth}px` : undefined
@@ -680,7 +664,7 @@ export const TutorialOverlay: React.FC = () => {
         };
     })() : isHudDrawsStep && hudDrawsRect ? (() => {
         const safeMargin = 18;
-        const gapBelow = 12;
+        const gapBelow = 22;
         const halfWidth = messageBoxSize.width / 2;
 
         const targetTop = hudDrawsRect.top + hudDrawsRect.height + gapBelow;

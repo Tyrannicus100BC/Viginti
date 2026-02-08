@@ -15,7 +15,7 @@ import { CITY_DEFINITIONS } from '../logic/cities/definitions';
 import { generateShopItems, getRelicCompCost } from '../logic/rewards/generator';
 // import type { RoundSummary } from '../logic/relics/types';
 import { TutorialManager } from '../logic/tutorials/tutorials';
-import { ATLANTIC_CITY_TUTORIAL_STEPS, GLOBAL_TUTORIAL_STEPS, TUTORIAL_STEPS } from '../logic/tutorials/definitions';
+import { ATLANTIC_CITY_TUTORIAL_STEPS, GLOBAL_TUTORIAL_STEPS, STAND_TUTORIAL_ID, TUTORIAL_STEPS } from '../logic/tutorials/definitions';
 import { getDebugSettingsEnabled, setDebugSettingsEnabled } from './persistence';
 import { recordCityCleared } from '../logic/progression';
 import { sfxEngine } from '../utils/sfxEngine';
@@ -96,7 +96,7 @@ interface GameState {
         drawCountMod: number;
         placeCountMod: number;
     };
-    phase: 'init' | 'entering_casino' | 'playing' | 'scoring' | 'round_over' | 'game_over' | 'gift_shop' | 'victory';
+    phase: 'init' | 'entering_casino' | 'playing' | 'scoring' | 'round_over' | 'game_over' | 'casino_win' | 'gift_shop' | 'victory';
     round: number;
     interactionMode: 'default' | 'select_hand' | 'select_card' | 'select_draw';
     totalScore: number;
@@ -122,6 +122,8 @@ interface GameState {
     shopItems: { id: string, type: 'Charm' | 'Angle' | 'Card', card?: Card, purchased?: boolean, cost: number, nameOverride?: string }[];
     selectedShopItemId: string | null;
     buyShopItem: (itemId: string) => void;
+    addComps: (amount: number) => void;
+    enterGiftShop: () => void;
 
     isInitialDeal: boolean;
     isShaking: boolean; // For >300 score celebration
@@ -213,6 +215,18 @@ export const useGameStore = create<GameState>((set, get) => {
         });
     };
 
+    const shouldSuppressAutoStandForStandTutorial = () => {
+        const manager = TutorialManager.getInstance();
+        return manager.areSessionTutorialsEnabled() && !manager.isCompleted(STAND_TUTORIAL_ID);
+    };
+
+    const queueAutoStandIfAllowed = () => {
+        if (shouldSuppressAutoStandForStandTutorial()) return;
+        setTimeout(() => {
+            get().holdReturns();
+        }, 1000);
+    };
+
     const getDealerDisplayValue = (dealer: DealerHand, inventory: RelicInstance[]) => {
         const visibleCards = dealer.isRevealed ? dealer.cards : dealer.cards.filter(card => card.isFaceUp);
         return getBlackjackScore(visibleCards, inventory);
@@ -265,6 +279,10 @@ export const useGameStore = create<GameState>((set, get) => {
     animationSpeed: 1,
     scoreSfxStep: 0,
     setAnimationSpeed: (speed) => set({ animationSpeed: speed }),
+    addComps: (amount) => {
+        if (amount <= 0) return;
+        set(state => ({ comps: state.comps + amount }));
+    },
     triggerVigintiSound: () => set(state => ({ vigintiSoundKey: state.vigintiSoundKey + 1 })),
     resetScoreRowPitch: () => set({ scoreSfxStep: 0 }),
     playScoreRowSfx: () =>
@@ -615,9 +633,7 @@ export const useGameStore = create<GameState>((set, get) => {
         // Consume draw modifier
         set(state => ({ modifiers: { ...state.modifiers, drawCountMod: 0 } }));
 
-        console.log('[DEBUG] Pre-Hook drawCount:', drawCount, 'Inventory:', inventory.map(r => r.id));
         drawCount = RelicManager.executeValueHook('getDrawCount', drawCount, { inventory });
-        console.log('[DEBUG] Post-Hook drawCount:', drawCount);
 
 
 
@@ -803,9 +819,7 @@ export const useGameStore = create<GameState>((set, get) => {
             }
 
             if (updatedHands.every(h => h.isBust || h.isHeld || h.blackjackValue === 21)) {
-                setTimeout(() => {
-                    get().holdReturns();
-                }, 1000);
+                queueAutoStandIfAllowed();
             }
             return;
         }
@@ -845,9 +859,7 @@ export const useGameStore = create<GameState>((set, get) => {
             });
             const allUnplayable = newHands.every(h => h.isBust || h.isHeld || h.blackjackValue === 21);
             if (allUnplayable) {
-                setTimeout(() => {
-                    get().holdReturns();
-                }, 1000);
+                queueAutoStandIfAllowed();
             }
             return;
         }
@@ -972,9 +984,7 @@ export const useGameStore = create<GameState>((set, get) => {
             const allUnplayable = postHands.every(h => h.isBust || h.isHeld || h.blackjackValue === 21);
             const hasRemainingCards = get().drawnCards.some(c => c !== null);
             if (allUnplayable && !hasRemainingCards) {
-                setTimeout(() => {
-                    get().holdReturns();
-                }, 1000);
+                queueAutoStandIfAllowed();
             }
         }
     },
@@ -1165,9 +1175,7 @@ export const useGameStore = create<GameState>((set, get) => {
             const allUnplayable = updatedHands.every(h => h.isBust || h.isHeld || h.blackjackValue === 21);
             const hasRemainingCards = get().drawnCards.some(c => c !== null);
             if (allUnplayable && !hasRemainingCards) {
-                setTimeout(() => {
-                    get().holdReturns();
-                }, 1000);
+                queueAutoStandIfAllowed();
             }
         }
     },
@@ -1464,9 +1472,7 @@ export const useGameStore = create<GameState>((set, get) => {
             // Auto-stand if all hands are unplayable
             const allUnplayable = postBustHands.every(h => h.isBust || h.isHeld || h.blackjackValue === 21);
             if (allUnplayable) {
-                setTimeout(() => {
-                    get().holdReturns();
-                }, 1000);
+                queueAutoStandIfAllowed();
             }
         }
     },
@@ -1773,7 +1779,6 @@ export const useGameStore = create<GameState>((set, get) => {
                      highlightRelic: async (relicId: string, options?: any) => {
                          const { preDelay = 0, duration = 250, postDelay = 0, trigger } = options || {};
                          await wait(preDelay);
-                         console.log('Relic Active:', relicId);
                          set({ activeRelicId: relicId });
                          if (trigger) await trigger();
                          await wait(duration);
@@ -1841,7 +1846,6 @@ export const useGameStore = create<GameState>((set, get) => {
                 // Apply the requested 200ms delays for onRoundCompletion
                 const { preDelay = 200, duration = 750, postDelay = 200, trigger } = options || {};
                 await wait(preDelay);
-                console.log('Highlighting Relic:', id);
                 set({ activeRelicId: id });
                 if (trigger) await trigger();
                 await wait(duration);
@@ -2100,7 +2104,7 @@ export const useGameStore = create<GameState>((set, get) => {
             // GO TO GIFT SHOP PHASE
 
             // Calculate Rewards
-            const { tableActionCharges, handsRemaining, comps, inventory, selectedCityId, round } = currentState;
+            const { tableActionCharges, handsRemaining, inventory, selectedCityId, round } = currentState;
             const dealsBonus = handsRemaining * 2;
             const hasDoubleDownRelic = inventory.some(r => r.id === 'double_down');
             const doubleDownBonus = hasDoubleDownRelic ? ((tableActionCharges['double_down'] ?? 0) * 1) : 0;
@@ -2108,8 +2112,6 @@ export const useGameStore = create<GameState>((set, get) => {
             const surrenderBonus = hasSurrenderRelic ? ((tableActionCharges['surrender'] ?? 0) * 1) : 0;
             const winBonus = 2;
             const totalBonus = dealsBonus + doubleDownBonus + surrenderBonus + winBonus;
-
-            set({ comps: comps + totalBonus });
 
             // Generate Rewards based on City
             const city = CITY_DEFINITIONS.find(c => c.id === selectedCityId) || CITY_DEFINITIONS[0];
@@ -2137,13 +2139,14 @@ export const useGameStore = create<GameState>((set, get) => {
             // If round 1 is cleared, that's the 1st reward.
             // So index should be 0 for Round 1 reward?
             // Let's assume input to getRewards matches the index of the casino just beaten (0-based)
-            const rewardConfig = city.getRewards(round - 1);
-            
-            const newShopItems = generateShopItems(rewardConfig, inventory);
+            const casinoIndex = round - 1;
+            const rewardConfig = city.getRewards(casinoIndex);
+            const shopPriceOverrides = city.getShopPriceOverrides?.(casinoIndex);
+            const newShopItems = generateShopItems(rewardConfig, inventory, shopPriceOverrides);
 
             set({
                 shopItems: newShopItems,
-                phase: 'gift_shop',
+                phase: 'casino_win',
                 dealerVisible: false,
                 shopRewardSummary: { dealsBonus, doubleDownBonus, surrenderBonus, winBonus, total: totalBonus }
             });
@@ -2448,6 +2451,9 @@ export const useGameStore = create<GameState>((set, get) => {
         set({
             shopItems: shopItems.map(i => i.id === itemId ? { ...i, purchased: true } : i)
         });
+    },
+    enterGiftShop: () => {
+        set({ phase: 'gift_shop' });
     }
     });
 });

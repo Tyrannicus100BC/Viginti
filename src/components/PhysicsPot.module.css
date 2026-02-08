@@ -5,7 +5,7 @@
     width: 100%;
     height: 100%;
     pointer-events: none; /* Let clicks pass through to game */
-    z-index: 10; /* Lowered from 900 to be behind hands */
+    z-index: 900; /* Above hands so pots stay visible during scoring */
     overflow: hidden;
 }
 
@@ -21,7 +21,7 @@ canvas {
     align-items: center;
     color: #ffd700;
     pointer-events: none;
-    z-index: 12; /* Lowered from 902 */
+    z-index: 910;
     transition: 
         transform 0.1s ease,
         left 0.8s cubic-bezier(0.22, 1, 0.36, 1),

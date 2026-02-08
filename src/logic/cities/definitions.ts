@@ -1,4 +1,4 @@
-import type { CityDefinition, RewardConfig } from './types';
+import type { CityDefinition, RewardConfig, ShopPriceOverrides } from './types';
 
 // Helper to generate standard rewards
 const STANDARD_REWARD_CONFIG: RewardConfig[] = [
@@ -14,16 +14,26 @@ export const CITY_DEFINITIONS: CityDefinition[] = [
         name: 'Atlantic City', // Tutorial City
         description: 'The Boardwalk Empire. A short trip to get your feet wet.',
         unlockCondition: { type: 'always' },
-        casinoTargets: [75, 110, 165, 240],
+        casinoTargets: [20, 50, 80, 125],
         getRewards: (index) => {
             if (index === 1) { // 2nd Reward (after Casino 2)
                 return [
-                    { type: 'Action', count: 2, specificIds: ['double_down', 'surrender'] }
+                    { type: 'Action', count: 1, specificIds: ['redraw'] },
+                    { type: 'Action', count: 1, specificIds: ['switch'] }
                 ];
             }
             return [
                 { type: 'Charm', count: 4, categories: ['Suite', 'Global', 'Cards'] }
             ];
+        },
+        getShopPriceOverrides: (index): ShopPriceOverrides => {
+            if (index === 1) {
+                return {
+                    redraw: 0,
+                    switch: 0
+                };
+            }
+            return {};
         }
     },
     {
@@ -51,7 +61,7 @@ export const CITY_DEFINITIONS: CityDefinition[] = [
         id: 'monte_carlo',
         name: 'Monte Carlo', // Regular City
         description: 'The Royal Casino. The standard by which all others are measured.',
-        unlockCondition: { type: 'beat_city', cityId: 'atlantic_city' },
+        unlockCondition: { type: 'beat_city', cityId: 'las_vegas' },
         casinoTargets: [
             600, 1000, 1800, 3200, 5800, 10500, 19000, 35000, 
             65000, 120000, 220000, 400000, 750000, 1400000, 2500000, 5000000

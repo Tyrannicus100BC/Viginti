@@ -5,6 +5,8 @@ import {
     isCityUnlocked,
     isGamblerUnlocked,
     markCityCleared,
+    setSelectedCityId,
+    setSelectedGamblerId,
     unlockCity,
     unlockEverything,
     unlockGambler
@@ -51,9 +53,22 @@ export const unlockAllContent = () => {
     if (!isCityCleared('atlantic_city')) {
         markCityCleared('atlantic_city');
     }
+    setSelectedCityId('las_vegas');
+    setSelectedGamblerId('default');
 };
 
 export const recordCityCleared = (cityId: string) => {
+    const wasAlreadyCleared = isCityCleared(cityId);
     markCityCleared(cityId);
     ensureUnlocksUpToDate();
+
+    // On first Atlantic City clear, move menu defaults to the newly unlocked run.
+    if (!wasAlreadyCleared && cityId === 'atlantic_city') {
+        if (isCityUnlocked('las_vegas')) {
+            setSelectedCityId('las_vegas');
+        }
+        if (isGamblerUnlocked('default')) {
+            setSelectedGamblerId('default');
+        }
+    }
 };

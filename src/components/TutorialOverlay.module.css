@@ -168,6 +168,11 @@
     pointer-events: auto;
 }
 
+.interactiveMode .messageBox,
+.interactiveMode .messageBoxWrapper {
+    pointer-events: none;
+}
+
 /* If we have a highlight in blocking mode, we rely on the highlight's box-shadow for dimming, so blocking overlay checks that */
 
 .messageBoxPositioned {

@@ -163,6 +163,9 @@ export const PlayingCard: React.FC<CardProps> = ({
             ${animClass}
             ${origin === 'discard' ? styles.discarding : ''}
         `}
+        data-origin={origin}
+        data-face-up={card.isFaceUp ? '1' : '0'}
+        data-anim={animClass || 'none'}
         style={{ animationDelay: `${delay}s` }}
         onAnimationEnd={(e) => {
           if (e.currentTarget !== e.target) return;
@@ -173,7 +176,9 @@ export const PlayingCard: React.FC<CardProps> = ({
         }}
       >
         {/* Front */}
-        <div className={`${styles.face} ${styles.front} ${isRed ? styles.red : styles.black}`}
+        <div
+          className={`${styles.face} ${styles.front} ${isRed ? styles.red : styles.black}`}
+          data-face="front"
           style={
             card.type === 'chip' ? { color: '#4ade80', WebkitTextStroke: '2px #166534', paintOrder: 'stroke fill' } as React.CSSProperties :
               card.type === 'mult' ? { color: '#facc15', WebkitTextStroke: '2px #854d0e', paintOrder: 'stroke fill' } as React.CSSProperties :
@@ -255,7 +260,7 @@ export const PlayingCard: React.FC<CardProps> = ({
         </div>
 
         {/* Back */}
-        <div className={`${styles.face} ${styles.back}`}>
+        <div className={`${styles.face} ${styles.back}`} data-face="back">
           <div className={styles.pattern}></div>
         </div>
       </div>

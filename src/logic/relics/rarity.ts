@@ -2,7 +2,7 @@ import type { RelicRarity } from './types';
 
 export const RELIC_RARITY_STYLES: Record<RelicRarity, { frame: string; text: string }> = {
     Common: {
-        frame: '#ffffff',
+        frame: '#c0c0c0',
         text: '#ffffff'
     },
     Uncommon: {

@@ -31,25 +31,21 @@ export const GAMBLER_DEFINITIONS: GamblerDefinition[] = [
     {
         id: 'default',
         name: 'The Tourist',
-        description: 'Just here for a good time. Starts with a standard 52-card deck and a balanced set of scoring relics.',
+        description: 'Just here for a good time. Starts with a standard 52-card deck and run-focused scoring angles.',
         unlockCondition: { type: 'beat_city', cityId: 'atlantic_city' },
         getInitialDeck: () => createStandardDeck(),
         getInitialRelics: () => [
-
             getRelicInstance('viginti'),
-            getRelicInstance('double_down'),
-            getRelicInstance('rank_pair_chips'),
-            // Randomly give rank run or flush run (Chips variants)
-            Math.random() > 0.5
-                ? getRelicInstance('rank_run_chips')
-                : getRelicInstance('flush_run_chips')
+            getRelicInstance('rank_run_chips'),
+            getRelicInstance('flush_run_chips'),
+            getRelicInstance('straight_run_chips')
         ]
     },
     {
         id: 'mathematician',
         name: 'The Mathematician',
         description: 'Calculated and precise. Removes all face cards for a number-heavy deck, starting with powerful Straight synergies.',
-        unlockCondition: { type: 'beat_city', cityId: 'atlantic_city' },
+        unlockCondition: { type: 'beat_city', cityId: 'las_vegas' },
         getInitialDeck: () => {
             const deck = createStandardDeck();
             // Remove Face Cards (J, Q, K)
@@ -66,7 +62,7 @@ export const GAMBLER_DEFINITIONS: GamblerDefinition[] = [
         id: 'wild',
         name: 'The Wildcard',
         description: 'Chaos incarnate. A distorted deck heavy on high cards in black suits and low red cards. Starts with 8 random Special Cards.',
-        unlockCondition: { type: 'beat_city', cityId: 'atlantic_city' },
+        unlockCondition: { type: 'beat_city', cityId: 'las_vegas' },
         getInitialDeck: () => {
             const deck: Card[] = [];
 

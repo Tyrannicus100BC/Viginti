@@ -17,6 +17,7 @@ import { RelicInventory } from './components/RelicInventory';
 
 import { RelicStore } from './components/RelicStore';
 import { GiftShop } from './components/GiftShop';
+import { CasinoWinScreen } from './components/CasinoWinScreen';
 import { TableActionButton } from './components/TableActionButton';
 
 import type { PlayerHand, Card } from './types';
@@ -53,11 +54,12 @@ import {
     setSkipAtlanticTutorials as setPersistedSkipAtlanticTutorials
 } from './store/persistence';
 import { ensureUnlocksUpToDate, unlockAllContent } from './logic/progression';
-import { STAND_TUTORIAL_ID, TUTORIAL_STEPS, shouldPromptStandNow } from './logic/tutorials/definitions';
+import { NEXT_CASINO_TUTORIAL_ID, STAND_TUTORIAL_ID, TUTORIAL_STEPS, shouldPromptStandNow } from './logic/tutorials/definitions';
 
 // Constants for layout
 const POT_TOP_Y = 380; // Anchor pots to this Y value
-const MUSIC_FADE_MS = 800;
+const MUSIC_FADE_IN_MS = 280;
+const MUSIC_SWITCH_FADE_OUT_MS = 180;
 const MUSIC_VOLUME_SCALE = 0.5;
 const MENU_MUSIC = '/sounds/Music-Menu.mp3';
 const GIFT_SHOP_MUSIC = '/sounds/Music-GiftShop.mp3';
@@ -195,7 +197,7 @@ export default function App() {
     const [showCompsWindow, setShowCompsWindow] = useState(false);
     const [showRelicStore, setShowRelicStore] = useState(false);
     const [relicStoreFilter, setRelicStoreFilter] = useState<string | undefined>(undefined);
-    const [overlayComplete, setOverlayComplete] = useState(false);
+    const [overlayComplete, setOverlayComplete] = useState(true);
     // scoreAnimate removed
 
     const [hasClickedWin, setHasClickedWin] = useState(false);
@@ -205,6 +207,7 @@ export default function App() {
     const [standWarningStyle, setStandWarningStyle] = useState<React.CSSProperties | null>(null);
     const standWarningTimeoutRef = useRef<number | null>(null);
     const standButtonRef = useRef<HTMLButtonElement | null>(null);
+    const gameWrapperRef = useRef<HTMLDivElement | null>(null);
     const swapTimeoutRef = useRef<number | null>(null);
 
     const drawAreaRef = useRef<HTMLDivElement>(null);
@@ -261,11 +264,32 @@ export default function App() {
         }
     }, []);
 
+    useEffect(() => {
+        if (phase !== 'init') return;
+        const persisted = getPersistedState();
+
+        setSelectedCityId(current =>
+            current === persisted.selectedCityId ? current : persisted.selectedCityId
+        );
+        setSelectedGamblerId(current =>
+            current === persisted.selectedGamblerId ? current : persisted.selectedGamblerId
+        );
+    }, [phase]);
+
     const stopMusicFade = () => {
         if (musicFadeRef.current !== null) {
             cancelAnimationFrame(musicFadeRef.current);
             musicFadeRef.current = null;
         }
+    };
+
+    const playMusic = (audio: HTMLAudioElement) => {
+        const playPromise = audio.play();
+        if (!playPromise) return;
+        void playPromise
+            .catch(() => {
+                // Ignore autoplay errors; playback is retried on user gesture.
+            });
     };
 
     const fadeMusicTo = (
@@ -305,13 +329,23 @@ export default function App() {
 
     const getDesiredMusicTrack = (currentPhase: string, casinoRound: number) => {
         if (currentPhase === 'init') return MENU_MUSIC;
-        if (currentPhase === 'gift_shop') return GIFT_SHOP_MUSIC;
+        if (currentPhase === 'gift_shop' || currentPhase === 'casino_win') return GIFT_SHOP_MUSIC;
         return getGameMusicForRound(casinoRound);
     };
 
     const getScaledMusicVolume = (rawVolume: number, isMuted: boolean) => {
         if (isMuted) return 0;
         return Math.max(0, Math.min(1, rawVolume * MUSIC_VOLUME_SCALE));
+    };
+
+    const isAudioOnTrack = (audio: HTMLAudioElement, track: string) => {
+        if (!audio.src) return false;
+        try {
+            const srcPath = new URL(audio.src, window.location.href).pathname;
+            return srcPath.endsWith(track);
+        } catch {
+            return audio.src.endsWith(track);
+        }
     };
 
     useEffect(() => {
@@ -333,45 +367,60 @@ export default function App() {
     useEffect(() => {
         const music = new Audio();
         music.loop = true;
+        music.preload = 'auto';
         music.volume = 0;
         musicRef.current = music;
 
+        let hasResumed = false;
+
         const resumeOnGesture = () => {
+            if (hasResumed) return;
+            hasResumed = true;
             setAudioUnlocked(true);
             void sfxEngine.resume();
             const currentMusic = musicRef.current;
             if (!currentMusic) return;
             const desiredTrack = getDesiredMusicTrack(phaseRef.current, roundRef.current);
             const desiredVolume = getScaledMusicVolume(musicVolumeRef.current, musicMutedRef.current);
-            if (desiredVolume <= 0) return;
+            const hasDesiredTrackLoaded = isAudioOnTrack(currentMusic, desiredTrack);
+            if (desiredVolume <= 0) {
+                return;
+            }
 
-            if (musicTrackRef.current !== desiredTrack) {
+            if (musicTrackRef.current !== desiredTrack || !hasDesiredTrackLoaded) {
                 stopMusicFade();
                 musicTrackRef.current = desiredTrack;
                 currentMusic.src = desiredTrack;
                 currentMusic.currentTime = 0;
                 currentMusic.volume = 0;
-                currentMusic.play().catch(() => {});
-                fadeMusicTo(currentMusic, 0, desiredVolume, MUSIC_FADE_MS);
+                playMusic(currentMusic);
+                fadeMusicTo(currentMusic, 0, desiredVolume, MUSIC_FADE_IN_MS);
                 return;
             }
 
             if (currentMusic.paused) {
                 currentMusic.volume = 0;
-                currentMusic.play().catch(() => {});
-                fadeMusicTo(currentMusic, 0, desiredVolume, MUSIC_FADE_MS);
+                playMusic(currentMusic);
+                fadeMusicTo(currentMusic, 0, desiredVolume, MUSIC_FADE_IN_MS);
             } else {
                 currentMusic.volume = desiredVolume;
             }
         };
-        window.addEventListener('pointerdown', resumeOnGesture, { once: true });
+
+        const gestureEvents: Array<keyof WindowEventMap> = ['pointerdown', 'click', 'keydown', 'touchstart'];
+        gestureEvents.forEach(eventName => {
+            window.addEventListener(eventName, resumeOnGesture, { passive: true });
+        });
         void sfxEngine.preloadAll();
 
         return () => {
-            window.removeEventListener('pointerdown', resumeOnGesture);
+            gestureEvents.forEach(eventName => {
+                window.removeEventListener(eventName, resumeOnGesture);
+            });
             stopMusicFade();
             music.pause();
             music.src = '';
+            musicTrackRef.current = null;
         };
     }, []);
 
@@ -381,17 +430,18 @@ export default function App() {
 
         const desiredTrack = getDesiredMusicTrack(phase, round);
         const desiredVolume = getScaledMusicVolume(musicVolume, musicMuted);
+        const hasDesiredTrackLoaded = isAudioOnTrack(music, desiredTrack);
 
         const startTrack = () => {
             musicTrackRef.current = desiredTrack;
             music.src = desiredTrack;
             music.currentTime = 0;
             music.volume = 0;
-            music.play().catch(() => {});
-            fadeMusicTo(music, 0, desiredVolume, MUSIC_FADE_MS);
+            playMusic(music);
+            fadeMusicTo(music, 0, desiredVolume, MUSIC_FADE_IN_MS);
         };
 
-        if (musicTrackRef.current === desiredTrack) {
+        if (musicTrackRef.current === desiredTrack && hasDesiredTrackLoaded) {
             if (!audioUnlocked || desiredVolume === 0) {
                 stopMusicFade();
                 music.volume = 0;
@@ -400,8 +450,8 @@ export default function App() {
             }
             if (music.paused) {
                 music.volume = 0;
-                music.play().catch(() => {});
-                fadeMusicTo(music, 0, desiredVolume, MUSIC_FADE_MS);
+                playMusic(music);
+                fadeMusicTo(music, 0, desiredVolume, MUSIC_FADE_IN_MS);
                 return;
             }
             music.volume = desiredVolume;
@@ -420,7 +470,7 @@ export default function App() {
 
         if (!music.paused) {
             const from = music.volume;
-            fadeMusicTo(music, from, 0, MUSIC_FADE_MS, () => {
+            fadeMusicTo(music, from, 0, MUSIC_SWITCH_FADE_OUT_MS, () => {
                 startTrack();
             });
         } else {
@@ -528,14 +578,15 @@ export default function App() {
 
         const updatePosition = () => {
             const button = standButtonRef.current;
-            const wrapper = document.getElementById('game-scale-wrapper');
-            if (!button || !wrapper) return;
+            const gameWrapper = gameWrapperRef.current;
+            if (!button || !gameWrapper) return;
 
             const rect = button.getBoundingClientRect();
-            const wrapperRect = wrapper.getBoundingClientRect();
-            const left = (rect.left - wrapperRect.left) / scale + rect.width / scale / 2;
-            const gap = 12;
-            const top = (rect.top - wrapperRect.top) / scale - gap;
+            const gameWrapperRect = gameWrapper.getBoundingClientRect();
+            const left = (rect.left - gameWrapperRect.left) / scale + rect.width / scale / 2;
+            // Keep tutorial warning clearly above the STAND button across responsive scales.
+            const verticalClearance = Math.max(18, rect.height * 0.22);
+            const top = (rect.top - gameWrapperRect.top) / scale - verticalClearance;
 
             setStandWarningStyle({
                 left: `${left}px`,
@@ -775,69 +826,35 @@ export default function App() {
     // Handle value updates for Casino and Target
     React.useEffect(() => {
         if (phase === 'entering_casino') {
-            if (debugEnabled) {
-                setOverlayComplete(true);
-                setDisplayRound(round);
-                setDisplayTarget(targetScore);
-                setDisplayComps(comps);
-                return;
-            }
-
-            setOverlayComplete(false);
-
-            // Wait for HUD to arrive at center (0.8s transition)
-            const transitionTimer = setTimeout(() => {
-                // Update values and trigger pulse animations
-                if (round !== displayRound) {
-                    setDisplayRound(round);
-                    setRoundAnimate(true);
-                    setTimeout(() => setRoundAnimate(false), 500 / animationSpeed);
-                }
-                if (targetScore !== displayTarget) {
-                    setDisplayTarget(targetScore);
-                    setTargetAnimate(true);
-                    setTimeout(() => setTargetAnimate(false), 500 / animationSpeed);
-                }
-                if (comps !== displayComps) {
-                    setDisplayComps(comps);
-                    setCompsAnimate(true);
-                    setTimeout(() => setCompsAnimate(false), 500 / animationSpeed);
-                }
-            }, 800 / animationSpeed);
-
-            // Calculate exit delay
-            const delay = round === 1 ? 1080 : 1800;
-            const exitTimer = setTimeout(() => {
-                setOverlayComplete(true);
-            }, delay / animationSpeed);
-
-            return () => {
-                clearTimeout(transitionTimer);
-                clearTimeout(exitTimer);
-            };
-        } else {
-            // Sync values if they change while already in HUD mode
-            if (round !== displayRound) {
-                setDisplayRound(round);
-            }
-            if (targetScore !== displayTarget) {
-                setDisplayTarget(targetScore);
-            }
-            if (comps !== displayComps) {
-                setDisplayComps(comps);
-                // Trigger animation for Comps when they change (e.g. Gift Shop purchase)
-                setCompsAnimate(true);
-                const timer = setTimeout(() => setCompsAnimate(false), 500 / animationSpeed);
-                return () => clearTimeout(timer);
-            }
+            // Keep HUD in its final position for all runs (no overlay transition).
+            setOverlayComplete(true);
+            setDisplayRound(round);
+            setDisplayTarget(targetScore);
+            setDisplayComps(comps);
+            return;
         }
-    }, [phase, round, targetScore, comps, debugEnabled]);
+
+        // Sync values if they change while already in HUD mode
+        if (round !== displayRound) {
+            setDisplayRound(round);
+        }
+        if (targetScore !== displayTarget) {
+            setDisplayTarget(targetScore);
+        }
+        if (comps !== displayComps) {
+            setDisplayComps(comps);
+            // Trigger animation for Comps when they change (e.g. Gift Shop purchase)
+            setCompsAnimate(true);
+            const timer = setTimeout(() => setCompsAnimate(false), 500 / animationSpeed);
+            return () => clearTimeout(timer);
+        }
+    }, [phase, round, targetScore, comps]);
 
     // Synchronize display values immediately when starting a new run (Round 1) 
     // to avoid showing old run values or starting from the top of the screen.
     if (phase === 'entering_casino' && round === 1) {
         if (!runInitializedRef.current) {
-            setOverlayComplete(debugEnabled);
+            setOverlayComplete(true);
             setDisplayRound(1);
             setDisplayTarget(targetScore);
             setDisplayComps(5);
@@ -849,10 +866,13 @@ export default function App() {
 
     const isOverlayMode = phase === 'entering_casino' && !overlayComplete;
 
-    const shouldBlockForStandTutorial = () => {
+    const isStandTutorialPending = () => {
         const tutorialManager = TutorialManager.getInstance();
-        if (!tutorialManager.areSessionTutorialsEnabled()) return false;
-        if (tutorialManager.isCompleted(STAND_TUTORIAL_ID)) return false;
+        return tutorialManager.areSessionTutorialsEnabled() && !tutorialManager.isCompleted(STAND_TUTORIAL_ID);
+    };
+
+    const shouldBlockForStandTutorial = () => {
+        if (!isStandTutorialPending()) return false;
         return shouldPromptStandNow({
             phase,
             isInitialDeal,
@@ -969,7 +989,7 @@ export default function App() {
     const isDrawAreaClear = !hasDrawnCards;
     const canDraw = phase === 'playing' && isDrawAreaClear && !isDealerPlaying && !isInitialDeal && interactionMode === 'default' && !areAllHandsUnplayable && !isRedrawAnimating;
     const canDrawNow = canDraw && !shouldBlockForStandTutorial();
-    const canHold = phase === 'playing' && isDrawAreaClear && !isDealerPlaying && !isInitialDeal && interactionMode === 'default' && !areAllHandsUnplayable && !isRedrawAnimating;
+    const canHold = phase === 'playing' && isDrawAreaClear && !isDealerPlaying && !isInitialDeal && interactionMode === 'default' && (!areAllHandsUnplayable || isStandTutorialPending()) && !isRedrawAnimating;
     const isDrawAreaVisible = phase === 'playing' && !isDealerPlaying && !isInitialDeal && (interactionMode === 'default' || interactionMode === 'select_draw' || hasDrawnCards);
     const showTableActions = phase === 'playing' && !dealer.isRevealed && !isInitialDeal;
     const hasDealerFaceUpCard = dealer.cards.some(card => card.isFaceUp);
@@ -1008,7 +1028,7 @@ export default function App() {
         }
     };
 
-    const areHandsVisible = phase !== 'gift_shop';
+    const areHandsVisible = phase !== 'gift_shop' && phase !== 'casino_win';
 
     const showStandWarning = () => {
         if (standWarningTimeoutRef.current !== null) {
@@ -1075,11 +1095,20 @@ export default function App() {
     }, [phase, round, isInitialDeal, isDealerPlaying, interactionMode, dealer.cards.length, playerHands, drawnCards, checkTutorials]);
 
     useEffect(() => {
+        if (phase === 'round_over') return;
+        const tutorialManager = TutorialManager.getInstance();
+        if (tutorialManager.getActiveStep()?.id === NEXT_CASINO_TUTORIAL_ID) {
+            tutorialManager.completeStep(NEXT_CASINO_TUTORIAL_ID);
+        }
+    }, [phase]);
+
+    useEffect(() => {
         if (!drawTutorialReady || !canDraw) return;
         TutorialManager.getInstance().signalEvent('draw_available_after_debt');
     }, [drawTutorialReady, canDraw]);
 
     const isTotalWinningsVisible = ((phase === 'scoring' && (isCollectingChips || roundSummary || allWinnersEnlarged)) || phase === 'round_over') && runningSummary && runningSummary.chips > 0;
+    const showPotLabels = phase === 'scoring' || phase === 'round_over';
     const totalWinningsSoundPlayedRef = useRef(false);
 
     useEffect(() => {
@@ -1249,6 +1278,9 @@ export default function App() {
                                     playClick();
                                     unlockAllContent();
                                     ensureUnlocksUpToDate();
+                                    const persisted = getPersistedState();
+                                    setSelectedCityId(persisted.selectedCityId);
+                                    setSelectedGamblerId(persisted.selectedGamblerId);
                                     setProgressionRevision(v => v + 1);
                                 }}
                             >
@@ -1349,6 +1381,8 @@ export default function App() {
         if (canDrawNow) {
             handleDraw();
         } else if (phase === 'round_over') {
+            // When the player can leave/clear the casino, require an explicit tap on the action button.
+            if (totalScore >= targetScore) return;
             nextRound();
         } else if (phase === 'entering_casino') {
             // Allow global click to start dealing 
@@ -1477,30 +1511,34 @@ export default function App() {
             {/* Remove CasinoIntroOverlay usage */}
             {/* Remove CasinoIntroOverlay usage */}
 
-            <PhysicsPot
-                key={`chips-${round}-${handsRemaining}`}
-                totalValue={runningSummary?.chips ?? 0}
-                variant="chips"
-                isCollecting={isCollectingChips}
-                center={{ x: centerX - currentPotOffset, y: POT_TOP_Y }}
-                labelId="total-winnings"
-                onCollectionComplete={() => { }}
-                onItemArrived={() => { }}
-                labelPrefix="$"
-            />
+            {showPotLabels && (
+                <PhysicsPot
+                    key={`chips-${round}-${handsRemaining}`}
+                    totalValue={runningSummary?.chips ?? 0}
+                    variant="chips"
+                    isCollecting={isCollectingChips}
+                    center={{ x: centerX - currentPotOffset, y: POT_TOP_Y }}
+                    labelId="total-winnings"
+                    onCollectionComplete={() => { }}
+                    onItemArrived={() => { }}
+                    labelPrefix="$"
+                />
+            )}
 
             {/* RelicInventory moved to sidebar */}
 
-            <PhysicsPot
-                key={`mult-${round}-${handsRemaining}`}
-                totalValue={runningSummary?.mult ?? 0}
-                variant="multiplier"
-                isCollecting={isCollectingChips}
-                center={{ x: centerX + currentPotOffset, y: POT_TOP_Y }}
-                onCollectionComplete={() => { }}
-                onItemArrived={() => { }}
-                labelPrefix="x"
-            />
+            {showPotLabels && (
+                <PhysicsPot
+                    key={`mult-${round}-${handsRemaining}`}
+                    totalValue={runningSummary?.mult ?? 0}
+                    variant="multiplier"
+                    isCollecting={isCollectingChips}
+                    center={{ x: centerX + currentPotOffset, y: POT_TOP_Y }}
+                    onCollectionComplete={() => { }}
+                    onItemArrived={() => { }}
+                    labelPrefix="x"
+                />
+            )}
 
             {/* Total Winnings Label (Center) - Only visible when we have a full summary */}
             {isTotalWinningsVisible && runningSummary && runningSummary.chips > 0 && (
@@ -1528,7 +1566,7 @@ export default function App() {
 
             <canvas ref={canvasRef} className={styles.confettiCanvas} />
 
-            <div className={styles.gameWrapper}>
+            <div className={styles.gameWrapper} ref={gameWrapperRef}>
                 <div className={styles.sidebarsContainer}>
                     <div className={styles.leftSidebar}>
                         <div
@@ -1969,7 +2007,8 @@ export default function App() {
                                             drawnCards
                                         };
 
-                                        if (tutorialManager.areSessionTutorialsEnabled() && !tutorialManager.isCompleted(STAND_TUTORIAL_ID)) {
+                                        const standTutorialPending = isStandTutorialPending();
+                                        if (standTutorialPending && !areAllHandsUnplayable) {
                                             if (!shouldPromptStandNow(standContext)) {
                                                 showStandWarning();
                                                 return;
@@ -1987,9 +2026,14 @@ export default function App() {
                                 </button>
                             ) : (phase === 'round_over' || phase === 'entering_casino' || (phase === 'playing' && isInitialDeal)) ? (
                                 <button
+                                    id={phase === 'round_over' && totalScore >= targetScore ? 'next-casino-button' : undefined}
                                     className={styles.nextRoundButton}
                                     onClick={(e) => {
                                         e.stopPropagation();
+                                        const tutorialManager = TutorialManager.getInstance();
+                                        if (phase === 'round_over' && round === 1 && totalScore >= targetScore) {
+                                            tutorialManager.completeStep(NEXT_CASINO_TUTORIAL_ID);
+                                        }
                                         if (phase === 'entering_casino') {
                                             dealFirstHand();
                                         } else if (totalScore >= targetScore && isLastCasino) {
@@ -2002,7 +2046,7 @@ export default function App() {
                                     style={phase === 'round_over' && totalScore < targetScore && handsRemaining <= 0 ? { color: '#ff4444', borderColor: '#ff4444' } : {}}
                                 >
                                     {phase === 'entering_casino' || (phase === 'playing' && isInitialDeal) ? 'Deal' : (
-                                        totalScore >= targetScore ? (isLastCasino ? 'Victory' : 'Next Casino') :
+                                        totalScore >= targetScore ? (isLastCasino ? 'Victory' : 'Leave Casino') :
                                             (handsRemaining <= 0 ? 'Game Over' : 'Deal')
                                     )}
                                 </button>
@@ -2065,8 +2109,24 @@ export default function App() {
                 />
             )}
 
+            {phase === 'casino_win' && (
+                <CasinoWinScreen />
+            )}
             {phase === 'gift_shop' && (
-                <GiftShop />
+                <GiftShop
+                    onOpenDeckRemoval={() => {
+                        playClick();
+                        setIsEnhancingCards(false);
+                        setIsRemovingCards(true);
+                        setShowDeck(true);
+                    }}
+                    onOpenEnhanceCards={() => {
+                        playClick();
+                        setIsRemovingCards(false);
+                        setIsEnhancingCards(true);
+                        setShowDeck(true);
+                    }}
+                />
             )}
             {showCompsWindow && (
                 <CompsWindow

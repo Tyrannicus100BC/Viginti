@@ -27,6 +27,7 @@ export interface TutorialStep {
     completionType: TutorialCompletionCondition;
     scope?: TutorialScope; // session = reset on new run, global = persisted
     completeOnEventId?: string; // Auto-complete when this event fires
+    completeDelayMs?: number; // Optional delay before auto-complete
 
     // Optional UI behavior
     scrim?: TutorialScrim; // auto = dim when no highlight, dim = always, none = never
@@ -366,7 +367,14 @@ export class TutorialManager {
         }
 
         if (this.activeStep && this.activeStep.completeOnEventId === eventId) {
-            this.completeStep(this.activeStep.id);
+            const delay = this.activeStep.completeDelayMs ?? 0;
+            if (delay > 0) {
+                window.setTimeout(() => {
+                    this.completeStep(this.activeStep!.id);
+                }, delay);
+            } else {
+                this.completeStep(this.activeStep.id);
+            }
         }
 
         const waitingSet = this.waitingByEvent.get(eventId);

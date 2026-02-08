@@ -33,7 +33,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
   const playScoreRowSfx = useGameStore(state => state.playScoreRowSfx);
   // Determine if we should show overlay (bust or result revealed)
   const isViginti = hand.blackjackValue === 21;
-  const showOverlay = (hand.isBust || isViginti || hand.isDoubled || (hand.finalScore !== undefined && hand.resultRevealed)) && hand.cards.length > 0;
+  const isDealerHand = hand.id === -1;
 
   // Is this a winning hand that needs scoring animation?
   const isWin = !!(hand.finalScore && hand.resultRevealed);
@@ -220,6 +220,9 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
 
   const handleDealAnimationEnd = (cardId: string) => {
       dealAnimationDoneRef.current.add(cardId);
+      setVisualCards(prev => prev.map(vc => (
+        vc.card.id === cardId ? { ...vc, hasEntered: true } : vc
+      )));
       maybeNotifyDealComplete();
   };
 
@@ -457,6 +460,16 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
 
   // Check if any card is currently animating from draw pile
   const hasAnimatingCard = hand.cards.some(c => c.origin === 'draw_pile');
+  const hasPendingDealerDealAnimation = isDealerHand && visualCards.some(vc =>
+    !vc.isDiscarding &&
+    !vc.hasEntered &&
+    (vc.card.origin === 'deck' || vc.card.origin === 'double_down')
+  );
+  const showBustOverlay = hand.isBust && !hasPendingDealerDealAnimation;
+  const showVigintiOverlay = isViginti && !hand.isBust && !hasPendingDealerDealAnimation;
+  const showOverlay =
+    (showBustOverlay || showVigintiOverlay || hand.isDoubled || (hand.finalScore !== undefined && hand.resultRevealed)) &&
+    hand.cards.length > 0;
 
   return (
     <div
@@ -661,13 +674,13 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
               hand.finalScore?.criteria[activeCriteriaIdx].id !== 'win' &&
               hand.finalScore?.criteria[activeCriteriaIdx].id !== 'viginti') ? styles.faded : ''
               }`}>
-              {hand.isBust && (
+              {showBustOverlay && (
                 <div className={styles.overlayItem}>
                   <div className={`${styles.bustOverlay} ${styles.slamEnter}`}>BUST</div>
                 </div>
               )}
               {/* Only show VIGINTI if it's actually 21, regardless of win status logic, but usually implied win */}
-              {isViginti && !hand.isBust && (
+              {showVigintiOverlay && (
                 <div className={styles.overlayItem}>
                   <div className={`${styles.vigintiOverlay} ${styles.slamEnter}`}>VIGINTI</div>
                 </div>

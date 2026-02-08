@@ -1,5 +1,5 @@
 
-import type { RewardConfig } from '../cities/types';
+import type { RewardConfig, ShopPriceOverrides } from '../cities/types';
 import { RelicManager } from '../relics/manager';
 import { createStandardDeck } from '../deck';
 import type { Card } from '../../types';
@@ -28,7 +28,11 @@ export const getRelicCompCost = (relicId: string): number => {
 
 const getCardCompCost = (isSpecial: boolean): number => (isSpecial ? 2 : 1);
 
-export function generateShopItems(configList: RewardConfig[], currentInventory: RelicInstance[]): ShopItem[] {
+export function generateShopItems(
+    configList: RewardConfig[],
+    currentInventory: RelicInstance[],
+    priceOverrides?: ShopPriceOverrides
+): ShopItem[] {
     const items: ShopItem[] = [];
     const currentIds = currentInventory.map(i => i.id);
 
@@ -200,5 +204,11 @@ export function generateShopItems(configList: RewardConfig[], currentInventory: 
         }
     }
 
-    return uniqueItems;
+    if (!priceOverrides) return uniqueItems;
+
+    return uniqueItems.map(item => {
+        const overrideCost = priceOverrides[item.id];
+        if (overrideCost === undefined) return item;
+        return { ...item, cost: Math.max(0, overrideCost) };
+    });
 }

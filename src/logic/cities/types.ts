@@ -8,6 +8,8 @@ export interface RewardConfig {
     forceSpecialCard?: boolean;
 }
 
+export type ShopPriceOverrides = Record<string, number>;
+
 import type { UnlockCondition } from '../progression';
 
 export interface CityDefinition {
@@ -16,5 +18,6 @@ export interface CityDefinition {
     description: string;
     casinoTargets: number[]; // Scores required to clear each consecutive casino
     getRewards: (casinoIndex: number) => RewardConfig[];
+    getShopPriceOverrides?: (casinoIndex: number) => ShopPriceOverrides;
     unlockCondition: UnlockCondition;
 }

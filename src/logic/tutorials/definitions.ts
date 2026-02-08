@@ -1,15 +1,40 @@
 
 import type { TutorialStep } from './tutorials';
 import { TutorialHooks } from './hooks';
+import { TutorialManager } from './tutorials';
 
 export const GLOBAL_TUTORIAL_STEPS: TutorialStep[] = [];
 
 export const STAND_TUTORIAL_ID = 'stand_now';
+export const NEXT_CASINO_TUTORIAL_ID = 'next_casino_after_first_win';
+export const VIGINTI_TUTORIAL_ID = 'viginti_first';
+export const BUST_TUTORIAL_ID = 'bust_first';
 
-export const shouldPromptStandNow = (context: any) => {
+type StandPromptOptions = {
+    allowAllUnplayable?: boolean;
+};
+
+const hasVigintiHand = (context: any) =>
+    Array.isArray(context?.playerHands) &&
+    context.playerHands.some((hand: any) => hand.blackjackValue === 21 && !hand.isBust);
+
+const hasBustHand = (context: any) =>
+    Array.isArray(context?.playerHands) &&
+    context.playerHands.some((hand: any) => hand.isBust);
+
+const isOutcomeTutorialPending = (context: any) => {
+    const manager = TutorialManager.getInstance();
+    return (
+        (!manager.isCompleted(VIGINTI_TUTORIAL_ID) && hasVigintiHand(context)) ||
+        (!manager.isCompleted(BUST_TUTORIAL_ID) && hasBustHand(context))
+    );
+};
+
+export const shouldPromptStandNow = (context: any, options?: StandPromptOptions) => {
     if (!context || context.phase !== 'playing' || context.isInitialDeal) return false;
     if (context.isDealerPlaying) return false;
     if (context.interactionMode && context.interactionMode !== 'default') return false;
+    if (isOutcomeTutorialPending(context)) return false;
 
     const hands = Array.isArray(context.playerHands) ? context.playerHands : [];
     if (hands.length === 0) return false;
@@ -24,7 +49,7 @@ export const shouldPromptStandNow = (context: any) => {
     if (!allStandReady) return false;
 
     const allUnplayable = hands.every((hand: any) => hand.isBust || hand.isHeld || hand.blackjackValue === 21);
-    if (allUnplayable) return false;
+    if (allUnplayable && !options?.allowAllUnplayable) return false;
 
     const drawnCards = Array.isArray(context.drawnCards) ? context.drawnCards : [];
     const isDrawAreaClear = drawnCards.length === 0 || drawnCards.every((card: any) => card === null);
@@ -118,11 +143,11 @@ export const ATLANTIC_CITY_TUTORIAL_STEPS: TutorialStep[] = [
         autoTrigger: true,
         startDelayMs: 500,
         blockInputDuringDelay: true,
-        condition: shouldPromptStandNow
+        condition: (context: any) => shouldPromptStandNow(context, { allowAllUnplayable: true })
     },
     {
         id: 'dealer_turn',
-        text: "Now the Dealer's Turn",
+        text: "Dealer's Turn",
         completionType: 'custom',
         scope: 'session',
         scrim: 'none',
@@ -161,15 +186,30 @@ export const ATLANTIC_CITY_TUTORIAL_STEPS: TutorialStep[] = [
         scrim: 'none',
         completionType: 'custom',
         scope: 'session',
-        autoTrigger: false,
+        autoTrigger: true,
         waitForEventId: 'deal_action_available',
         completeOnEventId: 'hud_draws_decremented',
+        completeDelayMs: 500,
         condition: (context: any) => {
             const totalScore = context?.totalScore ?? 0;
             const targetScore = context?.targetScore ?? 0;
             const handsRemaining = context?.handsRemaining ?? 0;
             return totalScore < targetScore && handsRemaining > 0;
         }
+    },
+    {
+        id: NEXT_CASINO_TUTORIAL_ID,
+        text: "You Repaid Your Debt\n\nLet's Get Out of Here",
+        highlight: { elementId: 'next-casino-button', type: 'rect', padding: 8 },
+        scrim: 'none',
+        completionType: 'custom',
+        scope: 'session',
+        autoTrigger: true,
+        condition: (context: any) => (
+            context.phase === 'round_over' &&
+            context.round === 1 &&
+            (context.totalScore ?? 0) >= (context.targetScore ?? 0)
+        )
     },
     {
         id: 'lost_all_hands',
@@ -182,7 +222,7 @@ export const ATLANTIC_CITY_TUTORIAL_STEPS: TutorialStep[] = [
             context.playerHands.every((hand: any) => hand.outcome === 'loss')
     },
     {
-        id: 'viginti_first',
+        id: VIGINTI_TUTORIAL_ID,
         text: "You got Viginti\n\nExactly 21 Always Wins",
         highlight: { elementId: 'player-hand-0', type: 'rect', padding: 8 },
         completionType: 'click',
@@ -192,7 +232,7 @@ export const ATLANTIC_CITY_TUTORIAL_STEPS: TutorialStep[] = [
         condition: (context: any) => context.playerHands?.some((hand: any) => hand.blackjackValue === 21 && !hand.isBust)
     },
     {
-        id: 'bust_first',
+        id: BUST_TUTORIAL_ID,
         text: "You Busted this Hand\n\nDon't Go Over 21",
         highlight: { elementId: 'player-hand-0', type: 'rect', padding: 8 },
         completionType: 'click',

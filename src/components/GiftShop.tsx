@@ -1,287 +1,374 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import Matter from 'matter-js';
 import { useGameStore } from '../store/gameStore';
 import { RelicManager } from '../logic/relics/manager';
-import { CITY_DEFINITIONS } from '../logic/cities/definitions';
-import { PlayingCard } from './PlayingCard';
+import { getRelicRarityFrameColor } from '../logic/relics/rarity';
+import { TransparentImage } from './TransparentImage';
 import { RelicTooltip } from './RelicTooltip';
-import { BonusPhysics } from './BonusPhysics';
+import { PlayingCard } from './PlayingCard';
 import { useLayout } from './ResponsiveLayout';
-import { createPortal } from 'react-dom';
 import styles from './GiftShop.module.css';
 
-export const GiftShop: React.FC = () => {
-    const { comps, inventory, shopItems, buyShopItem, leaveShop, shopRewardSummary, round, selectedCityId, winGame } = useGameStore();
-    const hasDoubleDownRelic = inventory.some(r => r.id === 'double_down');
-    const hasSurrenderRelic = inventory.some(r => r.id === 'surrender');
-    const [hoveredItemId, setHoveredItemId] = useState<string | null>(null);
-    const [hoveredCardPos, setHoveredCardPos] = useState<{ x: number, y: number, width: number } | null>(null);
-    const [introStep, setIntroStep] = useState(0);
+interface GiftShopProps {
+    onOpenDeckRemoval: () => void;
+    onOpenEnhanceCards: () => void;
+}
 
-    const currentCity = CITY_DEFINITIONS.find(c => c.id === selectedCityId) || CITY_DEFINITIONS[0];
-    const isLastCasino = round >= currentCity.casinoTargets.length;
+export const GiftShop: React.FC<GiftShopProps> = ({ onOpenDeckRemoval, onOpenEnhanceCards }) => {
+    const { shopItems, buyShopItem, comps } = useGameStore();
 
-    React.useEffect(() => {
-        // Start sequence
-        const seq = async () => {
-            // Step 1: Text
-            setIntroStep(1);
-            await new Promise(r => setTimeout(r, 1500)); // Slower
-            // Step 2: Deals
-            setIntroStep(2);
-            await new Promise(r => setTimeout(r, 1200)); // Slower
-            // Step 3: Surrender (If owned)
-            if (hasSurrenderRelic) {
-                setIntroStep(3);
-                await new Promise(r => setTimeout(r, 1200));
-            }
-            // Step 3.5: Double Down (If owned)
-            if (hasDoubleDownRelic) {
-                setIntroStep(3.5);
-                await new Promise(r => setTimeout(r, 1200));
-            }
-            // Step 4: Win
-            setIntroStep(4);
-            await new Promise(r => setTimeout(r, 2000)); // Hold full result
-            // Step 5: Fade Out
-            setIntroStep(5);
-            await new Promise(r => setTimeout(r, 1000)); // Fade duration
-            // Step 6: Shop
-            setIntroStep(6);
+    const signRef = useRef<HTMLDivElement>(null);
+    const rope1Ref = useRef<SVGPolylineElement>(null);
+    const rope2Ref = useRef<SVGPolylineElement>(null);
+
+    const { viewportWidth, viewportHeight, scale } = useLayout();
+    const layoutRef = useRef({ viewportWidth, viewportHeight, scale });
+
+    useEffect(() => {
+        layoutRef.current = { viewportWidth, viewportHeight, scale };
+    }, [viewportWidth, viewportHeight, scale]);
+
+    useEffect(() => {
+        const signEl = signRef.current;
+        if (!signEl) return;
+
+        const { Engine, Bodies, Composite, Constraint } = Matter;
+        const engine = Engine.create({
+            positionIterations: 10,
+            velocityIterations: 10
+        });
+        const world = engine.world;
+
+        const initialLayout = layoutRef.current;
+        const signRect = signEl.getBoundingClientRect();
+        const width = (signRect.width / initialLayout.scale) || 400;
+        const height = (signRect.height / initialLayout.scale) || 120;
+        const startX = initialLayout.viewportWidth / 2;
+        const startY = -250;
+        const noCollisionGroup = -1;
+
+        const signBody = Bodies.rectangle(startX, startY, width, height, {
+            restitution: 0,
+            frictionAir: 0.01,
+            density: 1.5,
+            collisionFilter: { group: noCollisionGroup }
+        });
+
+        const ropeAnchorY = 0;
+        const anchorOffset = width / 2 - 30;
+
+        const getAnchorPositions = (curWidth: number) => {
+            const centerX = curWidth / 2;
+            return {
+                left: { x: centerX - anchorOffset, y: ropeAnchorY },
+                right: { x: centerX + anchorOffset, y: ropeAnchorY }
+            };
         };
 
-        // If we don't have a summary (e.g. debug enter), skip
-        if (!shopRewardSummary) {
-            setIntroStep(6);
-        } else {
-            seq();
-        }
-    }, [shopRewardSummary]);
+        const initialAnchors = getAnchorPositions(initialLayout.viewportWidth);
 
-    const { viewportWidth, scale } = useLayout();
+        const segmentSize = 10;
+        const segmentW = 4;
 
-    // Helper to get tooltip content for an item
-    const renderTooltip = (item: typeof shopItems[0]) => {
-        if (item.type === 'Card' && item.card) {
-            if (item.card.specialEffect) {
-                const { type, value } = item.card.specialEffect;
-                const desc = `Special Card:\n${type === 'chip' ? `+${value} Chips` : type === 'mult' ? `x${value} Mult` : `-${value} Debt`}`;
-                return (
-                    <div className={styles.tooltipContainer}>
-                        <div className={styles.tooltipTitle}>Enhanced Card</div>
-                        <div className={styles.tooltipDesc}>{desc}</div>
-                    </div>
-                );
+        const createRopeChain = (segments: number, sX: number, sY: number) => {
+            const bodies: Matter.Body[] = [];
+            for (let i = 0; i < segments; i++) {
+                const body = Bodies.rectangle(sX, sY + i * 5, segmentW, segmentSize, {
+                    collisionFilter: { group: noCollisionGroup },
+                    frictionAir: 0.05,
+                    density: 8,
+                    render: { visible: false }
+                });
+                bodies.push(body);
             }
-            return null; // Return null for standard cards - portal will check this
-        } else {
-            // Relic
-            const config = RelicManager.getRelicConfig(item.id);
-            if (!config) return null;
+            const constraints: Matter.Constraint[] = [];
+            for (let i = 0; i < bodies.length - 1; i++) {
+                constraints.push(Constraint.create({
+                    bodyA: bodies[i],
+                    bodyB: bodies[i + 1],
+                    pointA: { x: 0, y: segmentSize / 2 },
+                    pointB: { x: 0, y: -segmentSize / 2 },
+                    stiffness: 1,
+                    damping: 0.1,
+                    length: 0
+                }));
+            }
+            return { bodies, constraints };
+        };
+
+        const leftSegments = 15;
+        const rightSegments = 12;
+
+        const ropeL = createRopeChain(leftSegments, initialAnchors.left.x, startY);
+        const ropeR = createRopeChain(rightSegments, initialAnchors.right.x, startY);
+
+        const attachToAnchor = (rope: { bodies: Matter.Body[] }, anchor: { x: number; y: number }) => {
+            return Constraint.create({
+                bodyB: rope.bodies[0],
+                pointB: { x: 0, y: -segmentSize / 2 },
+                pointA: { ...anchor },
+                stiffness: 1,
+                damping: 0.1,
+                length: 0
+            });
+        };
+
+        const signAttachLeftLocal = { x: -anchorOffset, y: -height / 2 + 10 };
+        const signAttachRightLocal = { x: anchorOffset, y: -height / 2 + 10 };
+
+        const attachToSign = (rope: { bodies: Matter.Body[] }, signPoint: { x: number; y: number }) => {
+            return Constraint.create({
+                bodyA: rope.bodies[rope.bodies.length - 1],
+                pointA: { x: 0, y: segmentSize / 2 },
+                bodyB: signBody,
+                pointB: signPoint,
+                stiffness: 1,
+                damping: 0.1,
+                length: 0
+            });
+        };
+
+        const cL1 = attachToAnchor(ropeL, initialAnchors.left);
+        const cL2 = attachToSign(ropeL, signAttachLeftLocal);
+        const cR1 = attachToAnchor(ropeR, initialAnchors.right);
+        const cR2 = attachToSign(ropeR, signAttachRightLocal);
+
+        Composite.add(world, [
+            signBody,
+            ...ropeL.bodies, ...ropeL.constraints, cL1, cL2,
+            ...ropeR.bodies, ...ropeR.constraints, cR1, cR2
+        ]);
+
+        let reqId: number;
+        const runner = () => {
+            const { viewportWidth } = layoutRef.current;
+
+            const currentAnchors = getAnchorPositions(viewportWidth);
+            cL1.pointA.x = currentAnchors.left.x;
+            cL1.pointA.y = currentAnchors.left.y;
+            cR1.pointA.x = currentAnchors.right.x;
+            cR1.pointA.y = currentAnchors.right.y;
+
+            Engine.update(engine, 1000 / 60);
+
+            if (signEl) {
+                const { x, y } = signBody.position;
+                const angle = signBody.angle;
+                signEl.style.transform = `translate3d(${x - width / 2}px, ${y - height / 2}px, 0) rotate(${angle}rad)`;
+            }
+
+            const drawRope = (bodies: Matter.Body[], ref: SVGPolylineElement | null, anchor: { x: number; y: number }) => {
+                if (!ref) return;
+                let pts = `${anchor.x},${anchor.y}`;
+                bodies.forEach(b => {
+                    pts += ` ${b.position.x},${b.position.y}`;
+                });
+                ref.setAttribute('points', pts);
+            };
+
+            drawRope(ropeL.bodies, rope1Ref.current, cL1.pointA);
+            drawRope(ropeR.bodies, rope2Ref.current, cR1.pointA);
+
+            reqId = requestAnimationFrame(runner);
+        };
+        runner();
+
+        return () => {
+            cancelAnimationFrame(reqId);
+            Matter.World.clear(world, false);
+            Matter.Engine.clear(engine);
+        };
+    }, []);
+
+    const charms = shopItems.filter(i => i.type === 'Charm');
+    const angles = shopItems.filter(i => i.type === 'Angle');
+    const cards = shopItems.filter(i => i.type === 'Card');
+    const hasNoCharms = charms.length === 0;
+    const hasNoAngles = angles.length === 0;
+    const hasNoCards = cards.length === 0;
+
+    const [hoveredId, setHoveredId] = useState<string | null>(null);
+
+    const renderItem = (item: typeof shopItems[number]) => {
+        const isSoldCharm = item.type === 'Charm' && item.purchased;
+
+        if (item.purchased && !isSoldCharm) {
+            return <div className={styles.emptySlot} />;
+        }
+
+        const canAfford = comps >= item.cost;
+
+        if (item.type === 'Card' && item.card) {
+            const isHovered = hoveredId === item.id;
+            const isDisabled = !canAfford;
 
             return (
-                <div className={styles.tooltipWrapper}>
-                    <RelicTooltip
-                        relic={config}
-                        displayValues={config.properties}
-                        hideIcon={false}
-                        isFlexible={true}
-                        className={styles.shopTooltip}
-                    />
+                <div
+                    key={item.id}
+                    onClick={() => {
+                        if (!isDisabled) buyShopItem(item.id);
+                    }}
+                    onMouseEnter={() => setHoveredId(item.id)}
+                    onMouseLeave={() => setHoveredId(null)}
+                    className={`${styles.cardSlot} ${isDisabled ? styles.itemDisabled : ''}`}
+                    style={{
+                        transform: isHovered && !isDisabled ? 'scale(1.05)' : 'scale(1)',
+                        cursor: isDisabled ? 'not-allowed' : 'pointer',
+                        zIndex: isHovered ? 2000 : 1
+                    }}
+                >
+                    <div className={styles.cardWrapper}>
+                        <PlayingCard card={item.card} isDrawn={true} suppressEnterAnimation />
+                    </div>
+                    <div className={`${styles.priceTag} ${!canAfford ? styles.priceTagLocked : ''}`}>
+                        ₵{item.cost}
+                    </div>
                 </div>
             );
         }
-    };
 
-    const renderTooltipPortal = (item: typeof shopItems[0]) => {
-        if (!hoveredCardPos) return null;
+        const config = RelicManager.getRelicConfig(item.id);
+        if (!config) return null;
 
-        const portalRoot = document.getElementById('tooltip-portal-root');
-        if (!portalRoot) return null;
+        const isHovered = hoveredId === item.id;
+        const isAngle = item.type === 'Angle';
+        const isDisabled = !canAfford || isSoldCharm;
+        const borderStyle = isDisabled
+            ? '3px solid #555'
+            : `3px solid ${getRelicRarityFrameColor(config.rarity)}`;
 
-        const content = renderTooltip(item);
-        if (!content) return null; // Suppress empty tooltips
-
-        // Calculate shiftX to keep on screen
-        const cardCenterX = hoveredCardPos.x + (hoveredCardPos.width / 2);
-        
-        // Tooltip max-width is 380px
-        const maxTooltipWidth = 380;
-        const halfTooltip = maxTooltipWidth / 2;
-        
-        let shiftX = 0;
-        if (cardCenterX - halfTooltip < 10) {
-            shiftX = 10 - (cardCenterX - halfTooltip);
-        } else if (cardCenterX + halfTooltip > viewportWidth - 10) {
-            shiftX = (viewportWidth - 10) - (cardCenterX + halfTooltip);
-        }
-
-        return createPortal(
-            <div 
-                className={styles.hoverOverlay}
-                style={{ 
-                    position: 'absolute',
-                    left: cardCenterX,
-                    top: hoveredCardPos.y - 25, // Increased offset to float higher above the card
-                    bottom: 'auto',
-                    pointerEvents: 'none',
-                    // @ts-ignore
-                    '--shift-x': `${shiftX}px` 
+        return (
+            <div
+                key={item.id}
+                className={styles.relicRow}
+                style={{
+                    zIndex: isHovered ? 2000 : 1,
+                    pointerEvents: isDisabled ? 'none' : 'auto',
+                    filter: isSoldCharm ? 'grayscale(0.45) brightness(0.7)' : (isDisabled ? 'grayscale(1) brightness(0.4)' : 'none')
                 }}
             >
-                {content}
-            </div>,
-            portalRoot
+                {isHovered && !isSoldCharm && (
+                    <RelicTooltip
+                        relic={config}
+                        displayValues={config.properties || {}}
+                        hideIcon={true}
+                        layout="horizontal"
+                        direction={isAngle ? 'rtl' : 'ltr'}
+                        isRightAligned={isAngle}
+                        style={{
+                            position: 'absolute',
+                            top: -11,
+                            left: isAngle ? 'auto' : -21,
+                            right: isAngle ? -21 : 'auto',
+                            pointerEvents: 'none'
+                        }}
+                    />
+                )}
+                <div
+                    onClick={() => {
+                        if (!isDisabled) buyShopItem(item.id);
+                    }}
+                    onMouseEnter={() => setHoveredId(item.id)}
+                    onMouseLeave={() => setHoveredId(null)}
+                    className={`${styles.itemButton} ${isAngle ? styles.itemButtonAngle : ''} ${isSoldCharm ? styles.itemButtonSold : ''}`}
+                    style={{
+                        transform: 'scale(1)',
+                        cursor: isDisabled ? 'not-allowed' : 'pointer'
+                    }}
+                >
+                    <div
+                        className={styles.itemIconCircle}
+                        style={{ border: borderStyle }}
+                    >
+                        {config.icon ? (
+                            config.icon.includes('.') || config.icon.includes('/') ? (
+                                <TransparentImage
+                                    src={config.icon}
+                                    alt={config.name}
+                                    threshold={250}
+                                    style={{ width: '85%', height: '85%', objectFit: 'contain' }}
+                                />
+                            ) : (
+                                <div className={styles.itemEmojiIcon}>{config.icon}</div>
+                            )
+                        ) : (
+                            <div className={styles.itemEmojiIcon}>{config.name.substring(0, 2).toUpperCase()}</div>
+                        )}
+                    </div>
+
+                    <div className={styles.itemLabel}>
+                        {config.handType?.name || config.name}
+                    </div>
+
+                    <div
+                        className={`${styles.itemCost} ${isAngle ? styles.itemCostRight : styles.itemCostLeft} ${isSoldCharm ? styles.itemCostSold : ''} ${!canAfford && !isSoldCharm ? styles.itemCostLocked : ''}`}
+                    >
+                        {isSoldCharm ? 'SOLD' : `₵${item.cost}`}
+                    </div>
+                </div>
+            </div>
         );
     };
 
     return (
-        <div className={styles.container}>
-            {/* Intro Overlay */}
-            {introStep < 6 && (
-                <div
-                    className={`${styles.introOverlay} ${introStep === 5 ? styles.fadeOut : ''}`}
-                    style={introStep === 5 ? { opacity: 0, transition: 'opacity 1s ease-out' } : {}}
-                >
-                    <BonusPhysics />
-                    <div style={{ zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                        {introStep >= 1 && (
-                            <div className={styles.introTextMain}>CASINO CLEARED</div>
-                        )}
+        <div className={styles.giftShopContainer}>
+            <svg className={styles.ropesLayer}>
+                <polyline ref={rope1Ref} fill="none" stroke="#8d6e63" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+                <polyline ref={rope2Ref} fill="none" stroke="#8d6e63" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
 
-                        {introStep >= 1 && (
-                            <div className={styles.compBonusHeader} style={{ fontSize: '1.5rem', color: '#ffd700', marginTop: 20, marginBottom: 10, opacity: introStep >= 2 ? 1 : 0, transition: 'opacity 0.5s' }}>
-                                COMP BONUS
-                            </div>
-                        )}
-
-                        {introStep >= 2 && shopRewardSummary && (
-                            <div className={styles.bonusLine}>
-                                <span className={styles.bonusLabel}>Deals Bonus</span>
-                                <span className={styles.bonusValue}>+₵{shopRewardSummary.dealsBonus}</span>
-                            </div>
-                        )}
-
-                        {introStep >= 3 && shopRewardSummary && hasSurrenderRelic && (
-                            <div className={styles.bonusLine}>
-                                <span className={styles.bonusLabel}>Surrenders Bonus</span>
-                                <span className={styles.bonusValue}>+₵{shopRewardSummary.surrenderBonus}</span>
-                            </div>
-                        )}
-
-                        {introStep >= 3.5 && shopRewardSummary && hasDoubleDownRelic && (
-                            <div className={styles.bonusLine}>
-                                <span className={styles.bonusLabel}>Double Down Bonus</span>
-                                <span className={styles.bonusValue}>+₵{shopRewardSummary.doubleDownBonus}</span>
-                            </div>
-                        )}
-
-                        {introStep >= 4 && shopRewardSummary && (
-                            <div className={styles.bonusLine}>
-                                <span className={styles.bonusLabel}>Win Bonus</span>
-                                <span className={styles.bonusValue}>+₵{shopRewardSummary.winBonus}</span>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            )}
-
-
-            <h1 className={styles.title}>CHOOSE YOUR REWARD</h1>
-
-            <div className={styles.choicesContainer} style={{ maxWidth: '90vw' }}>
-                {shopItems.map((item) => {
-                    const cost = item.cost;
-                    const canAfford = comps >= cost && !item.purchased;
-
-                    // Determine content based on type
-                    let content = null;
-                    let title = '';
-                    let styleClass = '';
-
-                    if (item.type === 'Card' && item.card) {
-                        styleClass = styles.cardTypeCard;
-                        title = 'New Card';
-                        content = (
-                            <div style={{ transform: 'scale(0.8)', pointerEvents: 'none' }}>
-                                <PlayingCard card={item.card} isDrawn={true} suppressSpecialVisuals={false} />
-                            </div>
-                        );
-                    } else {
-                        // Relic (Angle/Charm)
-                        const config = RelicManager.getRelicConfig(item.id);
-                        if (config) {
-                            title = item.nameOverride || config.name;
-                            styleClass = item.type === 'Angle' ? styles.cardTypeAngle : styles.cardTypeCharm;
-
-                            if (config.icon) {
-                                if (config.icon.includes('.') || config.icon.includes('/')) {
-                                    content = (
-                                        <div style={{ width: 100, height: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', overflow: 'hidden' }}>
-                                            <img src={config.icon} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                        </div>
-                                    );
-                                } else {
-                                    content = <div style={{ fontSize: '4rem', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 100, height: 100 }}>{config.icon}</div>;
-                                }
-                            } else {
-                                content = <div style={{ fontSize: '3rem' }}>{item.type === 'Angle' ? '📐' : '🧿'}</div>;
-                            }
-                        }
-                    }
-
-                    return (
-                        <div
-                            key={item.id}
-                            className={`${styles.choiceCard} ${styleClass} ${(!canAfford || item.purchased) ? styles.disabled : ''}`}
-                            onClick={() => {
-                                if (canAfford && !item.purchased) {
-                                    buyShopItem(item.id);
-                                }
-                            }}
-                            onMouseEnter={(e) => {
-                                setHoveredItemId(item.id);
-                                // Calculate position relative to game board
-                                const wrapper = document.getElementById('game-scale-wrapper');
-                                if (wrapper) {
-                                    const wrapperRect = wrapper.getBoundingClientRect();
-                                    const cardRect = e.currentTarget.getBoundingClientRect();
-                                    setHoveredCardPos({
-                                        x: (cardRect.left - wrapperRect.left) / scale,
-                                        y: (cardRect.top - wrapperRect.top) / scale,
-                                        width: cardRect.width / scale
-                                    });
-                                }
-                            }}
-                            onMouseLeave={() => {
-                                setHoveredItemId(null);
-                                setHoveredCardPos(null);
-                            }}
-                        >
-                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                                {content}
-                            </div>
-
-                            <div className={styles.cardTitle}>{title}</div>
-                            {item.purchased ? (
-                                <div className={styles.costContainer} style={{ borderColor: '#4ade80' }}>
-                                    <span className={styles.costValue} style={{ color: '#4ade80' }}>OWNED</span>
-                                </div>
-                            ) : (
-                                <div className={styles.costContainer}>
-                                    <span className={styles.costValue}>₵{cost}</span>
-                                </div>
-                            )}
-
-                            {/* Tooltip via Portal */}
-                            {hoveredItemId === item.id && renderTooltipPortal(item)}
-                        </div>
-                    );
-                })}
+            <div ref={signRef} className={styles.signContainer}>
+                <div className={styles.signText}>Gift Shop</div>
             </div>
 
-            <button className={styles.leaveButton} onClick={isLastCasino ? winGame : leaveShop}>
-                {isLastCasino ? 'VICTORY' : 'LEAVE SHOP'}
-            </button>
+            <div className={styles.shelvesContainer}>
+                <div className={styles.leftShelf}>
+                    <div className={styles.zoneHeader}>CHARMS</div>
+                    <div className={styles.charmsList}>
+                        {charms.map(item => (
+                            <div key={item.id} className={styles.itemSlot}>
+                                {renderItem(item)}
+                            </div>
+                        ))}
+                        {hasNoCharms && <div className={styles.soldOutStamp}>SOLD OUT</div>}
+                    </div>
+                    <button
+                        className={styles.shopEnhanceButton}
+                        onClick={onOpenEnhanceCards}
+                        style={{ marginBottom: 10 }}
+                    >
+                        ENHANCE CARDS
+                    </button>
+                    <button
+                        className={styles.shopTrashButton}
+                        onClick={onOpenDeckRemoval}
+                    >
+                        REMOVE CARDS
+                    </button>
+                </div>
+
+                <div className={styles.rightShelf}>
+                    <div className={styles.anglesZone}>
+                        <div className={styles.zoneHeader}>ANGLES</div>
+                        <div className={styles.anglesList}>
+                            {angles.map(item => (
+                                <div key={item.id} className={styles.itemSlot}>
+                                    {renderItem(item)}
+                                </div>
+                            ))}
+                            {hasNoAngles && <div className={styles.soldOutStamp}>SOLD OUT</div>}
+                        </div>
+                    </div>
+                    <div className={styles.cardsZone}>
+                        {cards.map(item => (
+                            <div key={item.id} className={styles.itemSlot}>
+                                {renderItem(item)}
+                            </div>
+                        ))}
+                        {hasNoCards && <div className={styles.soldOutStamp}>SOLD OUT</div>}
+                    </div>
+                </div>
+            </div>
         </div>
     );
 };

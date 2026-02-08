@@ -204,7 +204,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     // Actions
     {
         name: 'Double Down',
-        rarity: 'Uncommon',
+        rarity: 'Rare',
         categories: ['Charm', 'Action'],
         description: 'Double Down earns {hand.score}',
         handType: { id: 'double_down', name: 'Double Down', chips: 0, mult: 1, order: 1.5 },
@@ -221,7 +221,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     },
     {
         name: 'Surrender',
-        rarity: 'Uncommon',
+        rarity: 'Rare',
         categories: ['Charm', 'Action'],
         description: 'Surrender a hand to discard it',
         tableAction: {
@@ -236,7 +236,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     },
     {
         name: 'Discard',
-        rarity: 'Uncommon',
+        rarity: 'Rare',
         categories: ['Charm', 'Action'],
         description: 'Discard a card from any live hand\nCharges on busts and losses. Costs 3 charges.',
         tableAction: {
@@ -251,7 +251,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     },
     {
         name: 'Redraw',
-        rarity: 'Uncommon',
+        rarity: 'Rare',
         categories: ['Charm', 'Action'],
         description: 'Redraw a card from the draw area\nThree uses per casino',
         tableAction: {
@@ -266,7 +266,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     },
     {
         name: 'Hold',
-        rarity: 'Uncommon',
+        rarity: 'Rare',
         categories: ['Charm', 'Action'],
         description: 'Hold a drawn card for later placement\nOne use per casino',
         tableAction: {
@@ -282,7 +282,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     },
     {
         name: 'Switch',
-        rarity: 'Uncommon',
+        rarity: 'Rare',
         categories: ['Charm', 'Action'],
         description: 'Swap a player card with the dealer face-up card\nOne use per casino',
         tableAction: {
@@ -310,7 +310,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     },
     {
         name: 'Soap',
-        rarity: 'Uncommon',
+        rarity: 'Common',
         categories: ['Charm', 'Flush'],
         description: '[Flushes] earn an extra $${bonus_chips}',
         properties: { bonus_chips: 15 },
@@ -329,7 +329,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     },
     {
         name: 'Medal',
-        rarity: 'Uncommon',
+        rarity: 'Common',
         categories: ['Charm', 'Rank'],
         description: '[Rank] hands earn an extra $${bonus_chips}',
         properties: { bonus_chips: 15 },
@@ -349,7 +349,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     },
     {
         name: 'Protractor',
-        rarity: 'Uncommon',
+        rarity: 'Common',
         categories: ['Charm', 'Straight'],
         description: '[Straights] earn an extra $${bonus_chips}',
         properties: { bonus_chips: 15 },
@@ -359,7 +359,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     // Suits
     {
         name: 'Old Receipt',
-        rarity: 'Uncommon',
+        rarity: 'Common',
         categories: ['Charm', 'Suite', 'Diamonds'],
         description: 'Each [Diamond] in winning hands earn $${bonus_chips}',
         properties: { bonus_chips: 5 },
@@ -368,7 +368,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     },
     {
         name: 'Lucky Rock',
-        rarity: 'Uncommon',
+        rarity: 'Common',
         categories: ['Charm', 'Suite', 'Hearts'],
         description: 'Each [Hearts] in winning hands earn $${bonus_chips}',
         properties: { bonus_chips: 5 },
@@ -377,7 +377,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     },
     {
         name: 'Burnt Match',
-        rarity: 'Uncommon',
+        rarity: 'Common',
         categories: ['Charm', 'Suite', 'Clubs'],
         description: 'Each [Club] in winning hands earn $${bonus_chips}',
         properties: { bonus_chips: 5 },
@@ -386,7 +386,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     },
     {
         name: 'Lost Key',
-        rarity: 'Uncommon',
+        rarity: 'Common',
         categories: ['Charm', 'Suite', 'Spades'],
         description: 'Each [Spade] in winning hands earn $${bonus_chips}',
         properties: { bonus_chips: 5 },
@@ -423,7 +423,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     },
     {
         name: 'Joker',
-        rarity: 'Uncommon',
+        rarity: 'Rare',
         categories: ['Charm', 'Cards'],
         description: '[Jacks] are worth 10 or 5 to win',
         hooks: Hooks.joker_adjust_bj,
@@ -432,7 +432,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     // Hands
     {
         name: 'Feather',
-        rarity: 'Uncommon',
+        rarity: 'Common',
         categories: ['charm', 'Hands'],
         description: 'When all hands have the same number of cards, earn $${bonus_chips}',
         properties: { bonus_chips: 200 },
@@ -441,7 +441,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     },
     {
         name: 'Odd Sock',
-        rarity: 'Uncommon',
+        rarity: 'Common',
         categories: ['Charm', 'Hands'],
         description: 'When all hands have two cards, earn $${bonus_chips}',
         properties: { bonus_chips: 200 },
@@ -450,7 +450,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     },
     {
         name: 'High Roller',
-        rarity: 'Uncommon',
+        rarity: 'Common',
         categories: ['Charm', 'Hands'],
         description: 'Winning all three hands earns $${amount}',
         properties: { amount: 10 },
@@ -468,7 +468,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     },
     {
         name: 'Royalty',
-        rarity: 'Uncommon',
+        rarity: 'Common',
         categories: ['Charm', 'Hands'],
         description: 'Hands with two [Face] cards earn $${amount}',
         properties: { amount: 10 },
@@ -497,7 +497,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     },
     {
         name: 'Mini Shoe',
-        rarity: 'Uncommon',
+        rarity: 'Common',
         categories: ['Charm', 'Global'],
         description: 'Earn an extra $${bonus_chips}',
         properties: { bonus_chips: 20 },
@@ -515,7 +515,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     },
     {
         name: 'Key Ring',
-        rarity: 'Uncommon',
+        rarity: 'Common',
         categories: ['Charm', 'Global'],
         description: 'On final draw, earn x${bonus_mult}',
         properties: { bonus_mult: 0.5 },
@@ -525,7 +525,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     // Meta
     {
         name: 'Deft',
-        rarity: 'Uncommon',
+        rarity: 'Rare',
         categories: ['Charm', 'Meta'],
         description: 'Extra draw per Casino',
         properties: { extra_draws: 1 },
@@ -534,7 +534,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     },
     {
         name: 'Photocopier',
-        rarity: 'Uncommon',
+        rarity: 'Rare',
         categories: ['Charm', 'Meta'],
         description: 'Draw +{extra_draws} card each time you draw',
         properties: { extra_draws: 1 },
@@ -543,7 +543,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     },
     {
         name: 'Second Chance',
-        rarity: 'Uncommon',
+        rarity: 'Rare',
         categories: ['Charm', 'Meta'],
         description: 'If you Bust, next draw is +{extra_draw} cards and place {extra_place} card',
         properties: { extra_draw: 2, extra_place: 1, pending_bonus: false, active_bonus: false },
@@ -561,7 +561,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     },
     {
         name: 'Mulligan',
-        rarity: 'Uncommon',
+        rarity: 'Rare',
         categories: ['Charm', 'Meta'],
         description: 'Once per round, if you Bust, discard the last card',
         properties: { used_this_round: false },
@@ -570,7 +570,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     },
     {
         name: 'Spyglass',
-        rarity: 'Uncommon',
+        rarity: 'Common',
         categories: ['Charm', 'Meta'],
         description: 'If a hand reaches 13, reveal the Dealer\'s hidden card',
         properties: { used_this_round: false },
