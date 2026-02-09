@@ -313,7 +313,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
         rarity: 'Common',
         categories: ['Charm', 'Flush'],
         description: '[Flushes] earn an extra $${bonus_chips}',
-        properties: { bonus_chips: 15 },
+        properties: { bonus_chips: 10 },
         hooks: Hooks.flusher_chips,
         icon: '🧼'
     },
@@ -323,7 +323,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
         rarity: 'Uncommon',
         categories: ['Charm', 'Rank'],
         description: '[Rank] hands earn an extra x${bonus_mult}',
-        properties: { bonus_mult: 0.5 },
+        properties: { bonus_mult: 2 },
         hooks: Hooks.rank_mult,
         icon: '📛'
     },
@@ -332,7 +332,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
         rarity: 'Common',
         categories: ['Charm', 'Rank'],
         description: '[Rank] hands earn an extra $${bonus_chips}',
-        properties: { bonus_chips: 15 },
+        properties: { bonus_chips: 30 },
         hooks: Hooks.rank_chips,
         icon: '🏅'
     },
@@ -342,7 +342,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
         rarity: 'Uncommon',
         categories: ['Charm', 'Straight'],
         description: '[Straights] earn an extra x${bonus_mult}',
-        properties: { bonus_mult: 0.5 },
+        properties: { bonus_mult: 1.0 },
         hooks: Hooks.straight_mult,
         icon: '📏'
 
@@ -399,7 +399,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
         rarity: 'Uncommon',
         categories: ['Charm', 'Cards'],
         description: 'Each [9] in winning hands earn x${bonus_mult}',
-        properties: { bonus_mult: 0.5 },
+        properties: { bonus_mult: 1 },
         hooks: Hooks.star_bead_nines,
         icon: '⭐️'
     },
@@ -417,7 +417,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
         rarity: 'Uncommon',
         categories: ['Charm', 'Cards'],
         description: 'Each [King] in winning hands earn x${bonus_mult}',
-        properties: { bonus_mult: 0.5 },
+        properties: { bonus_mult: 1},
         hooks: Hooks.lucky_acorn_kings,
         icon: '🌰'
     },
@@ -435,7 +435,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
         rarity: 'Common',
         categories: ['charm', 'Hands'],
         description: 'When all hands have the same number of cards, earn $${bonus_chips}',
-        properties: { bonus_chips: 200 },
+        properties: { bonus_chips: 100 },
         hooks: Hooks.feather_same_hand_size,
         icon: '🪶'
     },
@@ -444,7 +444,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
         rarity: 'Common',
         categories: ['Charm', 'Hands'],
         description: 'When all hands have two cards, earn $${bonus_chips}',
-        properties: { bonus_chips: 200 },
+        properties: { bonus_chips: 100 },
         hooks: Hooks.odd_sock_two_cards,
         icon: '🧦'
     },
@@ -453,7 +453,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
         rarity: 'Common',
         categories: ['Charm', 'Hands'],
         description: 'Winning all three hands earns $${amount}',
-        properties: { amount: 10 },
+        properties: { amount: 100 },
         hooks: Hooks.high_roller_win_all,
         icon: '🎩'
     },
@@ -471,7 +471,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
         rarity: 'Common',
         categories: ['Charm', 'Hands'],
         description: 'Hands with two [Face] cards earn $${amount}',
-        properties: { amount: 10 },
+        properties: { amount: 25 },
         hooks: Hooks.royalty_face_cards,
         icon: '👑'
     },
@@ -490,8 +490,8 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
         name: 'Faded Tag',
         rarity: 'Uncommon',
         categories: ['Charm', 'Global'],
-        description: 'Earn an extra x${amount}, but decays by x2 each round',
-        properties: { amount: 10 },
+        description: 'Earn an extra x${amount}, but decreases by x${decay_amount} each round',
+        properties: { amount: 4, decay_amount: 0.5 },
         hooks: Hooks.faded_tag_bonus,
         icon: '🏷️'
     },
@@ -518,7 +518,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
         rarity: 'Common',
         categories: ['Charm', 'Global'],
         description: 'On final draw, earn x${bonus_mult}',
-        properties: { bonus_mult: 0.5 },
+        properties: { bonus_mult: 2 },
         hooks: Hooks.key_ring_final_draw,
         icon: '🗝️'
     },

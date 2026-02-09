@@ -124,6 +124,12 @@
     width: 100%;
 }
 
+/* Tint effect for non-dealer overlays so per-card highlights still work */
+.cardsContainer.tinted .cardWrapper {
+    filter: brightness(0.3);
+    transition: filter 0.3s ease, transform 0.3s ease;
+}
+
 /* Individual card lifting and restoring */
 .cardWrapper.highlighted {
     transform: rotate(var(--rotate)) translateY(calc(var(--translateY) - 14px)) !important;

@@ -23,11 +23,12 @@ interface HandProps {
   onCardSelect?: (cardId: string) => void;
   tableActionColor?: string;
   hiddenCardIds?: string[];
+  entryAnimationOverrides?: Record<string, { xOffset: number; yOffset: number; scale: number }>;
 }
 
 import { useGameStore } from '../store/gameStore';
 
-export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay = 0, stagger = true, isScoringFocus = false, isEnlarged = false, isSelected = false, id, onDealAnimationComplete, onCardDealSound, onCardFlipSound, onCardDiscardSound, selectableCardIds, onCardSelect, tableActionColor, hiddenCardIds }) => {
+export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay = 0, stagger = true, isScoringFocus = false, isEnlarged = false, isSelected = false, id, onDealAnimationComplete, onCardDealSound, onCardFlipSound, onCardDiscardSound, selectableCardIds, onCardSelect, tableActionColor, hiddenCardIds, entryAnimationOverrides }) => {
   const triggerScoringRow = useGameStore(state => state.triggerScoringRow);
   const triggerVigintiSound = useGameStore(state => state.triggerVigintiSound);
   const playScoreRowSfx = useGameStore(state => state.playScoreRowSfx);
@@ -471,6 +472,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
     (showBustOverlay || showVigintiOverlay || hand.isDoubled || (hand.finalScore !== undefined && hand.resultRevealed)) &&
     hand.cards.length > 0;
   const overlayFanDepthPx = Math.max(0, visualCards.length - 1);
+  const useOverlayScrim = isDealerHand && showOverlay;
 
   return (
     <div
@@ -520,7 +522,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
       <div
         className={`${styles.hand} ${canSelect ? styles.activeTarget : ''} ${isSelected ? styles.selected : ''}`}
       >
-        <div className={styles.cardsContainer}>
+        <div className={`${styles.cardsContainer} ${showOverlay && !useOverlayScrim ? styles.tinted : ''}`}>
           <div className={styles.cards}>
             {visualCards.map(({ card, isDiscarding, posIndex, hasEntered }, idx) => {
               // const styles = require('./Hand.module.css').default; 
@@ -583,12 +585,23 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
                 wrapperTranslateY = Math.abs((posIndex - 1) - center) * 2;
               }
 
+              const entryOverride =
+                card.origin === 'draw_pile' && !isDiscarding
+                  ? entryAnimationOverrides?.[card.id]
+                  : undefined;
+              const sourceOffsetX = entryOverride?.xOffset ?? (card.animationOffset || 0);
+              const sourceOffsetY = entryOverride?.yOffset ?? -200;
+              const sourceScale = entryOverride?.scale ?? 1.1;
+
               // Animation Coordinates (Screen Space)
-              const screenDx = isDoubleCard ? (startTxBase + 120) : (startTxBase + (card.animationOffset || 0));
-              const screenDy = isDoubleCard ? -400 : -200;
+              const screenDx = isDoubleCard ? (startTxBase + 120) : (startTxBase + sourceOffsetX);
+              const screenDy = isDoubleCard ? -400 : sourceOffsetY;
 
               // Discard Stagger Calculation
               const discardDelay = isDiscarding ? (idx * 0.1) : 0;
+              const cardDelay = isDiscarding
+                ? discardDelay
+                : (card.origin === 'deck' ? baseDelay + (stagger ? idx * 0.5 : 0) : 0);
               
               // Local Animation Coordinates (Correcting for Inner Rotation)
               // If Doubled, inner div is rotated 90deg clockwise.
@@ -631,11 +644,12 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
                       <PlayingCard
                         card={card}
                         origin={isDiscarding ? 'discard' : card.origin}
-                         delay={card.origin === 'deck' ? baseDelay + (stagger ? idx * 0.5 : 0) : discardDelay}
-                        style={{
-                          '--start-tx': `${animTx}px`,
-                          '--start-ty': `${animTy}px`
-                        } as React.CSSProperties}
+                         delay={cardDelay}
+                      style={{
+                        '--start-tx': `${animTx}px`,
+                        '--start-ty': `${animTy}px`,
+                        '--start-scale': `${sourceScale}`
+                      } as React.CSSProperties}
                         suppressSpecialVisuals={hand.id === -1}
                         suppressEnterAnimation={hasEntered}
                         onEnterAnimationEnd={handleDealAnimationEnd}
@@ -647,12 +661,11 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
                   ) : (
                     <PlayingCard
                       origin={isDiscarding ? 'discard' : card.origin}
-                      delay={card.origin === 'deck' 
-                        ? baseDelay + (stagger ? idx * 0.5 : 0) 
-                        : discardDelay}
+                      delay={cardDelay}
                       style={{
                         '--start-tx': `${screenDx}px`,
-                        '--start-ty': `${screenDy}px`
+                        '--start-ty': `${screenDy}px`,
+                        '--start-scale': `${sourceScale}`
                       } as React.CSSProperties}
                       suppressSpecialVisuals={hand.id === -1}
                       suppressEnterAnimation={hasEntered}
@@ -669,7 +682,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
             })}
           </div>
 
-          {showOverlay && (
+          {useOverlayScrim && (
             <div
               className={styles.overlayScrim}
               style={{ '--overlay-fan-depth': `${overlayFanDepthPx}px` } as React.CSSProperties}

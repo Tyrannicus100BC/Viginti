@@ -192,6 +192,7 @@ export type RoundCompletionContext = InterruptContext & {
     vigintis: number;
     runningSummary: { chips: number; mult: number };
     modifyRunningSummary: (chipsToAdd: number, multToAdd: number) => void;
+    removeRelic?: (relicId: string) => void;
     playerHands: any[]; // Avoid circular dependency with PlayerHand from main types
 }
 

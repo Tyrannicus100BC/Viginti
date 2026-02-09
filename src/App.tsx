@@ -83,6 +83,22 @@ type SwapAnimation = {
     durationMs: number;
 };
 
+type HoldPickupAnimation = {
+    card: Card;
+    drawIndex: number;
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+    dx: number;
+    dy: number;
+    fromScale: number;
+    toScale: number;
+};
+
+const HOLD_PICKUP_DURATION_MS = 360;
+const HOLD_PLACE_SOURCE_Y = -275;
+
 export default function App() {
     const {
         dealer,
@@ -191,6 +207,9 @@ export default function App() {
     const [isEnhancingCards, setIsEnhancingCards] = useState(false);
     const [isSelectingDebugCard, setIsSelectingDebugCard] = useState(false);
     const [swapAnimation, setSwapAnimation] = useState<SwapAnimation | null>(null);
+    const [holdPickupAnimation, setHoldPickupAnimation] = useState<HoldPickupAnimation | null>(null);
+    const [hiddenDrawCardIds, setHiddenDrawCardIds] = useState<string[]>([]);
+    const [entryAnimationOverrides, setEntryAnimationOverrides] = useState<Record<string, { xOffset: number; yOffset: number; scale: number }>>({});
     const [hiddenCardIds, setHiddenCardIds] = useState<string[]>([]);
     // showHandRankings removed
     const [showCasinoListing, setShowCasinoListing] = useState(false);
@@ -209,6 +228,8 @@ export default function App() {
     const standButtonRef = useRef<HTMLButtonElement | null>(null);
     const gameWrapperRef = useRef<HTMLDivElement | null>(null);
     const swapTimeoutRef = useRef<number | null>(null);
+    const holdPickupTimeoutRef = useRef<number | null>(null);
+    const holdPlaceOverrideTimeoutsRef = useRef<number[]>([]);
 
     const drawAreaRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -723,6 +744,7 @@ export default function App() {
 
     useEffect(() => {
         if (!redrawDiscard) return;
+        playCardPlace();
         const count = drawnCards.length;
         const spacing = 120;
         const offset = (redrawDiscard.index - (count - 1) / 2) * spacing;
@@ -734,7 +756,7 @@ export default function App() {
             setRedrawDiscardingCards(prev => prev.filter(entry => entry.card.id !== redrawDiscard.card.id));
         }, 350);
         redrawDiscardTimeouts.current.push(timeoutId);
-    }, [redrawDiscard, drawnCards.length]);
+    }, [redrawDiscard, drawnCards.length, playCardPlace]);
 
     useEffect(() => {
         return () => {
@@ -888,8 +910,92 @@ export default function App() {
         drawCard();
     };
 
+    const getTableActionSlotOffset = (relicId: string) => {
+        const slotIndex = tableActionSlots.findIndex(slot => slot.relicId === relicId);
+        if (slotIndex === -1) return null;
+        return slotIndex === 0 ? buttonOffset : -buttonOffset;
+    };
+
+    const handleHoldDrawSelection = (drawIndex: number, card: Card) => {
+        if (holdPickupAnimation) return;
+        const sourceCardEl = document.querySelector(`[data-card-id="${card.id}"]`) as HTMLElement | null;
+        const holdAnchorEl = document.getElementById('hold-card-anchor');
+        const wrapperEl = document.getElementById('game-scale-wrapper');
+        if (!sourceCardEl || !holdAnchorEl || !wrapperEl) {
+            selectTableActionDrawCard(drawIndex);
+            return;
+        }
+
+        const sourceRect = sourceCardEl.getBoundingClientRect();
+        const targetRect = holdAnchorEl.getBoundingClientRect();
+        const wrapperRect = wrapperEl.getBoundingClientRect();
+        const toWrapperSpace = (rect: DOMRect) => ({
+            left: (rect.left - wrapperRect.left) / scale,
+            top: (rect.top - wrapperRect.top) / scale,
+            width: rect.width / scale,
+            height: rect.height / scale
+        });
+
+        const source = toWrapperSpace(sourceRect);
+        const target = toWrapperSpace(targetRect);
+        const sourceCenterX = source.left + source.width / 2;
+        const sourceCenterY = source.top + source.height / 2;
+        const targetCenterX = target.left + target.width / 2;
+        const targetCenterY = target.top + target.height / 2;
+
+        setHiddenDrawCardIds(prev => [...prev, card.id]);
+        setHoldPickupAnimation({
+            card,
+            drawIndex,
+            left: source.left,
+            top: source.top,
+            width: source.width,
+            height: source.height,
+            dx: targetCenterX - sourceCenterX,
+            dy: targetCenterY - sourceCenterY,
+            fromScale: 1,
+            toScale: 0.6
+        });
+
+        if (holdPickupTimeoutRef.current !== null) {
+            window.clearTimeout(holdPickupTimeoutRef.current);
+        }
+        holdPickupTimeoutRef.current = window.setTimeout(() => {
+            setHoldPickupAnimation(current => {
+                if (!current || current.card.id !== card.id) return current;
+                setHiddenDrawCardIds(prev => prev.filter(id => id !== card.id));
+                selectTableActionDrawCard(current.drawIndex);
+                holdPickupTimeoutRef.current = null;
+                return null;
+            });
+        }, HOLD_PICKUP_DURATION_MS + 240);
+    };
+
     const handleHandClick = (index: number) => {
         if (interactionMode === 'select_hand' && activeTableActionId) {
+            if (activeTableActionId === 'hold') {
+                const heldCard = tableActionHeldCards[activeTableActionId];
+                const slotOffset = getTableActionSlotOffset(activeTableActionId);
+                if (heldCard && slotOffset !== null) {
+                    setEntryAnimationOverrides(prev => ({
+                        ...prev,
+                        [heldCard.id]: {
+                            xOffset: slotOffset,
+                            yOffset: HOLD_PLACE_SOURCE_Y,
+                            scale: 0.6
+                        }
+                    }));
+                    const timeoutId = window.setTimeout(() => {
+                        setEntryAnimationOverrides(prev => {
+                            if (!prev[heldCard.id]) return prev;
+                            const next = { ...prev };
+                            delete next[heldCard.id];
+                            return next;
+                        });
+                    }, 900);
+                    holdPlaceOverrideTimeoutsRef.current.push(timeoutId);
+                }
+            }
             selectTableActionHand(index);
         } else if (interactionMode === 'default' && drawnCards.length > 0) {
             assignCard(index);
@@ -1073,6 +1179,12 @@ export default function App() {
                 window.clearTimeout(swapTimeoutRef.current);
                 swapTimeoutRef.current = null;
             }
+            if (holdPickupTimeoutRef.current !== null) {
+                window.clearTimeout(holdPickupTimeoutRef.current);
+                holdPickupTimeoutRef.current = null;
+            }
+            holdPlaceOverrideTimeoutsRef.current.forEach(timeoutId => window.clearTimeout(timeoutId));
+            holdPlaceOverrideTimeoutsRef.current = [];
         };
     }, []);
 
@@ -1579,7 +1691,8 @@ export default function App() {
                                 cursor: debugEnabled ? 'pointer' : 'default',
                                 pointerEvents: 'auto'
                             }}
-                            onClick={debugEnabled ? () => {
+                            onClick={debugEnabled ? (e) => {
+                                e.stopPropagation();
                                 setRelicStoreFilter('Charm');
                                 setShowRelicStore(true);
                             } : undefined}
@@ -1602,7 +1715,8 @@ export default function App() {
                                 cursor: debugEnabled ? 'pointer' : 'default',
                                 pointerEvents: 'auto'
                             }}
-                            onClick={debugEnabled ? () => {
+                            onClick={debugEnabled ? (e) => {
+                                e.stopPropagation();
                                 setRelicStoreFilter('Angle');
                                 setShowRelicStore(true);
                             } : undefined}
@@ -1731,6 +1845,7 @@ export default function App() {
                                         const offset = (idx - (count - 1) / 2) * spacing;
 
                                         const card = drawnCards[idx];
+                                        const isHiddenForHoldPickup = !!card && hiddenDrawCardIds.includes(card.id);
                                         const isSelected = idx === selectedDrawIndex;
                                         const showHitText = !card && canDrawNow;
                                         const isMultiple = drawnCards.length > 1;
@@ -1744,7 +1859,7 @@ export default function App() {
                                                         ? 'selected-drawn-card'
                                                         : isPrimaryHitSpot
                                                             ? 'draw-hit-spot'
-                                                            : undefined
+                                                            : `draw-card-spot-${idx}`
                                                 }
                                                 className={`
                                                 ${styles.drawnCardSpot} 
@@ -1764,9 +1879,14 @@ export default function App() {
                                                 } as React.CSSProperties}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
+                                                    if (holdPickupAnimation) return;
                                                     if (interactionMode === 'select_draw' && activeTableActionId) {
                                                         if (card) {
-                                                            selectTableActionDrawCard(idx);
+                                                            if (activeTableActionId === 'hold') {
+                                                                handleHoldDrawSelection(idx, card);
+                                                            } else {
+                                                                selectTableActionDrawCard(idx);
+                                                            }
                                                         }
                                                     } else if (interactionMode !== 'default') {
                                                         return;
@@ -1777,7 +1897,7 @@ export default function App() {
                                                     }
                                                 }}
                                             >
-                                                {card ? (
+                                                {card && !isHiddenForHoldPickup ? (
                                                     <PlayingCard
                                                         card={card}
                                                         isDrawn
@@ -1904,6 +2024,8 @@ export default function App() {
                                                 isActive={isActive}
                                                 isSelectionMode={isSelectionMode}
                                                 heldCard={heldCard || undefined}
+                                                tableActionId={slot.relicId}
+                                                heldCardAnchorId={slot.relicId === 'hold' ? 'hold-card-anchor' : undefined}
                                                 onClick={() => {
                                                     if (isSelectionMode) {
                                                         cancelTableAction();
@@ -1976,6 +2098,7 @@ export default function App() {
                                             onCardSelect={(cardId) => handleCardSelect('player', idx, cardId)}
                                             tableActionColor={interactionMode === 'select_card' ? activeActionColor : undefined}
                                             hiddenCardIds={hiddenCardIds}
+                                            entryAnimationOverrides={entryAnimationOverrides}
                                         />
                                     );
                                 })}
@@ -2164,6 +2287,49 @@ export default function App() {
                             />
                         </div>
                     ))}
+                </div>
+            )}
+
+            {holdPickupAnimation && (
+                <div className={styles.holdPickupOverlay}>
+                    <div
+                        className={styles.holdPickupCard}
+                        onAnimationEnd={(e) => {
+                            if (e.currentTarget !== e.target) return;
+                            setHoldPickupAnimation(current => {
+                                if (!current) return current;
+                                if (holdPickupTimeoutRef.current !== null) {
+                                    window.clearTimeout(holdPickupTimeoutRef.current);
+                                    holdPickupTimeoutRef.current = null;
+                                }
+                                setHiddenDrawCardIds(prev => prev.filter(id => id !== current.card.id));
+                                selectTableActionDrawCard(current.drawIndex);
+                                return null;
+                            });
+                        }}
+                        style={{
+                            left: holdPickupAnimation.left,
+                            top: holdPickupAnimation.top,
+                            width: holdPickupAnimation.width,
+                            height: holdPickupAnimation.height,
+                            // @ts-ignore
+                            '--hold-dx': `${holdPickupAnimation.dx}px`,
+                            // @ts-ignore
+                            '--hold-dy': `${holdPickupAnimation.dy}px`,
+                            // @ts-ignore
+                            '--hold-from-scale': `${holdPickupAnimation.fromScale}`,
+                            // @ts-ignore
+                            '--hold-to-scale': `${holdPickupAnimation.toScale}`,
+                            animationDuration: `${HOLD_PICKUP_DURATION_MS}ms`
+                        } as React.CSSProperties}
+                    >
+                        <PlayingCard
+                            card={holdPickupAnimation.card}
+                            origin="none"
+                            suppressEnterAnimation
+                            style={{ width: '100%', height: '100%' }}
+                        />
+                    </div>
                 </div>
             )}
 

@@ -705,17 +705,25 @@ export const Hooks = {
 
     // Global
     faded_tag_bonus: {
-        onRoundCompletion: async (context: RoundCompletionContext, relicState: any, _config: any) => {
-             if (relicState.amount > 0) {
-                 await context.highlightRelic('faded_tag', {
-                     trigger: () => {
-                         context.modifyRunningSummary(0, relicState.amount);
-                         // Decay logic: divide by 2
-                         relicState.amount = Math.floor(relicState.amount / 2);
-                     }
-                 });
-             }
-         }
+        onRoundCompletion: async (context: RoundCompletionContext, relicState: any, config: any) => {
+            const relicId = config?.id || 'faded_tag';
+            const decayAmount = Math.max(0, Number(relicState.decay_amount ?? config?.properties?.decay_amount ?? 2));
+
+            if (relicState.amount <= 0) {
+                context.removeRelic?.(relicId);
+                return;
+            }
+
+            await context.highlightRelic(relicId, {
+                trigger: () => {
+                    context.modifyRunningSummary(0, relicState.amount);
+                    relicState.amount = Math.max(0, relicState.amount - decayAmount);
+                    if (relicState.amount <= 0) {
+                        context.removeRelic?.(relicId);
+                    }
+                }
+            });
+        }
     },
     mini_shoe_bonus_chips: {
         onRoundCompletion: async (context: RoundCompletionContext, relicState: any, _config: any) => {

@@ -1879,6 +1879,9 @@ export const useGameStore = create<GameState>((set, get) => {
                 // Additive update
                 get().updateRunningSummary(c, m);
             },
+            removeRelic: (relicId: string) => {
+                get().removeRelic(relicId);
+            },
             highlightRelic: async (id: string, options?: any) => {
                 // Apply the requested 200ms delays for onRoundCompletion
                 const { preDelay = 200, duration = 750, postDelay = 200, trigger } = options || {};

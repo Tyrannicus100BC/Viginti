@@ -326,7 +326,7 @@
 @keyframes flyInFromDraw {
     0% {
         /* Start from the center position */
-        transform: translate(var(--start-tx, 0), var(--start-ty, -150px)) scale(1.1);
+        transform: translate(var(--start-tx, 0), var(--start-ty, -150px)) scale(var(--start-scale, 1.1));
     }
     100% {
         /* End at the hand position */
@@ -382,14 +382,15 @@
 
 @keyframes hideFrontDiscard {
     0% { opacity: 1; }
-    39.9% { opacity: 1; }
-    40% { opacity: 0; }
+    /* Hand discard wrapper uses ease-out and reaches 90deg around 26.6%. */
+    26.5% { opacity: 1; }
+    26.6% { opacity: 0; }
     100% { opacity: 0; }
 }
 
 @keyframes showBackDiscard {
     0% { opacity: 0; }
-    39.9% { opacity: 0; }
-    40% { opacity: 1; }
+    26.5% { opacity: 0; }
+    26.6% { opacity: 1; }
     100% { opacity: 1; }
 }

@@ -321,6 +321,31 @@
     z-index: 2500;
 }
 
+.holdPickupOverlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 2550;
+}
+
+.holdPickupCard {
+    position: absolute;
+    animation: holdPickupMove 0.36s cubic-bezier(0.2, 0.78, 0.2, 1) forwards;
+    transform-origin: center center;
+    will-change: transform, opacity;
+}
+
+@keyframes holdPickupMove {
+    0% {
+        opacity: 1;
+        transform: translate(0, 0) scale(var(--hold-from-scale, 1));
+    }
+    100% {
+        opacity: 1;
+        transform: translate(var(--hold-dx, 0px), var(--hold-dy, 0px)) scale(var(--hold-to-scale, 0.6));
+    }
+}
+
 .swapCard {
     position: absolute;
     offset-path: var(--path);

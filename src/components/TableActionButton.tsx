@@ -14,6 +14,8 @@ interface TableActionButtonProps {
     onClick: () => void;
     style?: React.CSSProperties;
     heldCard?: Card | null;
+    tableActionId?: string;
+    heldCardAnchorId?: string;
 }
 
 const hexToRgb = (hex: string) => {
@@ -41,7 +43,9 @@ export const TableActionButton: React.FC<TableActionButtonProps> = ({
     isSelectionMode,
     onClick,
     style,
-    heldCard
+    heldCard,
+    tableActionId,
+    heldCardAnchorId
 }) => {
     const size = 120;
     const strokeWidth = 6;
@@ -77,7 +81,7 @@ export const TableActionButton: React.FC<TableActionButtonProps> = ({
     const labelLines = label.split('\n');
 
     return (
-        <div className={styles.container} style={{ ...style, ...colorVars }}>
+        <div className={styles.container} style={{ ...style, ...colorVars }} data-table-action-id={tableActionId}>
             <svg className={styles.chargeSvg} viewBox={`0 0 ${size} ${size}`}>
                 <defs>
                     <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
@@ -121,6 +125,8 @@ export const TableActionButton: React.FC<TableActionButtonProps> = ({
                     <div className={styles.costTag}>-{cost}</div>
                 )}
             </div>
+
+            <div id={heldCardAnchorId} className={styles.heldCardAnchor} />
 
             {heldCard && (
                 <div className={styles.heldCard}>
