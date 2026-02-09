@@ -470,6 +470,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
   const showOverlay =
     (showBustOverlay || showVigintiOverlay || hand.isDoubled || (hand.finalScore !== undefined && hand.resultRevealed)) &&
     hand.cards.length > 0;
+  const overlayFanDepthPx = Math.max(0, visualCards.length - 1);
 
   return (
     <div
@@ -519,7 +520,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
       <div
         className={`${styles.hand} ${canSelect ? styles.activeTarget : ''} ${isSelected ? styles.selected : ''}`}
       >
-        <div className={`${styles.cardsContainer} ${showOverlay ? styles.tinted : ''}`}>
+        <div className={styles.cardsContainer}>
           <div className={styles.cards}>
             {visualCards.map(({ card, isDiscarding, posIndex, hasEntered }, idx) => {
               // const styles = require('./Hand.module.css').default; 
@@ -667,6 +668,13 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
               );
             })}
           </div>
+
+          {showOverlay && (
+            <div
+              className={styles.overlayScrim}
+              style={{ '--overlay-fan-depth': `${overlayFanDepthPx}px` } as React.CSSProperties}
+            />
+          )}
 
           {/* Overlay text on cards */}
           {showOverlay && (

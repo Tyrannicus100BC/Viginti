@@ -53,21 +53,30 @@
 
 .shelvesContainer {
     position: absolute;
-    bottom: 160px;
+    bottom: 150px;
     left: 50%;
     transform: translateX(-50%) translateY(200%);
     width: 800px;
-    height: 500px;
+    height: 540px;
     background: #3e2723;
     border-radius: 12px;
     box-shadow: 0 -10px 30px rgba(0,0,0,0.8);
     border: 4px solid #5d4037;
-    padding: 30px;
+    padding: 18px 42px 28px;
     display: flex;
-    gap: 0;
+    flex-direction: column;
+    gap: 8px;
+    --relic-slot-height: 104px;
     animation: slideUp 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
     animation-delay: 0.4s;
     pointer-events: auto;
+}
+
+.shelvesContentRow {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    gap: 24px;
 }
 
 .shelvesContainer::before {
@@ -86,27 +95,26 @@
 
 .leftShelf {
     flex: 1;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    padding: 10px;
-    border-right: 4px solid #281a16;
-    position: relative;
-    gap: 15px;
-}
-
-.charmsList {
-    flex: 1;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     justify-content: flex-start;
-    gap: 20px;
+    padding: 0;
+    position: relative;
+    gap: 12px;
+}
+
+.charmsList {
+    flex: 0 0 auto;
+    display: grid;
+    grid-template-rows: repeat(3, var(--relic-slot-height));
+    gap: 14px;
     position: relative;
 }
 
 .charmsList .itemSlot {
     justify-content: flex-start;
-    padding-left: 56px;
+    padding-left: 0;
     box-sizing: border-box;
 }
 
@@ -116,14 +124,13 @@
 
 .zoneHeader {
     font-size: 1.2rem;
-    color: #888;
+    color: #fff;
     text-transform: uppercase;
     letter-spacing: 2px;
     font-weight: bold;
     text-align: center;
-    border-bottom: 1px solid #444;
-    padding-bottom: 5px;
-    margin-bottom: 10px;
+    padding-bottom: 0;
+    margin-bottom: 6px;
 }
 
 .shopTrashButton {
@@ -172,32 +179,33 @@
 
 .rightShelf {
     flex: 1;
+    min-height: 0;
     display: flex;
     flex-direction: column;
-    padding-left: 30px;
+    padding-left: 0;
+    gap: 14px;
 }
 
 .anglesZone {
-    height: 50%;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-start;
-    padding: 10px;
-    border-bottom: 4px solid #281a16;
-}
-
-.anglesList {
     flex: 1;
     display: flex;
     flex-direction: column;
     justify-content: flex-start;
-    gap: 20px;
+    padding: 0;
+    gap: 12px;
+}
+
+.anglesList {
+    flex: 0 0 auto;
+    display: grid;
+    grid-template-rows: repeat(2, var(--relic-slot-height));
+    gap: 14px;
     position: relative;
 }
 
 .anglesList .itemSlot {
     justify-content: flex-end;
-    padding-right: 56px;
+    padding-right: 0;
     box-sizing: border-box;
 }
 
@@ -206,12 +214,20 @@
 }
 
 .cardsZone {
-    height: 50%;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 0;
+    position: relative;
+}
+
+.cardsGrid {
+    flex: 1;
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
     grid-template-rows: 1fr 1fr;
     gap: 10px;
-    padding: 10px;
     position: relative;
 }
 
@@ -219,11 +235,11 @@
     position: absolute;
     top: 50%;
     left: 50%;
-    transform: translate(-50%, -50%) rotate(-24deg);
+    transform: translate(-50%, -50%) rotate(-10deg);
     color: rgba(255, 160, 122, 0.75);
-    font-size: 2rem;
+    font-size: 1.5rem;
     font-weight: 900;
-    letter-spacing: 6px;
+    letter-spacing: 4.5px;
     text-transform: uppercase;
     text-shadow: 0 0 6px rgba(0, 0, 0, 0.8);
     pointer-events: none;
@@ -248,6 +264,71 @@
     width: 100%;
     display: flex;
     justify-content: center;
+}
+
+.expandedRelicCard {
+    position: relative;
+    width: 100%;
+    max-width: 340px;
+    cursor: pointer;
+    transition: transform 0.2s ease, filter 0.2s ease, opacity 0.2s ease;
+    pointer-events: auto;
+}
+
+.expandedRelicCard:hover:not(.expandedRelicCardDisabled):not(.expandedRelicCardSold) {
+    transform: translateY(-4px);
+}
+
+.expandedRelicCardDisabled {
+    cursor: not-allowed;
+    filter: grayscale(1) brightness(0.4);
+}
+
+.expandedRelicCardSold {
+    filter: grayscale(0.45) brightness(0.7);
+}
+
+.expandedRelicCardAngle {
+    margin-left: auto;
+}
+
+.expandedRelicTooltip {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+}
+
+.expandedRelicPrice {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    font-size: 0.75rem;
+    font-weight: bold;
+    color: #ffd700;
+    background: rgba(0, 0, 0, 0.75);
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 215, 0, 0.4);
+    z-index: 2;
+}
+
+.expandedRelicPriceAngle {
+    right: auto;
+    left: 8px;
+}
+
+.expandedRelicPriceLocked {
+    color: #d1d5db;
+    border-color: rgba(209, 213, 219, 0.3);
+}
+
+.expandedRelicPriceSold {
+    color: #fff;
+    border-color: #ff4d4d;
+    background: #5e1212;
+    font-size: 0.7rem;
+    letter-spacing: 0.4px;
+    padding: 2px 6px;
 }
 
 .itemButton {
@@ -372,4 +453,62 @@
 .itemDisabled {
     opacity: 0.6;
     filter: grayscale(0.6);
+}
+
+.bottomActionRow {
+    flex: 0 0 auto;
+    margin-top: 34px;
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.bottomActionButton {
+    border: none;
+    border-radius: 10px;
+    padding: 14px 18px;
+    font-size: 0.98rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: 700;
+    color: #fff;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.35);
+}
+
+.bottomActionButton:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 7px 13px rgba(0, 0, 0, 0.45);
+}
+
+.enhanceActionButton {
+    background: #2980b9;
+}
+
+.enhanceActionButton:hover:not(:disabled) {
+    background: #3498db;
+}
+
+.removeActionButton {
+    background: #c0392b;
+}
+
+.removeActionButton:hover:not(:disabled) {
+    background: #e74c3c;
+}
+
+.restockActionButton {
+    background: #8e5a1f;
+}
+
+.restockActionButton:hover:not(:disabled) {
+    background: #b46b1f;
+}
+
+.actionButtonDisabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    filter: grayscale(0.2);
 }

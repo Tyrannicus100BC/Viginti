@@ -113,6 +113,7 @@ export const RelicStore: React.FC<RelicStoreProps> = ({ onClose, filterCategory 
                                 }}>
                                     {groupedRelics[category].map(relic => {
                                         const isOwned = inventory.some(i => i.id === relic.id);
+                                        const isAngle = relic.categories.includes('Angle');
                                         return (
                                             <div 
                                                 key={relic.id}
@@ -128,12 +129,13 @@ export const RelicStore: React.FC<RelicStoreProps> = ({ onClose, filterCategory 
                                                     transform: isOwned ? 'scale(0.95)' : 'scale(1)',
                                                     width: '100%',
                                                     display: 'flex',
-                                                    justifyContent: 'center'
+                                                    justifyContent: isAngle ? 'flex-end' : 'center'
                                                 }}
                                             >
                                                 <RelicTooltip 
                                                     relic={relic} 
                                                     displayValues={relic.properties}
+                                                    isRightAligned={isAngle}
                                                     style={{
                                                         background: 'rgba(255, 255, 255, 0.03)',
                                                         border: isOwned ? '2px solid #27ae60' : '2px solid #444',

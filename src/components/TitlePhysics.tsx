@@ -3,6 +3,7 @@ import Matter from 'matter-js';
 import styles from './TitlePhysics.module.css';
 import { useLayout } from './ResponsiveLayout';
 import { useGameStore } from '../store/gameStore';
+import { sfxEngine } from '../utils/sfxEngine';
 
 interface ChipData {
   value: number;
@@ -21,6 +22,18 @@ const CHIP_WIDTH = 48;
 const CHIP_HEIGHT = 12;
 const CARD_WIDTH = 50;
 const CARD_HEIGHT = 70;
+const MOUSE_COLLIDER_RADIUS = 42;
+const BURST_MIN_COUNT = 3;
+const BURST_RANGE_SIZE = 13;
+const BURST_MAX_COUNT = BURST_MIN_COUNT + BURST_RANGE_SIZE - 1;
+const FLING_CONFETTI_VOLUME = 0.05;
+
+const COLLISION_CATEGORY = {
+  STATIC: 0x0002,
+  CONFETTI: 0x0004,
+  CARD: 0x0008,
+  MOUSE: 0x0010,
+} as const;
 
 export const TitlePhysics: React.FC = () => {
   const { viewportWidth, viewportHeight, scale } = useLayout();
@@ -34,6 +47,7 @@ export const TitlePhysics: React.FC = () => {
   const runnerRef = useRef<Matter.Runner | null>(null);
   const debugEnabledRef = useRef(debugEnabled);
   const lastImpulseRef = useRef(new Map<number, number>());
+  const mouseColliderRef = useRef<Matter.Body | null>(null);
   
   // Refs for tracking bodies and layout across closures
   const staticBodiesRef = useRef<Matter.Body[]>([]);
@@ -135,6 +149,10 @@ export const TitlePhysics: React.FC = () => {
                 restitution,
                 friction: 0.01, 
                 frictionStatic: 0,
+                collisionFilter: {
+                    category: COLLISION_CATEGORY.STATIC,
+                    mask: COLLISION_CATEGORY.CONFETTI | COLLISION_CATEGORY.CARD,
+                },
                 render: { 
                     visible: debugEnabledRef.current,
                     fillStyle: 'rgba(255, 215, 0, 0.05)',
@@ -163,6 +181,10 @@ export const TitlePhysics: React.FC = () => {
                 angle: buttonRotation,
                 friction: 0.01,
                 frictionStatic: 0,
+                collisionFilter: {
+                    category: COLLISION_CATEGORY.STATIC,
+                    mask: COLLISION_CATEGORY.CONFETTI | COLLISION_CATEGORY.CARD,
+                },
                 render: { 
                     visible: debugEnabledRef.current,
                     fillStyle: 'rgba(255, 255, 255, 0.1)',
@@ -191,6 +213,10 @@ export const TitlePhysics: React.FC = () => {
                 restitution: 0.3,
                 friction: 0.01,
                 frictionStatic: 0,
+                collisionFilter: {
+                    category: COLLISION_CATEGORY.STATIC,
+                    mask: COLLISION_CATEGORY.CONFETTI | COLLISION_CATEGORY.CARD,
+                },
                 render: { 
                     visible: debugEnabledRef.current,
                     fillStyle: 'rgba(255, 215, 0, 0.15)',
@@ -353,15 +379,87 @@ export const TitlePhysics: React.FC = () => {
     updateStaticBodies();
     animationFrameId = requestAnimationFrame(animateLetters);
 
+    const removeMouseCollider = () => {
+        if (!engineRef.current || !mouseColliderRef.current) return;
+        Matter.World.remove(engineRef.current.world, mouseColliderRef.current);
+        mouseColliderRef.current = null;
+    };
+
+    const isPointInsideViewport = (x: number, y: number) => {
+        const { viewportWidth, viewportHeight } = layoutRef.current;
+        return x >= 0 && x <= viewportWidth && y >= 0 && y <= viewportHeight;
+    };
+
+    const upsertMouseCollider = (x: number, y: number) => {
+        if (!engineRef.current) return;
+
+        if (!mouseColliderRef.current) {
+            const collider = Matter.Bodies.circle(x, y, MOUSE_COLLIDER_RADIUS, {
+                isStatic: true,
+                friction: 0,
+                frictionStatic: 0,
+                restitution: 0.95,
+                collisionFilter: {
+                    category: COLLISION_CATEGORY.MOUSE,
+                    mask: COLLISION_CATEGORY.CONFETTI | COLLISION_CATEGORY.CARD,
+                },
+                render: { visible: false },
+            });
+
+            mouseColliderRef.current = collider;
+            Matter.World.add(engineRef.current.world, collider);
+            return;
+        }
+
+        Matter.Body.setPosition(mouseColliderRef.current, { x, y });
+    };
+
+    const handlePointerMove = (event: MouseEvent) => {
+        const { scale } = layoutRef.current;
+        const x = event.clientX / scale;
+        const y = event.clientY / scale;
+
+        if (!document.hasFocus() || !isPointInsideViewport(x, y)) {
+            removeMouseCollider();
+            return;
+        }
+
+        upsertMouseCollider(x, y);
+    };
+
+    const handleBlur = () => {
+        removeMouseCollider();
+    };
+
+    const handleMouseOut = (event: MouseEvent) => {
+        if (!event.relatedTarget && !event.toElement) {
+            removeMouseCollider();
+        }
+    };
+
+    window.addEventListener('mousemove', handlePointerMove);
+    window.addEventListener('blur', handleBlur);
+    window.addEventListener('mouseout', handleMouseOut);
+
     // 4. Burst Logic
     let leftTimer: any;
     let rightTimer: any;
+
+    const getConfettiVariantIndex = (value: number, min: number, max: number) => {
+        if (max <= min) return 0;
+        const normalized = (value - min) / (max - min);
+        if (normalized < 2 / 4) return 0;
+            if (normalized < 3 / 4) return 1;
+        return 2;
+    };
 
     const spawnBurst = (side: 'left' | 'right') => {
         if (!engineRef.current || document.visibilityState === 'hidden') return;
         const { viewportWidth, viewportHeight } = layoutRef.current;
         
-        const count = 3 + Math.floor(Math.random() * 13);
+        const count = BURST_MIN_COUNT + Math.floor(Math.random() * BURST_RANGE_SIZE);
+        const confettiVariant = getConfettiVariantIndex(count, BURST_MIN_COUNT, BURST_MAX_COUNT);
+        sfxEngine.play('confetti', { volume: FLING_CONFETTI_VOLUME, variantIndex: confettiVariant });
         const startX = side === 'left' ? -50 : viewportWidth + 50;
         const startY = viewportHeight * (0.6 + Math.random() * 0.35);
         
@@ -385,6 +483,10 @@ export const TitlePhysics: React.FC = () => {
                     frictionAir: isCard ? 0.015 : 0.01, 
                     density: isCard ? 0.1 : 0.001, 
                     chamfer: { radius: isCard ? 6 : 4 },
+                    collisionFilter: {
+                        category: isCard ? COLLISION_CATEGORY.CARD : COLLISION_CATEGORY.CONFETTI,
+                        mask: COLLISION_CATEGORY.STATIC | COLLISION_CATEGORY.CONFETTI | COLLISION_CATEGORY.CARD | COLLISION_CATEGORY.MOUSE,
+                    },
                     render: {
                         fillStyle: isCard ? '#2c3e50' : chip.color,
                         strokeStyle: isCard ? '#ecf0f1' : '#000',
@@ -440,6 +542,7 @@ export const TitlePhysics: React.FC = () => {
         if (document.visibilityState === 'hidden') {
             clearTimeout(leftTimer);
             clearTimeout(rightTimer);
+            removeMouseCollider();
         } else {
             scheduleBurst('left', true);
             scheduleBurst('right', true);
@@ -454,6 +557,10 @@ export const TitlePhysics: React.FC = () => {
       cancelAnimationFrame(animationFrameId);
       clearTimeout(leftTimer);
       clearTimeout(rightTimer);
+      removeMouseCollider();
+      window.removeEventListener('mousemove', handlePointerMove);
+      window.removeEventListener('blur', handleBlur);
+      window.removeEventListener('mouseout', handleMouseOut);
       Matter.Render.stop(render);
       Matter.Runner.stop(runner);
       if (render.canvas) {

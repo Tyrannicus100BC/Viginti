@@ -28,6 +28,7 @@ export const CasinoWinScreen: React.FC = () => {
     const [showDeals, setShowDeals] = React.useState(false);
     const [showSurrender, setShowSurrender] = React.useState(false);
     const [showDoubleDown, setShowDoubleDown] = React.useState(false);
+    const [showInterested, setShowInterested] = React.useState(false);
     const [showWin, setShowWin] = React.useState(false);
     const [sequenceComplete, setSequenceComplete] = React.useState(false);
     const [usedFastForward, setUsedFastForward] = React.useState(false);
@@ -53,6 +54,7 @@ export const CasinoWinScreen: React.FC = () => {
         setShowDeals(false);
         setShowSurrender(false);
         setShowDoubleDown(false);
+        setShowInterested(false);
         setShowWin(false);
         setSequenceComplete(false);
         setUsedFastForward(false);
@@ -122,6 +124,16 @@ export const CasinoWinScreen: React.FC = () => {
                 await waitScaled(BETWEEN_ROW_MS);
                 if (cancelled) return;
             }
+
+            setShowInterested(true);
+            await waitScaled(ROW_REVEAL_MS);
+            if (cancelled) return;
+            playScoreRowSfx();
+            await waitScaled(SLAM_MS);
+            if (cancelled) return;
+            creditBonus('interested', shopRewardSummary.interestedBonus);
+            await waitScaled(BETWEEN_ROW_MS);
+            if (cancelled) return;
 
             setShowWin(true);
             await waitScaled(ROW_REVEAL_MS);
@@ -198,6 +210,13 @@ export const CasinoWinScreen: React.FC = () => {
                     <div className={styles.bonusLine}>
                         <span className={styles.bonusLabel}>Double Down Bonus</span>
                         <span className={styles.bonusValue}>₵{shopRewardSummary.doubleDownBonus}</span>
+                    </div>
+                )}
+
+                {showInterested && (
+                    <div className={styles.bonusLine}>
+                        <span className={styles.bonusLabel}>Interested Bonus</span>
+                        <span className={styles.bonusValue}>₵{shopRewardSummary.interestedBonus}</span>
                     </div>
                 )}
 

@@ -23,7 +23,7 @@ export const CITY_DEFINITIONS: CityDefinition[] = [
                 ];
             }
             return [
-                { type: 'Charm', count: 4, categories: ['Suite', 'Global', 'Cards'] }
+                { type: 'Charm', count: 3, categories: ['Suite', 'Global', 'Cards'] }
             ];
         },
         getShopPriceOverrides: (index): ShopPriceOverrides => {
@@ -69,7 +69,7 @@ export const CITY_DEFINITIONS: CityDefinition[] = [
         getRewards: (index) => {
             return [
                 { type: 'Card', count: 1, forceSpecialCard: true },
-                { type: 'Charm', count: 2 },
+                { type: 'Charm', count: 3 },
                 { type: 'Angle', count: 1 }
             ];
         }

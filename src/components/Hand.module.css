@@ -124,12 +124,6 @@
     width: 100%;
 }
 
-/* Tint effect when overlay is shown - applied to wrappers now */
-.cardsContainer.tinted .cardWrapper {
-    filter: brightness(0.3);
-    transition: filter 0.3s ease, transform 0.3s ease;
-}
-
 /* Individual card lifting and restoring */
 .cardWrapper.highlighted {
     transform: rotate(var(--rotate)) translateY(calc(var(--translateY) - 14px)) !important;
@@ -142,6 +136,19 @@
     width: 100%;
     padding-top: 10px;
     transition: filter 0.2s ease;
+}
+
+.overlayScrim {
+    position: absolute;
+    top: 6px;
+    left: 0;
+    right: 0;
+    height: calc(124px + var(--overlay-fan-depth, 0px) + 10px);
+    background: rgba(0, 0, 0, 0.68);
+    border-radius: 10px;
+    pointer-events: none;
+    z-index: 110;
+    transition: opacity 0.2s ease;
 }
 
 .cardWrapper {

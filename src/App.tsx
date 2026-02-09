@@ -1468,7 +1468,7 @@ export default function App() {
                                 triggerDebugChips();
                             }}
                         >
-                            CASH
+                            {phase === 'gift_shop' ? 'Comps' : 'CASH'}
                         </button>
                     )}
                     <div className={styles.stat}>
@@ -1549,7 +1549,6 @@ export default function App() {
                         left: centerX,
                         top: POT_TOP_Y - 135
                     }}
-                    onAnimationEnd={handleTotalWinningsAnimationEnd}
                     onAnimationEnd={handleTotalWinningsAnimationEnd}
                 >
                     <div className={styles.winningsWrapper}>

@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import Matter from 'matter-js';
 import styles from './TitlePhysics.module.css'; // We can reuse basic canvas styles or make new ones
 import { useLayout } from './ResponsiveLayout';
+import { sfxEngine } from '../utils/sfxEngine';
 
 interface ChipData {
     value: number;
@@ -20,6 +21,10 @@ const CHIP_WIDTH = 48;
 const CHIP_HEIGHT = 12;
 const CARD_WIDTH = 50;
 const CARD_HEIGHT = 70;
+const BURST_MIN_COUNT = 3;
+const BURST_RANGE_SIZE = 13;
+const BURST_MAX_COUNT = BURST_MIN_COUNT + BURST_RANGE_SIZE - 1;
+const FLING_CONFETTI_VOLUME = 0.05;
 
 export const BonusPhysics: React.FC = () => {
     const { viewportWidth, viewportHeight, scale } = useLayout();
@@ -84,11 +89,21 @@ export const BonusPhysics: React.FC = () => {
         let leftTimer: any;
         let rightTimer: any;
 
+        const getConfettiVariantIndex = (value: number, min: number, max: number) => {
+            if (max <= min) return 0;
+            const normalized = (value - min) / (max - min);
+            if (normalized < 2 / 4) return 0;
+            if (normalized < 3 / 4) return 1;
+            return 2;
+        };
+
         const spawnBurst = (side: 'left' | 'right') => {
             if (!engineRef.current || document.visibilityState === 'hidden') return;
             const { viewportWidth, viewportHeight } = layoutRef.current;
 
-            const count = 3 + Math.floor(Math.random() * 13);
+            const count = BURST_MIN_COUNT + Math.floor(Math.random() * BURST_RANGE_SIZE);
+            const confettiVariant = getConfettiVariantIndex(count, BURST_MIN_COUNT, BURST_MAX_COUNT);
+            sfxEngine.play('confetti', { volume: FLING_CONFETTI_VOLUME, variantIndex: confettiVariant });
             const startX = side === 'left' ? -50 : viewportWidth + 50;
             const startY = viewportHeight * (0.6 + Math.random() * 0.35);
 
@@ -194,4 +209,3 @@ export const BonusPhysics: React.FC = () => {
         </div>
     );
 };
-

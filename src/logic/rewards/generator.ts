@@ -35,6 +35,7 @@ export function generateShopItems(
 ): ShopItem[] {
     const items: ShopItem[] = [];
     const currentIds = currentInventory.map(i => i.id);
+    const pickedRelicIds = new Set<string>();
 
     for (const config of configList) {
         for (let i = 0; i < config.count; i++) {
@@ -70,7 +71,9 @@ export function generateShopItems(
             } else if (config.type === 'Charm' || config.type === 'Angle') {
                 // Filter Logic
                 let candidates = RelicManager.getAllRelics().filter(r => 
-                    r.categories.includes(config.type) && !currentIds.includes(r.id)
+                    r.categories.includes(config.type) &&
+                    !currentIds.includes(r.id) &&
+                    !pickedRelicIds.has(r.id)
                 );
 
                 if (config.categories && config.categories.length > 0) {
@@ -114,7 +117,9 @@ export function generateShopItems(
                         const specificCandidates = RelicManager.getAllRelics().filter(r => config.specificIds!.includes(r.id));
                         // Merge?
                         // Let's just reset candidates to specific ones if specificIds is set
-                         candidates = RelicManager.getAllRelics().filter(r => config.specificIds!.includes(r.id));
+                         candidates = RelicManager.getAllRelics().filter(r =>
+                            config.specificIds!.includes(r.id) && !pickedRelicIds.has(r.id)
+                        );
                     }
                 }
 
@@ -129,6 +134,7 @@ export function generateShopItems(
                         cost: getRelicCompCost(pick.id),
                         nameOverride: pick.name
                     });
+                    pickedRelicIds.add(pick.id);
 
                     // Remove from candidates to avoid dupes in same shop?
                     // Or duplicates are allowed if inventory allows?
@@ -143,8 +149,9 @@ export function generateShopItems(
                  // But `ShopItem` has `type: 'Charm' | 'Angle' | 'Card'`.
                  
                  // If type is Action, we probably mean "Unlockable Ability" which are Charms in the system.
-                  let candidates = RelicManager.getAllRelics().filter(r => 
-                    r.categories.includes('Action') || (config.specificIds && config.specificIds.includes(r.id))
+                  let candidates = RelicManager.getAllRelics().filter(r =>
+                    (r.categories.includes('Action') || (config.specificIds && config.specificIds.includes(r.id))) &&
+                    !pickedRelicIds.has(r.id)
                 );
                  // Filter specific
                  if (config.specificIds) {
@@ -179,6 +186,7 @@ export function generateShopItems(
                         cost: getRelicCompCost(pick.id),
                         nameOverride: pick.name
                     });
+                    pickedRelicIds.add(pick.id);
                      // Remove pick from future candidates in this loop if we want unique items
                      // But `candidates` is scoped to loop.
                      // I should define candidates unique logic outside.
@@ -187,26 +195,9 @@ export function generateShopItems(
         }
     }
     
-    // De-duplication of IDs in the generated list
-    // (A bit hacky, better to manage candidates statefully, but this works for now)
-    const uniqueItems: ShopItem[] = [];
-    const seenIds = new Set<string>();
-    
-    // Bias towards preserving first items
-    for(const item of items) {
-        if(item.type === 'Card') {
-            uniqueItems.push(item); // Cards are unique by instance usually
-        } else {
-            if(!seenIds.has(item.id)) {
-                seenIds.add(item.id);
-                uniqueItems.push(item);
-            }
-        }
-    }
+    if (!priceOverrides) return items;
 
-    if (!priceOverrides) return uniqueItems;
-
-    return uniqueItems.map(item => {
+    return items.map(item => {
         const overrideCost = priceOverrides[item.id];
         if (overrideCost === undefined) return item;
         return { ...item, cost: Math.max(0, overrideCost) };

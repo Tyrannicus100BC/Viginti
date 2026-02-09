@@ -10,7 +10,8 @@ type SfxId =
     | 'stand'
     | 'totalWinnings'
     | 'score'
-    | 'tutorial';
+    | 'tutorial'
+    | 'confetti';
 
 const CARD_FLIP_GAIN = 2;
 const CARD_DEAL_GAIN = 1;
@@ -25,6 +26,11 @@ const SFX_SOURCES = {
     totalWinnings: '/sounds/TotalWinnings.mp3',
     score: '/sounds/Score.mp3',
     tutorial: '/sounds/Tutorial.wav',
+    confetti: [
+        '/sounds/Confetti-01.wav',
+        '/sounds/Confetti-02.wav',
+        '/sounds/Confetti-03.wav'
+    ],
     cardPlace: [
         '/sounds/CardPlace-01.wav',
         '/sounds/CardPlace-02.wav',
@@ -141,6 +147,7 @@ class SfxEngine {
             SFX_SOURCES.totalWinnings,
             SFX_SOURCES.score,
             SFX_SOURCES.tutorial,
+            ...SFX_SOURCES.confetti,
             ...SFX_SOURCES.cardPlace,
             ...SFX_SOURCES.cardDeal,
             ...SFX_SOURCES.cardFlip
@@ -223,9 +230,10 @@ class SfxEngine {
         }
     }
 
-    play(id: SfxId, options?: { volume?: number; playbackRate?: number }) {
+    play(id: SfxId, options?: { volume?: number; playbackRate?: number; variantIndex?: number }) {
         const volume = options?.volume ?? 1;
         const playbackRate = options?.playbackRate ?? 1;
+        const variantIndex = options?.variantIndex;
         switch (id) {
             case 'viginti':
                 this.playBySrc(SFX_SOURCES.viginti, volume, playbackRate);
@@ -254,6 +262,14 @@ class SfxEngine {
             case 'tutorial':
                 this.playBySrc(SFX_SOURCES.tutorial, volume, playbackRate);
                 break;
+            case 'confetti': {
+                const confettiOptions = SFX_SOURCES.confetti;
+                const index = typeof variantIndex === 'number'
+                    ? Math.max(0, Math.min(confettiOptions.length - 1, Math.floor(variantIndex)))
+                    : Math.floor(Math.random() * confettiOptions.length);
+                this.playBySrc(confettiOptions[index], volume, playbackRate);
+                break;
+            }
             case 'cardDeal': {
                 const options = SFX_SOURCES.cardDeal;
                 const randomIndex = Math.floor(Math.random() * options.length);

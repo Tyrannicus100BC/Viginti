@@ -1030,7 +1030,7 @@
     pointer-events: none;
     display: flex;
     justify-content: space-between;
-    z-index: 1100;
+    z-index: 1300;
 }
 
 .sidebar {

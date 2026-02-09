@@ -531,6 +531,8 @@ export const TutorialOverlay: React.FC = () => {
     const isHudDebtStep = activeStep.id === 'hud_debt';
     const isHudDrawsStep = activeStep.id === 'hud_draws';
     const safeLeft = (viewportWidth - idealWidth) / 2;
+    const boardEdgeInset = 20;
+    const leftAnchoredMessageLeft = safeLeft + boardEdgeInset;
     
     // Calculate highlight style
     const highlightStyle: React.CSSProperties = renderedHighlightRect ? {
@@ -548,14 +550,14 @@ export const TutorialOverlay: React.FC = () => {
         const paddedHeight = indicatorRect!.height + padding * 2;
         const drawCenterY = paddedTop + paddedHeight / 2;
 
-        const gapLeft = safeLeft;
+        const gapLeft = leftAnchoredMessageLeft;
         const gapRight = paddedLeft;
         const available = Math.max(0, gapRight - gapLeft);
         const maxWidth = Math.min(360, Math.max(0, available - 16));
 
         return {
             position: 'absolute',
-            left: `${safeLeft}px`,
+            left: `${leftAnchoredMessageLeft}px`,
             top: `${drawCenterY}px`,
             transform: 'translate(0, -50%)',
             maxWidth: maxWidth > 0 ? `${maxWidth}px` : undefined
@@ -567,14 +569,14 @@ export const TutorialOverlay: React.FC = () => {
         const paddedHeight = indicatorRect.height + padding * 2;
         const drawCenterY = paddedTop + paddedHeight / 2;
 
-        const gapLeft = safeLeft;
+        const gapLeft = leftAnchoredMessageLeft;
         const gapRight = paddedLeft;
         const available = Math.max(0, gapRight - gapLeft);
         const maxWidth = Math.min(360, Math.max(0, available - 16));
 
         return {
             position: 'absolute',
-            left: `${safeLeft}px`,
+            left: `${leftAnchoredMessageLeft}px`,
             top: `${drawCenterY}px`,
             transform: 'translate(0, -50%)',
             maxWidth: maxWidth > 0 ? `${maxWidth}px` : undefined
@@ -598,7 +600,7 @@ export const TutorialOverlay: React.FC = () => {
 
         return {
             position: 'absolute',
-            left: `${safeLeft}px`,
+            left: `${leftAnchoredMessageLeft}px`,
             top: `${centerY}px`,
             transform: 'translate(0, -50%)',
             maxWidth: maxWidth > 0 ? `${maxWidth}px` : undefined

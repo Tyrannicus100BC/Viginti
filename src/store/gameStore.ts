@@ -112,7 +112,7 @@ interface GameState {
     runningSummary: { chips: number; mult: number } | null;
     roundSummary: { totalChips: number; totalMult: number; finalScore: number } | null;
     selectedCityId: string | null;
-    shopRewardSummary: { dealsBonus: number; doubleDownBonus: number; surrenderBonus: number; winBonus: number; total: number } | null;
+    shopRewardSummary: { dealsBonus: number; doubleDownBonus: number; surrenderBonus: number; interestedBonus: number; winBonus: number; total: number } | null;
     discardPile: Card[];
     inventory: RelicInstance[];
     activeRelicId: string | null;
@@ -120,8 +120,10 @@ interface GameState {
     tableActionCharges: Record<string, number>;
     tableActionHeldCards: Record<string, Card | null>;
     shopItems: { id: string, type: 'Charm' | 'Angle' | 'Card', card?: Card, purchased?: boolean, cost: number, nameOverride?: string }[];
+    giftShopRestockCost: number;
     selectedShopItemId: string | null;
     buyShopItem: (itemId: string) => void;
+    restockGiftShop: () => void;
     addComps: (amount: number) => void;
     enterGiftShop: () => void;
 
@@ -232,6 +234,16 @@ export const useGameStore = create<GameState>((set, get) => {
         return getBlackjackScore(visibleCards, inventory);
     };
 
+    const getCurrentCasinoShopConfig = () => {
+        const { selectedCityId, round } = get();
+        const city = CITY_DEFINITIONS.find(c => c.id === selectedCityId) || CITY_DEFINITIONS[0];
+        const casinoIndex = round - 1;
+        return {
+            rewardConfig: city.getRewards(casinoIndex),
+            shopPriceOverrides: city.getShopPriceOverrides?.(casinoIndex)
+        };
+    };
+
     return ({
     deck: [],
     dealer: { cards: [], isRevealed: false, blackjackValue: 0 },
@@ -266,6 +278,7 @@ export const useGameStore = create<GameState>((set, get) => {
     tableActionCharges: {},
     tableActionHeldCards: {},
     shopItems: [],
+    giftShopRestockCost: 3,
     selectedShopItemId: null,
     vigintiSoundKey: 0,
     isInitialDeal: true,
@@ -393,10 +406,33 @@ export const useGameStore = create<GameState>((set, get) => {
     incrementScore: (amount) => set(state => ({ totalScore: state.totalScore + amount })),
 
     triggerDebugChips: () => {
-        const { targetScore, incrementScore } = get();
+        const { targetScore, totalScore, incrementScore, phase, addComps } = get();
+        if (phase === 'gift_shop') {
+            addComps(5);
+            return;
+        }
         const amount = Math.ceil(targetScore / 2);
+        const nextTotal = totalScore + amount;
         incrementScore(amount);
-        get().chipCollectionComplete();
+        // Only finalize collection during the scoring pipeline.
+        // Calling this during "playing" can force round_over while the initial deal lock is still active.
+        if (phase === 'scoring') {
+            get().chipCollectionComplete();
+            return;
+        }
+
+        // Debug convenience: if cash clears the casino during normal play,
+        // move directly to round_over and clear the initial deal lock
+        // so the action button becomes "Leave Casino".
+        if ((phase === 'playing' || phase === 'entering_casino') && nextTotal >= targetScore) {
+            set({
+                phase: 'round_over',
+                isCollectingChips: false,
+                scoringHandIndex: -1,
+                roundSummary: null,
+                isInitialDeal: false
+            });
+        }
     },
 
     updateRunningSummary: (chips, mult) => {
@@ -481,6 +517,7 @@ export const useGameStore = create<GameState>((set, get) => {
             allWinnersEnlarged: false,
             dealerVisible: true,
             shopItems: [],
+            giftShopRestockCost: 3,
             selectedShopItemId: null,
             isDealerPlaying: false,
             drawTutorialReady: false,
@@ -2081,6 +2118,7 @@ export const useGameStore = create<GameState>((set, get) => {
             allWinnersEnlarged: false,
             dealerVisible: true,
             shopItems: [],
+            giftShopRestockCost: 3,
             selectedShopItemId: null,
             shopRewardSummary: null,
             animationSpeed: 1
@@ -2104,14 +2142,16 @@ export const useGameStore = create<GameState>((set, get) => {
             // GO TO GIFT SHOP PHASE
 
             // Calculate Rewards
-            const { tableActionCharges, handsRemaining, inventory, selectedCityId, round } = currentState;
+            const { tableActionCharges, handsRemaining, inventory, selectedCityId, round, comps } = currentState;
             const dealsBonus = handsRemaining * 2;
             const hasDoubleDownRelic = inventory.some(r => r.id === 'double_down');
             const doubleDownBonus = hasDoubleDownRelic ? ((tableActionCharges['double_down'] ?? 0) * 1) : 0;
             const hasSurrenderRelic = inventory.some(r => r.id === 'surrender');
             const surrenderBonus = hasSurrenderRelic ? ((tableActionCharges['surrender'] ?? 0) * 1) : 0;
+            // "Interested" bonus is based on comps before casino payout rewards are applied.
+            const interestedBonus = Math.min(5, Math.floor(comps / 5));
             const winBonus = 2;
-            const totalBonus = dealsBonus + doubleDownBonus + surrenderBonus + winBonus;
+            const totalBonus = dealsBonus + doubleDownBonus + surrenderBonus + interestedBonus + winBonus;
 
             // Generate Rewards based on City
             const city = CITY_DEFINITIONS.find(c => c.id === selectedCityId) || CITY_DEFINITIONS[0];
@@ -2139,16 +2179,14 @@ export const useGameStore = create<GameState>((set, get) => {
             // If round 1 is cleared, that's the 1st reward.
             // So index should be 0 for Round 1 reward?
             // Let's assume input to getRewards matches the index of the casino just beaten (0-based)
-            const casinoIndex = round - 1;
-            const rewardConfig = city.getRewards(casinoIndex);
-            const shopPriceOverrides = city.getShopPriceOverrides?.(casinoIndex);
+            const { rewardConfig, shopPriceOverrides } = getCurrentCasinoShopConfig();
             const newShopItems = generateShopItems(rewardConfig, inventory, shopPriceOverrides);
 
             set({
                 shopItems: newShopItems,
                 phase: 'casino_win',
                 dealerVisible: false,
-                shopRewardSummary: { dealsBonus, doubleDownBonus, surrenderBonus, winBonus, total: totalBonus }
+                shopRewardSummary: { dealsBonus, doubleDownBonus, surrenderBonus, interestedBonus, winBonus, total: totalBonus }
             });
             return;
         }
@@ -2452,8 +2490,25 @@ export const useGameStore = create<GameState>((set, get) => {
             shopItems: shopItems.map(i => i.id === itemId ? { ...i, purchased: true } : i)
         });
     },
+    restockGiftShop: () => {
+        const { phase, comps, giftShopRestockCost, inventory } = get();
+        if (phase !== 'gift_shop' || comps < giftShopRestockCost) return;
+
+        const { rewardConfig, shopPriceOverrides } = getCurrentCasinoShopConfig();
+        const rerolledItems = generateShopItems(rewardConfig, inventory, shopPriceOverrides);
+
+        set(state => ({
+            comps: state.comps - state.giftShopRestockCost,
+            shopItems: rerolledItems,
+            selectedShopItemId: null,
+            giftShopRestockCost: state.giftShopRestockCost + 3
+        }));
+    },
     enterGiftShop: () => {
-        set({ phase: 'gift_shop' });
+        set({
+            phase: 'gift_shop',
+            giftShopRestockCost: 3
+        });
     }
     });
 });

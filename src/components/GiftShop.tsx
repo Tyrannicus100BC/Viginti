@@ -2,8 +2,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import Matter from 'matter-js';
 import { useGameStore } from '../store/gameStore';
 import { RelicManager } from '../logic/relics/manager';
-import { getRelicRarityFrameColor } from '../logic/relics/rarity';
-import { TransparentImage } from './TransparentImage';
 import { RelicTooltip } from './RelicTooltip';
 import { PlayingCard } from './PlayingCard';
 import { useLayout } from './ResponsiveLayout';
@@ -15,7 +13,7 @@ interface GiftShopProps {
 }
 
 export const GiftShop: React.FC<GiftShopProps> = ({ onOpenDeckRemoval, onOpenEnhanceCards }) => {
-    const { shopItems, buyShopItem, comps } = useGameStore();
+    const { shopItems, buyShopItem, comps, restockGiftShop, giftShopRestockCost } = useGameStore();
 
     const signRef = useRef<HTMLDivElement>(null);
     const rope1Ref = useRef<SVGPolylineElement>(null);
@@ -183,6 +181,9 @@ export const GiftShop: React.FC<GiftShopProps> = ({ onOpenDeckRemoval, onOpenEnh
     const charms = shopItems.filter(i => i.type === 'Charm');
     const angles = shopItems.filter(i => i.type === 'Angle');
     const cards = shopItems.filter(i => i.type === 'Card');
+    const charmSlots = Array.from({ length: 3 }, (_, i) => charms[i] ?? null);
+    const angleSlots = Array.from({ length: 2 }, (_, i) => angles[i] ?? null);
+    const canAffordRestock = comps >= giftShopRestockCost;
     const hasNoCharms = charms.length === 0;
     const hasNoAngles = angles.length === 0;
     const hasNoCards = cards.length === 0;
@@ -208,13 +209,15 @@ export const GiftShop: React.FC<GiftShopProps> = ({ onOpenDeckRemoval, onOpenEnh
                     onClick={() => {
                         if (!isDisabled) buyShopItem(item.id);
                     }}
-                    onMouseEnter={() => setHoveredId(item.id)}
+                    onMouseEnter={() => {
+                        if (!isDisabled) setHoveredId(item.id);
+                    }}
                     onMouseLeave={() => setHoveredId(null)}
                     className={`${styles.cardSlot} ${isDisabled ? styles.itemDisabled : ''}`}
                     style={{
-                        transform: isHovered && !isDisabled ? 'scale(1.05)' : 'scale(1)',
+                        transform: isHovered && !isDisabled ? 'translateY(-4px) scale(1.05)' : 'translateY(0) scale(1)',
                         cursor: isDisabled ? 'not-allowed' : 'pointer',
-                        zIndex: isHovered ? 2000 : 1
+                        zIndex: isHovered && !isDisabled ? 2000 : 1
                     }}
                 >
                     <div className={styles.cardWrapper}>
@@ -230,78 +233,41 @@ export const GiftShop: React.FC<GiftShopProps> = ({ onOpenDeckRemoval, onOpenEnh
         const config = RelicManager.getRelicConfig(item.id);
         if (!config) return null;
 
-        const isHovered = hoveredId === item.id;
         const isAngle = item.type === 'Angle';
         const isDisabled = !canAfford || isSoldCharm;
-        const borderStyle = isDisabled
-            ? '3px solid #555'
-            : `3px solid ${getRelicRarityFrameColor(config.rarity)}`;
 
         return (
             <div
                 key={item.id}
                 className={styles.relicRow}
                 style={{
-                    zIndex: isHovered ? 2000 : 1,
-                    pointerEvents: isDisabled ? 'none' : 'auto',
-                    filter: isSoldCharm ? 'grayscale(0.45) brightness(0.7)' : (isDisabled ? 'grayscale(1) brightness(0.4)' : 'none')
+                    zIndex: 1
                 }}
             >
-                {isHovered && !isSoldCharm && (
-                    <RelicTooltip
-                        relic={config}
-                        displayValues={config.properties || {}}
-                        hideIcon={true}
-                        layout="horizontal"
-                        direction={isAngle ? 'rtl' : 'ltr'}
-                        isRightAligned={isAngle}
-                        style={{
-                            position: 'absolute',
-                            top: -11,
-                            left: isAngle ? 'auto' : -21,
-                            right: isAngle ? -21 : 'auto',
-                            pointerEvents: 'none'
-                        }}
-                    />
-                )}
                 <div
                     onClick={() => {
                         if (!isDisabled) buyShopItem(item.id);
                     }}
-                    onMouseEnter={() => setHoveredId(item.id)}
-                    onMouseLeave={() => setHoveredId(null)}
-                    className={`${styles.itemButton} ${isAngle ? styles.itemButtonAngle : ''} ${isSoldCharm ? styles.itemButtonSold : ''}`}
-                    style={{
-                        transform: 'scale(1)',
-                        cursor: isDisabled ? 'not-allowed' : 'pointer'
-                    }}
+                    className={`${styles.expandedRelicCard} ${isAngle ? styles.expandedRelicCardAngle : ''} ${isSoldCharm ? styles.expandedRelicCardSold : ''} ${isDisabled ? styles.expandedRelicCardDisabled : ''}`}
                 >
+                    <RelicTooltip
+                        relic={config}
+                        displayValues={config.properties || {}}
+                        isRightAligned={isAngle}
+                        className={styles.expandedRelicTooltip}
+                        style={{
+                            background: 'rgba(255, 255, 255, 0.03)',
+                            border: '2px solid #444',
+                            boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
+                            pointerEvents: 'none',
+                            animation: 'none',
+                            width: '100%',
+                            minWidth: 0,
+                            maxWidth: 'none'
+                        }}
+                    />
                     <div
-                        className={styles.itemIconCircle}
-                        style={{ border: borderStyle }}
-                    >
-                        {config.icon ? (
-                            config.icon.includes('.') || config.icon.includes('/') ? (
-                                <TransparentImage
-                                    src={config.icon}
-                                    alt={config.name}
-                                    threshold={250}
-                                    style={{ width: '85%', height: '85%', objectFit: 'contain' }}
-                                />
-                            ) : (
-                                <div className={styles.itemEmojiIcon}>{config.icon}</div>
-                            )
-                        ) : (
-                            <div className={styles.itemEmojiIcon}>{config.name.substring(0, 2).toUpperCase()}</div>
-                        )}
-                    </div>
-
-                    <div className={styles.itemLabel}>
-                        {config.handType?.name || config.name}
-                    </div>
-
-                    <div
-                        className={`${styles.itemCost} ${isAngle ? styles.itemCostRight : styles.itemCostLeft} ${isSoldCharm ? styles.itemCostSold : ''} ${!canAfford && !isSoldCharm ? styles.itemCostLocked : ''}`}
+                        className={`${styles.expandedRelicPrice} ${isAngle ? styles.expandedRelicPriceAngle : ''} ${isSoldCharm ? styles.expandedRelicPriceSold : ''} ${!canAfford && !isSoldCharm ? styles.expandedRelicPriceLocked : ''}`}
                     >
                         {isSoldCharm ? 'SOLD' : `₵${item.cost}`}
                     </div>
@@ -322,51 +288,65 @@ export const GiftShop: React.FC<GiftShopProps> = ({ onOpenDeckRemoval, onOpenEnh
             </div>
 
             <div className={styles.shelvesContainer}>
-                <div className={styles.leftShelf}>
-                    <div className={styles.zoneHeader}>CHARMS</div>
-                    <div className={styles.charmsList}>
-                        {charms.map(item => (
-                            <div key={item.id} className={styles.itemSlot}>
-                                {renderItem(item)}
-                            </div>
-                        ))}
-                        {hasNoCharms && <div className={styles.soldOutStamp}>SOLD OUT</div>}
+                <div className={styles.shelvesContentRow}>
+                    <div className={styles.leftShelf}>
+                        <div className={styles.zoneHeader}>CHARMS</div>
+                        <div className={styles.charmsList}>
+                            {charmSlots.map((item, index) => (
+                                <div key={item?.id ?? `empty_charm_${index}`} className={styles.itemSlot}>
+                                    {item ? renderItem(item) : <div className={styles.emptySlot} />}
+                                </div>
+                            ))}
+                            {hasNoCharms && <div className={styles.soldOutStamp}>NO STOCK</div>}
+                        </div>
                     </div>
+
+                    <div className={styles.rightShelf}>
+                        <div className={styles.anglesZone}>
+                            <div className={styles.zoneHeader}>ANGLES</div>
+                            <div className={styles.anglesList}>
+                                {angleSlots.map((item, index) => (
+                                    <div key={item?.id ?? `empty_angle_${index}`} className={styles.itemSlot}>
+                                        {item ? renderItem(item) : <div className={styles.emptySlot} />}
+                                    </div>
+                                ))}
+                                {hasNoAngles && <div className={styles.soldOutStamp}>NO STOCK</div>}
+                            </div>
+                        </div>
+                        <div className={styles.cardsZone}>
+                            <div className={styles.zoneHeader}>CARDS</div>
+                            <div className={styles.cardsGrid}>
+                                {cards.map(item => (
+                                    <div key={item.id} className={styles.itemSlot}>
+                                        {renderItem(item)}
+                                    </div>
+                                ))}
+                                {hasNoCards && <div className={styles.soldOutStamp}>NO STOCK</div>}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className={styles.bottomActionRow}>
                     <button
-                        className={styles.shopEnhanceButton}
+                        className={`${styles.bottomActionButton} ${styles.enhanceActionButton}`}
                         onClick={onOpenEnhanceCards}
-                        style={{ marginBottom: 10 }}
                     >
                         ENHANCE CARDS
                     </button>
                     <button
-                        className={styles.shopTrashButton}
+                        className={`${styles.bottomActionButton} ${styles.removeActionButton}`}
                         onClick={onOpenDeckRemoval}
                     >
                         REMOVE CARDS
                     </button>
-                </div>
-
-                <div className={styles.rightShelf}>
-                    <div className={styles.anglesZone}>
-                        <div className={styles.zoneHeader}>ANGLES</div>
-                        <div className={styles.anglesList}>
-                            {angles.map(item => (
-                                <div key={item.id} className={styles.itemSlot}>
-                                    {renderItem(item)}
-                                </div>
-                            ))}
-                            {hasNoAngles && <div className={styles.soldOutStamp}>SOLD OUT</div>}
-                        </div>
-                    </div>
-                    <div className={styles.cardsZone}>
-                        {cards.map(item => (
-                            <div key={item.id} className={styles.itemSlot}>
-                                {renderItem(item)}
-                            </div>
-                        ))}
-                        {hasNoCards && <div className={styles.soldOutStamp}>SOLD OUT</div>}
-                    </div>
+                    <button
+                        className={`${styles.bottomActionButton} ${styles.restockActionButton} ${!canAffordRestock ? styles.actionButtonDisabled : ''}`}
+                        onClick={restockGiftShop}
+                        disabled={!canAffordRestock}
+                    >
+                        {`RESTOCK ₵${giftShopRestockCost}`}
+                    </button>
                 </div>
             </div>
         </div>
