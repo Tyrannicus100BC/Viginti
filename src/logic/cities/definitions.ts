@@ -2,10 +2,9 @@ import type { CityDefinition, RewardConfig, ShopPriceOverrides } from './types';
 
 // Helper to generate standard rewards
 const STANDARD_REWARD_CONFIG: RewardConfig[] = [
-    { type: 'Card', count: 1 }, // Standard Card
-    { type: 'Card', count: 1, forceSpecialCard: true }, // Special Card
+    { type: 'TableAction', count: 1 },
     { type: 'Angle', count: 1 },
-    { type: 'Charm', count: 1 }
+    { type: 'Charm', count: 3 }
 ];
 
 export const CITY_DEFINITIONS: CityDefinition[] = [
@@ -18,13 +17,12 @@ export const CITY_DEFINITIONS: CityDefinition[] = [
         getRewards: (index) => {
             if (index === 1) { // 2nd Reward (after Casino 2)
                 return [
-                    { type: 'Action', count: 1, specificIds: ['redraw'] },
-                    { type: 'Action', count: 1, specificIds: ['switch'] }
+                    { type: 'Charm', count: 3, categories: ['Suite', 'Global', 'Cards'] },
+                    { type: 'Angle', count: 1 },
+                    { type: 'TableAction', count: 1, specificIds: ['redraw', 'switch'] }
                 ];
             }
-            return [
-                { type: 'Charm', count: 3, categories: ['Suite', 'Global', 'Cards'] }
-            ];
+            return STANDARD_REWARD_CONFIG;
         },
         getShopPriceOverrides: (index): ShopPriceOverrides => {
             if (index === 1) {
@@ -53,6 +51,10 @@ export const CITY_DEFINITIONS: CityDefinition[] = [
                     type: 'Angle',
                     count: 1,
                     excludeCategories: ['Triple']
+                },
+                {
+                    type: 'TableAction',
+                    count: 1
                 }
             ];
         }
@@ -68,9 +70,9 @@ export const CITY_DEFINITIONS: CityDefinition[] = [
         ],
         getRewards: (index) => {
             return [
-                { type: 'Card', count: 1, forceSpecialCard: true },
                 { type: 'Charm', count: 3 },
-                { type: 'Angle', count: 1 }
+                { type: 'Angle', count: 1 },
+                { type: 'TableAction', count: 1 }
             ];
         }
     }

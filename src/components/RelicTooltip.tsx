@@ -136,6 +136,7 @@ export const RelicTooltip: React.FC<RelicTooltipProps> = ({
             {/* Header: Icon and Title */}
             <div 
                 className={`${styles.header} ${isHorizontal ? styles.headerHorizontal : ''}`}
+                data-relic-header="true"
                 style={{
                     flexDirection: isRightAligned ? 'row-reverse' : 'row',
                     textAlign: (isRightAligned && !isHorizontal) ? 'right' : 'left',
@@ -143,6 +144,7 @@ export const RelicTooltip: React.FC<RelicTooltipProps> = ({
             >
                 <div 
                     className={styles.iconContainer}
+                    data-relic-icon="true"
                     style={{
                         opacity: hideIcon ? 0 : 1,
                         visibility: hideIcon ? 'hidden' : 'visible',
@@ -162,7 +164,7 @@ export const RelicTooltip: React.FC<RelicTooltipProps> = ({
                     )}
                 </div>
                 <div className={styles.titleBlock} style={{ textAlign: (isRightAligned && !isHorizontal) ? 'right' : 'left' }}>
-                    <div className={styles.title}>
+                    <div className={styles.title} data-relic-title="true">
                         {relic.handType?.name || relic.name}
                     </div>
                     <div 

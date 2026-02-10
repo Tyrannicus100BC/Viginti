@@ -366,6 +366,70 @@
     }
 }
 
+.shopRelicFlyOverlay {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 2600;
+}
+
+.shopRelicFlyCard {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 0;
+    will-change: transform;
+    transform-origin: top left;
+}
+
+.shopRelicFlyCardAngle {
+    justify-content: flex-end;
+    flex-direction: row-reverse;
+}
+
+.shopRelicFlyIcon {
+    width: calc(40px * var(--relic-fly-ui-scale, 1));
+    height: calc(40px * var(--relic-fly-ui-scale, 1));
+    border-radius: 50%;
+    background: #2c3e50;
+    border: calc(3px * var(--relic-fly-ui-scale, 1)) solid #8b949e;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    flex-shrink: 0;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+.shopRelicFlyIcon img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.shopRelicFlyIcon span {
+    font-size: calc(1.3rem * var(--relic-fly-ui-scale, 1));
+    line-height: 1;
+}
+
+.shopRelicFlyLabel {
+    font-size: calc(0.9rem * var(--relic-fly-ui-scale, 1));
+    white-space: nowrap;
+    color: #ecf0f1;
+    font-weight: 700;
+    line-height: 1;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.shopRelicFlyLabelCharm {
+    margin-left: calc(10px * var(--relic-fly-ui-scale, 1));
+}
+
+.shopRelicFlyLabelAngle {
+    margin-right: calc(10px * var(--relic-fly-ui-scale, 1));
+}
+
 .infoTextContainer {
     margin-top: 6px;
     min-height: 30px;

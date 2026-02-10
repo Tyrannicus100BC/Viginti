@@ -13,6 +13,10 @@
     overflow: hidden;
 }
 
+.giftShopContainerExiting {
+    pointer-events: none;
+}
+
 .ropesLayer {
     position: absolute;
     top: 0;
@@ -21,6 +25,10 @@
     height: 100%;
     pointer-events: none;
     z-index: 40;
+}
+
+.ropesLayerExiting {
+    animation: giftShopRopesExit 300ms ease-out forwards;
 }
 
 .signContainer {
@@ -67,9 +75,14 @@
     flex-direction: column;
     gap: 8px;
     --relic-slot-height: 104px;
-    animation: slideUp 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    animation: giftShopShelvesEnter 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
     animation-delay: 0.4s;
     pointer-events: auto;
+}
+
+.shelvesContainerExiting {
+    animation: giftShopShelvesExit 300ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    animation-delay: 0ms;
 }
 
 .shelvesContentRow {
@@ -87,9 +100,31 @@
     pointer-events: none;
 }
 
-@keyframes slideUp {
+@keyframes giftShopShelvesEnter {
     to {
         transform: translateX(-50%) translateY(0);
+    }
+}
+
+@keyframes giftShopShelvesExit {
+    from {
+        transform: translateX(-50%) translateY(0);
+        opacity: 1;
+    }
+
+    to {
+        transform: translateX(-50%) translateY(200%);
+        opacity: 0;
+    }
+}
+
+@keyframes giftShopRopesExit {
+    from {
+        opacity: 1;
+    }
+
+    to {
+        opacity: 0;
     }
 }
 
@@ -114,6 +149,7 @@
 
 .charmsList .itemSlot {
     justify-content: flex-start;
+    align-items: flex-start;
     padding-left: 0;
     box-sizing: border-box;
 }
@@ -183,52 +219,40 @@
     display: flex;
     flex-direction: column;
     padding-left: 0;
-    gap: 14px;
-}
-
-.anglesZone {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-start;
-    padding: 0;
     gap: 12px;
 }
 
-.anglesList {
+.rightShelfRows {
     flex: 0 0 auto;
     display: grid;
-    grid-template-rows: repeat(2, var(--relic-slot-height));
+    grid-template-rows: repeat(3, var(--relic-slot-height));
     gap: 14px;
     position: relative;
 }
 
-.anglesList .itemSlot {
+.rightShelfRow {
     justify-content: flex-end;
+    align-items: flex-start;
     padding-right: 0;
     box-sizing: border-box;
+    position: relative;
 }
 
-.anglesList .relicRow {
+.rightShelfRow .relicRow {
     justify-content: flex-end;
 }
 
-.cardsZone {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    padding: 0;
-    position: relative;
+.rightShelfSpacer {
+    pointer-events: none;
 }
 
-.cardsGrid {
-    flex: 1;
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    grid-template-rows: 1fr 1fr;
-    gap: 10px;
-    position: relative;
+.tableActionHeader {
+    position: absolute;
+    bottom: calc(100% + 18px);
+    right: 0;
+    width: 100%;
+    margin-bottom: 0;
+    pointer-events: none;
 }
 
 .soldOutStamp {

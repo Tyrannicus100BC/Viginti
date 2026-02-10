@@ -90,6 +90,7 @@
 .slider {
     width: 130px;
     accent-color: #000000;
+    touch-action: auto;
 }
 
 .slider::-webkit-slider-runnable-track {

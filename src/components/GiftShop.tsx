@@ -1,23 +1,48 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import Matter from 'matter-js';
 import { useGameStore } from '../store/gameStore';
 import { RelicManager } from '../logic/relics/manager';
 import { RelicTooltip } from './RelicTooltip';
-import { PlayingCard } from './PlayingCard';
 import { useLayout } from './ResponsiveLayout';
 import styles from './GiftShop.module.css';
 
 interface GiftShopProps {
     onOpenDeckRemoval: () => void;
     onOpenEnhanceCards: () => void;
+    isExiting?: boolean;
+    onEnterAnimationComplete?: () => void;
+    onExitAnimationComplete?: () => void;
+    onRelicPurchased?: (payload: {
+        relicId: string;
+        relicType: 'Charm' | 'Angle';
+        icon: string | null;
+        name: string;
+        sourceRect: { left: number; top: number; width: number; height: number };
+    }) => void;
 }
 
-export const GiftShop: React.FC<GiftShopProps> = ({ onOpenDeckRemoval, onOpenEnhanceCards }) => {
+const SHELVES_ENTER_TOTAL_MS = 1200;
+const SHOP_EXIT_MS = 300;
+
+export const GiftShop: React.FC<GiftShopProps> = ({
+    onOpenDeckRemoval,
+    onOpenEnhanceCards,
+    isExiting = false,
+    onEnterAnimationComplete,
+    onExitAnimationComplete,
+    onRelicPurchased
+}) => {
     const { shopItems, buyShopItem, comps, restockGiftShop, giftShopRestockCost } = useGameStore();
 
     const signRef = useRef<HTMLDivElement>(null);
     const rope1Ref = useRef<SVGPolylineElement>(null);
     const rope2Ref = useRef<SVGPolylineElement>(null);
+    const isExitingRef = useRef(isExiting);
+    const hasFiredEnterCompleteRef = useRef(false);
+    const hasFiredExitCompleteRef = useRef(false);
+    const exitStartTimeRef = useRef<number | null>(null);
+    const hasAppliedSignExitBoostRef = useRef(false);
 
     const { viewportWidth, viewportHeight, scale } = useLayout();
     const layoutRef = useRef({ viewportWidth, viewportHeight, scale });
@@ -27,10 +52,14 @@ export const GiftShop: React.FC<GiftShopProps> = ({ onOpenDeckRemoval, onOpenEnh
     }, [viewportWidth, viewportHeight, scale]);
 
     useEffect(() => {
+        isExitingRef.current = isExiting;
+    }, [isExiting]);
+
+    useEffect(() => {
         const signEl = signRef.current;
         if (!signEl) return;
 
-        const { Engine, Bodies, Composite, Constraint } = Matter;
+        const { Engine, Bodies, Body, Composite, Constraint } = Matter;
         const engine = Engine.create({
             positionIterations: 10,
             velocityIterations: 10
@@ -152,7 +181,23 @@ export const GiftShop: React.FC<GiftShopProps> = ({ onOpenDeckRemoval, onOpenEnh
             if (signEl) {
                 const { x, y } = signBody.position;
                 const angle = signBody.angle;
-                signEl.style.transform = `translate3d(${x - width / 2}px, ${y - height / 2}px, 0) rotate(${angle}rad)`;
+                let signExitOffsetY = 0;
+                let signOpacity = 1;
+                if (isExitingRef.current) {
+                    if (exitStartTimeRef.current === null) {
+                        exitStartTimeRef.current = performance.now();
+                    }
+                    if (!hasAppliedSignExitBoostRef.current) {
+                        hasAppliedSignExitBoostRef.current = true;
+                        Body.setVelocity(signBody, { x: signBody.velocity.x, y: -18 });
+                    }
+                    const elapsed = performance.now() - exitStartTimeRef.current;
+                    const progress = Math.max(0, Math.min(1, elapsed / SHOP_EXIT_MS));
+                    signExitOffsetY = -220 * progress;
+                    signOpacity = 1 - progress;
+                }
+                signEl.style.opacity = `${signOpacity}`;
+                signEl.style.transform = `translate3d(${x - width / 2}px, ${y - height / 2 + signExitOffsetY}px, 0) rotate(${angle}rad)`;
             }
 
             const drawRope = (bodies: Matter.Body[], ref: SVGPolylineElement | null, anchor: { x: number; y: number }) => {
@@ -178,63 +223,53 @@ export const GiftShop: React.FC<GiftShopProps> = ({ onOpenDeckRemoval, onOpenEnh
         };
     }, []);
 
+    useEffect(() => {
+        if (isExiting) return;
+        hasFiredEnterCompleteRef.current = false;
+        const timeoutId = window.setTimeout(() => {
+            if (hasFiredEnterCompleteRef.current) return;
+            hasFiredEnterCompleteRef.current = true;
+            onEnterAnimationComplete?.();
+        }, SHELVES_ENTER_TOTAL_MS + 80);
+        return () => window.clearTimeout(timeoutId);
+    }, [isExiting, onEnterAnimationComplete]);
+
+    useEffect(() => {
+        if (!isExiting) {
+            hasFiredExitCompleteRef.current = false;
+            exitStartTimeRef.current = null;
+            hasAppliedSignExitBoostRef.current = false;
+            return;
+        }
+        const timeoutId = window.setTimeout(() => {
+            if (hasFiredExitCompleteRef.current) return;
+            hasFiredExitCompleteRef.current = true;
+            onExitAnimationComplete?.();
+        }, SHOP_EXIT_MS + 60);
+        return () => window.clearTimeout(timeoutId);
+    }, [isExiting, onExitAnimationComplete]);
+
     const charms = shopItems.filter(i => i.type === 'Charm');
     const angles = shopItems.filter(i => i.type === 'Angle');
-    const cards = shopItems.filter(i => i.type === 'Card');
+    const tableActions = shopItems.filter(i => i.type === 'TableAction');
     const charmSlots = Array.from({ length: 3 }, (_, i) => charms[i] ?? null);
-    const angleSlots = Array.from({ length: 2 }, (_, i) => angles[i] ?? null);
+    const angleSlot = angles[0] ?? null;
+    const tableActionSlot = tableActions[0] ?? null;
     const canAffordRestock = comps >= giftShopRestockCost;
     const hasNoCharms = charms.length === 0;
-    const hasNoAngles = angles.length === 0;
-    const hasNoCards = cards.length === 0;
-
-    const [hoveredId, setHoveredId] = useState<string | null>(null);
+    const hasNoAngles = !angleSlot;
+    const hasNoTableActions = !tableActionSlot;
 
     const renderItem = (item: typeof shopItems[number]) => {
-        const isSoldCharm = item.type === 'Charm' && item.purchased;
-
-        if (item.purchased && !isSoldCharm) {
-            return <div className={styles.emptySlot} />;
-        }
+        const isSoldRelic = (item.type === 'Charm' || item.type === 'Angle' || item.type === 'TableAction') && !!item.purchased;
 
         const canAfford = comps >= item.cost;
-
-        if (item.type === 'Card' && item.card) {
-            const isHovered = hoveredId === item.id;
-            const isDisabled = !canAfford;
-
-            return (
-                <div
-                    key={item.id}
-                    onClick={() => {
-                        if (!isDisabled) buyShopItem(item.id);
-                    }}
-                    onMouseEnter={() => {
-                        if (!isDisabled) setHoveredId(item.id);
-                    }}
-                    onMouseLeave={() => setHoveredId(null)}
-                    className={`${styles.cardSlot} ${isDisabled ? styles.itemDisabled : ''}`}
-                    style={{
-                        transform: isHovered && !isDisabled ? 'translateY(-4px) scale(1.05)' : 'translateY(0) scale(1)',
-                        cursor: isDisabled ? 'not-allowed' : 'pointer',
-                        zIndex: isHovered && !isDisabled ? 2000 : 1
-                    }}
-                >
-                    <div className={styles.cardWrapper}>
-                        <PlayingCard card={item.card} isDrawn={true} suppressEnterAnimation />
-                    </div>
-                    <div className={`${styles.priceTag} ${!canAfford ? styles.priceTagLocked : ''}`}>
-                        ₵{item.cost}
-                    </div>
-                </div>
-            );
-        }
 
         const config = RelicManager.getRelicConfig(item.id);
         if (!config) return null;
 
         const isAngle = item.type === 'Angle';
-        const isDisabled = !canAfford || isSoldCharm;
+        const isDisabled = !canAfford || isSoldRelic;
 
         return (
             <div
@@ -245,10 +280,36 @@ export const GiftShop: React.FC<GiftShopProps> = ({ onOpenDeckRemoval, onOpenEnh
                 }}
             >
                 <div
-                    onClick={() => {
-                        if (!isDisabled) buyShopItem(item.id);
+                    onClick={(event) => {
+                        if (isDisabled) return;
+                        const iconEl = event.currentTarget.querySelector('[data-relic-icon="true"]') as HTMLElement | null;
+                        const titleEl = event.currentTarget.querySelector('[data-relic-title="true"]') as HTMLElement | null;
+                        const fallbackRect = event.currentTarget.getBoundingClientRect();
+                        const iconRect = iconEl?.getBoundingClientRect();
+                        const titleRect = titleEl?.getBoundingClientRect();
+                        const sourceRect = (() => {
+                            if (!iconEl || !titleEl) return fallbackRect;
+                            if (!iconRect || !titleRect) return fallbackRect;
+                            const left = Math.min(iconRect.left, titleRect.left);
+                            const top = Math.min(iconRect.top, titleRect.top);
+                            const right = Math.max(iconRect.right, titleRect.right);
+                            const bottom = Math.max(iconRect.bottom, titleRect.bottom);
+                            return new DOMRect(left, top, right - left, bottom - top);
+                        })();
+                        flushSync(() => {
+                            onRelicPurchased?.({
+                                relicId: item.id,
+                                relicType: isAngle ? 'Angle' : 'Charm',
+                                icon: config.icon ?? null,
+                                name: item.nameOverride || config.handType?.name || config.name,
+                                sourceRect: sourceRect
+                                    ? { left: sourceRect.left, top: sourceRect.top, width: sourceRect.width, height: sourceRect.height }
+                                    : { left: 0, top: 0, width: 0, height: 0 }
+                            });
+                        });
+                        buyShopItem(item.id);
                     }}
-                    className={`${styles.expandedRelicCard} ${isAngle ? styles.expandedRelicCardAngle : ''} ${isSoldCharm ? styles.expandedRelicCardSold : ''} ${isDisabled ? styles.expandedRelicCardDisabled : ''}`}
+                    className={`${styles.expandedRelicCard} ${isAngle ? styles.expandedRelicCardAngle : ''} ${isSoldRelic ? styles.expandedRelicCardSold : ''} ${isDisabled ? styles.expandedRelicCardDisabled : ''}`}
                 >
                     <RelicTooltip
                         relic={config}
@@ -267,18 +328,33 @@ export const GiftShop: React.FC<GiftShopProps> = ({ onOpenDeckRemoval, onOpenEnh
                         }}
                     />
                     <div
-                        className={`${styles.expandedRelicPrice} ${isAngle ? styles.expandedRelicPriceAngle : ''} ${isSoldCharm ? styles.expandedRelicPriceSold : ''} ${!canAfford && !isSoldCharm ? styles.expandedRelicPriceLocked : ''}`}
+                        className={`${styles.expandedRelicPrice} ${isAngle ? styles.expandedRelicPriceAngle : ''} ${isSoldRelic ? styles.expandedRelicPriceSold : ''} ${!canAfford && !isSoldRelic ? styles.expandedRelicPriceLocked : ''}`}
                     >
-                        {isSoldCharm ? 'SOLD' : `₵${item.cost}`}
+                        {isSoldRelic ? 'SOLD' : `₵${item.cost}`}
                     </div>
                 </div>
             </div>
         );
     };
 
+    const handleShelvesAnimationEnd = (event: React.AnimationEvent<HTMLDivElement>) => {
+        if (event.target !== event.currentTarget) return;
+        if (event.animationName === 'giftShopShelvesEnter') {
+            if (hasFiredEnterCompleteRef.current) return;
+            hasFiredEnterCompleteRef.current = true;
+            onEnterAnimationComplete?.();
+            return;
+        }
+        if (event.animationName === 'giftShopShelvesExit') {
+            if (hasFiredExitCompleteRef.current) return;
+            hasFiredExitCompleteRef.current = true;
+            onExitAnimationComplete?.();
+        }
+    };
+
     return (
-        <div className={styles.giftShopContainer}>
-            <svg className={styles.ropesLayer}>
+        <div className={`${styles.giftShopContainer} ${isExiting ? styles.giftShopContainerExiting : ''}`}>
+            <svg className={`${styles.ropesLayer} ${isExiting ? styles.ropesLayerExiting : ''}`}>
                 <polyline ref={rope1Ref} fill="none" stroke="#8d6e63" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
                 <polyline ref={rope2Ref} fill="none" stroke="#8d6e63" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
@@ -287,7 +363,10 @@ export const GiftShop: React.FC<GiftShopProps> = ({ onOpenDeckRemoval, onOpenEnh
                 <div className={styles.signText}>Gift Shop</div>
             </div>
 
-            <div className={styles.shelvesContainer}>
+            <div
+                className={`${styles.shelvesContainer} ${isExiting ? styles.shelvesContainerExiting : ''}`}
+                onAnimationEnd={handleShelvesAnimationEnd}
+            >
                 <div className={styles.shelvesContentRow}>
                     <div className={styles.leftShelf}>
                         <div className={styles.zoneHeader}>CHARMS</div>
@@ -302,26 +381,19 @@ export const GiftShop: React.FC<GiftShopProps> = ({ onOpenDeckRemoval, onOpenEnh
                     </div>
 
                     <div className={styles.rightShelf}>
-                        <div className={styles.anglesZone}>
-                            <div className={styles.zoneHeader}>ANGLES</div>
-                            <div className={styles.anglesList}>
-                                {angleSlots.map((item, index) => (
-                                    <div key={item?.id ?? `empty_angle_${index}`} className={styles.itemSlot}>
-                                        {item ? renderItem(item) : <div className={styles.emptySlot} />}
-                                    </div>
-                                ))}
+                        <div className={styles.zoneHeader}>ANGLES</div>
+                        <div className={styles.rightShelfRows}>
+                            <div className={`${styles.itemSlot} ${styles.rightShelfRow}`}>
+                                {angleSlot ? renderItem(angleSlot) : <div className={styles.emptySlot} />}
                                 {hasNoAngles && <div className={styles.soldOutStamp}>NO STOCK</div>}
                             </div>
-                        </div>
-                        <div className={styles.cardsZone}>
-                            <div className={styles.zoneHeader}>CARDS</div>
-                            <div className={styles.cardsGrid}>
-                                {cards.map(item => (
-                                    <div key={item.id} className={styles.itemSlot}>
-                                        {renderItem(item)}
-                                    </div>
-                                ))}
-                                {hasNoCards && <div className={styles.soldOutStamp}>NO STOCK</div>}
+                            <div className={`${styles.itemSlot} ${styles.rightShelfSpacer}`}>
+                                <div className={styles.emptySlot} />
+                            </div>
+                            <div className={`${styles.itemSlot} ${styles.rightShelfRow}`}>
+                                <div className={`${styles.zoneHeader} ${styles.tableActionHeader}`}>TABLE ACTION</div>
+                                {tableActionSlot ? renderItem(tableActionSlot) : <div className={styles.emptySlot} />}
+                                {hasNoTableActions && <div className={styles.soldOutStamp}>NO STOCK</div>}
                             </div>
                         </div>
                     </div>

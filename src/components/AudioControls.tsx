@@ -28,6 +28,12 @@ export const AudioControls: React.FC<AudioControlsProps> = ({
     const sfxPercent = clampPercent(sfxVolume);
     const isMusicMuted = musicMuted || musicPercent === 0;
     const isSfxMuted = sfxMuted || sfxPercent === 0;
+    const handleMusicSlider = (event: React.FormEvent<HTMLInputElement>) => {
+        onMusicVolumeChange(Number(event.currentTarget.value) / 100);
+    };
+    const handleSfxSlider = (event: React.FormEvent<HTMLInputElement>) => {
+        onSfxVolumeChange(Number(event.currentTarget.value) / 100);
+    };
 
     return (
         <div className={styles.audioControls}>
@@ -54,7 +60,8 @@ export const AudioControls: React.FC<AudioControlsProps> = ({
                         min={0}
                         max={100}
                         value={musicPercent}
-                        onChange={(event) => onMusicVolumeChange(Number(event.target.value) / 100)}
+                        onInput={handleMusicSlider}
+                        onChange={handleMusicSlider}
                         aria-label="Music volume"
                     />
                 </div>
@@ -81,7 +88,8 @@ export const AudioControls: React.FC<AudioControlsProps> = ({
                         min={0}
                         max={100}
                         value={sfxPercent}
-                        onChange={(event) => onSfxVolumeChange(Number(event.target.value) / 100)}
+                        onInput={handleSfxSlider}
+                        onChange={handleSfxSlider}
                         aria-label="SFX volume"
                     />
                 </div>

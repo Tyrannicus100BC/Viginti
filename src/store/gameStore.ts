@@ -119,7 +119,7 @@ interface GameState {
     activeTableActionId: string | null;
     tableActionCharges: Record<string, number>;
     tableActionHeldCards: Record<string, Card | null>;
-    shopItems: { id: string, type: 'Charm' | 'Angle' | 'Card', card?: Card, purchased?: boolean, cost: number, nameOverride?: string }[];
+    shopItems: { id: string, type: 'Charm' | 'Angle' | 'TableAction', purchased?: boolean, cost: number, nameOverride?: string }[];
     giftShopRestockCost: number;
     selectedShopItemId: string | null;
     buyShopItem: (itemId: string) => void;
@@ -1994,21 +1994,14 @@ export const useGameStore = create<GameState>((set, get) => {
         if (idToConfirm) {
             const selectedItem = shopItems.find(i => i.id === idToConfirm);
             if (selectedItem && !selectedItem.purchased) {
-                if (selectedItem.type === 'Card' && selectedItem.card) {
-                    // Add card to deck
-                    set(state => ({
-                        deck: [...state.deck, selectedItem.card!]
-                    }));
-                } else {
-                    // Add to inventory
-                    const baseRelic = RelicManager.getRelicConfig(selectedItem.id);
-                    if (baseRelic) {
-                        const newInstance: RelicInstance = {
-                            id: selectedItem.id,
-                            state: { ...(baseRelic.properties || {}) }
-                        };
-                        newInventory.push(newInstance);
-                    }
+                // Add to inventory
+                const baseRelic = RelicManager.getRelicConfig(selectedItem.id);
+                if (baseRelic) {
+                    const newInstance: RelicInstance = {
+                        id: selectedItem.id,
+                        state: { ...(baseRelic.properties || {}) }
+                    };
+                    newInventory.push(newInstance);
                 }
 
                 // Mark as purchased instead of removing
@@ -2447,14 +2440,12 @@ export const useGameStore = create<GameState>((set, get) => {
     }, // Add comma
 
     buyShopItem: (itemId: string) => {
-        const { comps, inventory, deck, shopItems } = get();
+        const { comps, inventory, shopItems } = get();
 
         const item = shopItems.find(i => i.id === itemId);
         if (!item || item.purchased) return;
 
-        const fallbackCost = item.type === 'Card'
-            ? (item.card?.specialEffect ? 2 : 1)
-            : getRelicCompCost(item.id);
+        const fallbackCost = getRelicCompCost(item.id);
         const cost = item.cost ?? fallbackCost;
 
         if (comps < cost) {
@@ -2464,34 +2455,31 @@ export const useGameStore = create<GameState>((set, get) => {
         // Deduct Cost
         set({ comps: comps - cost });
 
-        if (item.type === 'Card' && item.card) {
-            set({ deck: [...deck, item.card] });
-        } else {
-            // Add Angle/Charm to inventory
-            const baseRelic = RelicManager.getRelicConfig(item.id);
-            if (baseRelic) {
-                const newInstance: RelicInstance = {
-                    id: item.id,
-                    state: { ...(baseRelic.properties || {}) }
-                };
+        // Add Angle/Charm/TableAction relic to inventory
+        const baseRelic = RelicManager.getRelicConfig(item.id);
+        if (baseRelic) {
+            const newInstance: RelicInstance = {
+                id: item.id,
+                state: { ...(baseRelic.properties || {}) }
+            };
 
-                const newInventory = [...inventory, newInstance];
-                // Recalculate deals
-                const dealsPerCasino = RelicManager.executeValueHook('getDealsPerCasino', BASE_DEALS_PER_CASINO, { inventory: newInventory });
+            const newInventory = [...inventory, newInstance];
+            // Recalculate deals
+            const dealsPerCasino = RelicManager.executeValueHook('getDealsPerCasino', BASE_DEALS_PER_CASINO, { inventory: newInventory });
 
-                set(state => ({
-                    inventory: newInventory,
-                    handsRemaining: dealsPerCasino - state.dealsTaken,
-                    tableActionCharges: buildTableActionCharges(newInventory, state.tableActionCharges),
-                    tableActionHeldCards: buildTableActionHeldCards(newInventory, state.tableActionHeldCards)
-                }));
-            }
+            set(state => ({
+                inventory: newInventory,
+                handsRemaining: dealsPerCasino - state.dealsTaken,
+                tableActionCharges: buildTableActionCharges(newInventory, state.tableActionCharges),
+                tableActionHeldCards: buildTableActionHeldCards(newInventory, state.tableActionHeldCards)
+            }));
         }
 
         // Mark purchased
         set({
             shopItems: shopItems.map(i => i.id === itemId ? { ...i, purchased: true } : i)
         });
+        sfxEngine.play('purchase');
     },
     restockGiftShop: () => {
         const { phase, comps, giftShopRestockCost, inventory } = get();
@@ -2499,6 +2487,7 @@ export const useGameStore = create<GameState>((set, get) => {
 
         const { rewardConfig, shopPriceOverrides } = getCurrentCasinoShopConfig();
         const rerolledItems = generateShopItems(rewardConfig, inventory, shopPriceOverrides);
+        sfxEngine.play('restock');
 
         set(state => ({
             comps: state.comps - state.giftShopRestockCost,

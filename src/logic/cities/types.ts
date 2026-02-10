@@ -1,11 +1,10 @@
 
 export interface RewardConfig {
-    type: 'Charm' | 'Angle' | 'Card' | 'Action';
+    type: 'Charm' | 'Angle' | 'TableAction';
     count: number;
     categories?: string[];
     excludeCategories?: string[];
     specificIds?: string[];
-    forceSpecialCard?: boolean;
 }
 
 export type ShopPriceOverrides = Record<string, number>;

@@ -25,6 +25,7 @@ import { useLayout } from './components/ResponsiveLayout';
 import { CasinosButton, DeckButton } from './components/HeaderButtons';
 import { CITY_DEFINITIONS } from './logic/cities/definitions';
 import { RelicManager } from './logic/relics/manager';
+import { getRelicRarityFrameColor } from './logic/relics/rarity';
 import { AudioControls } from './components/AudioControls';
 import { sfxEngine } from './utils/sfxEngine';
 
@@ -70,6 +71,15 @@ const GAME_MUSIC_TRACKS = [
     '/sounds/Music-Game-04.mp3'
 ];
 
+type WebkitWindow = Window & typeof globalThis & {
+    webkitAudioContext?: typeof AudioContext;
+};
+
+const getAudioContextCtor = (): typeof AudioContext | null => {
+    if (typeof window === 'undefined') return null;
+    return window.AudioContext ?? (window as WebkitWindow).webkitAudioContext ?? null;
+};
+
 type SwapAnimationItem = {
     key: string;
     card: Card;
@@ -96,8 +106,28 @@ type HoldPickupAnimation = {
     toScale: number;
 };
 
+type ShopRelicPurchaseLaunch = {
+    relicId: string;
+    relicType: 'Charm' | 'Angle';
+    icon: string | null;
+    name: string;
+    sourceRect: { left: number; top: number; width: number; height: number };
+};
+
+type ShopRelicFlight = {
+    key: string;
+    relicType: 'Charm' | 'Angle';
+    icon: string | null;
+    name: string;
+    rarityFrameColor: string;
+    start: { left: number; top: number; width: number; height: number };
+    target: { left: number; top: number; width: number; height: number };
+};
+
 const HOLD_PICKUP_DURATION_MS = 360;
 const HOLD_PLACE_SOURCE_Y = -275;
+const SHOP_RELIC_FLY_MS = 620;
+const GIFT_SHOP_EXIT_DURATION_MS = 300;
 
 export default function App() {
     const {
@@ -208,6 +238,10 @@ export default function App() {
     const [isSelectingDebugCard, setIsSelectingDebugCard] = useState(false);
     const [swapAnimation, setSwapAnimation] = useState<SwapAnimation | null>(null);
     const [holdPickupAnimation, setHoldPickupAnimation] = useState<HoldPickupAnimation | null>(null);
+    const [shopRelicPurchaseLaunch, setShopRelicPurchaseLaunch] = useState<ShopRelicPurchaseLaunch | null>(null);
+    const [shopRelicFlight, setShopRelicFlight] = useState<ShopRelicFlight | null>(null);
+    const [pendingInventoryHide, setPendingInventoryHide] = useState<{ kind: 'charm' | 'angle'; id: string } | null>(null);
+    const [hiddenInventoryEntry, setHiddenInventoryEntry] = useState<{ kind: 'charm' | 'angle'; id: string; index: number } | null>(null);
     const [hiddenDrawCardIds, setHiddenDrawCardIds] = useState<string[]>([]);
     const [entryAnimationOverrides, setEntryAnimationOverrides] = useState<Record<string, { xOffset: number; yOffset: number; scale: number }>>({});
     const [hiddenCardIds, setHiddenCardIds] = useState<string[]>([]);
@@ -230,6 +264,9 @@ export default function App() {
     const swapTimeoutRef = useRef<number | null>(null);
     const holdPickupTimeoutRef = useRef<number | null>(null);
     const holdPlaceOverrideTimeoutsRef = useRef<number[]>([]);
+    const shopRelicRetryTimeoutRef = useRef<number | null>(null);
+    const shopRelicFlyCardRef = useRef<HTMLDivElement | null>(null);
+    const shopRelicFlyAnimationRef = useRef<Animation | null>(null);
 
     const drawAreaRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -243,6 +280,9 @@ export default function App() {
     const musicRef = useRef<HTMLAudioElement | null>(null);
     const musicTrackRef = useRef<string | null>(null);
     const musicFadeRef = useRef<number | null>(null);
+    const musicContextRef = useRef<AudioContext | null>(null);
+    const musicSourceRef = useRef<MediaElementAudioSourceNode | null>(null);
+    const musicGainRef = useRef<GainNode | null>(null);
     const phaseRef = useRef(phase);
     const roundRef = useRef(round);
     const musicVolumeRef = useRef(musicVolume);
@@ -313,6 +353,33 @@ export default function App() {
             });
     };
 
+    const setMusicOutputVolume = (audio: HTMLAudioElement, volume: number) => {
+        const nextVolume = Math.max(0, Math.min(1, volume));
+        if (musicGainRef.current) {
+            musicGainRef.current.gain.value = nextVolume;
+            return;
+        }
+        audio.volume = nextVolume;
+    };
+
+    const ensureMusicGraph = (audio: HTMLAudioElement) => {
+        if (musicContextRef.current && musicSourceRef.current && musicGainRef.current) return;
+        const ctor = getAudioContextCtor();
+        if (!ctor) return;
+        const ctx = new ctor();
+        try {
+            const source = ctx.createMediaElementSource(audio);
+            const gain = ctx.createGain();
+            source.connect(gain);
+            gain.connect(ctx.destination);
+            musicContextRef.current = ctx;
+            musicSourceRef.current = source;
+            musicGainRef.current = gain;
+        } catch {
+            void ctx.close().catch(() => undefined);
+        }
+    };
+
     const fadeMusicTo = (
         audio: HTMLAudioElement,
         from: number,
@@ -322,7 +389,7 @@ export default function App() {
     ) => {
         stopMusicFade();
         if (durationMs <= 0) {
-            audio.volume = to;
+            setMusicOutputVolume(audio, to);
             onComplete?.();
             return;
         }
@@ -330,7 +397,7 @@ export default function App() {
         const tick = (now: number) => {
             const progress = Math.min(1, (now - start) / durationMs);
             const nextVolume = from + (to - from) * progress;
-            audio.volume = Math.max(0, Math.min(1, nextVolume));
+            setMusicOutputVolume(audio, nextVolume);
             if (progress < 1) {
                 musicFadeRef.current = requestAnimationFrame(tick);
             } else {
@@ -389,7 +456,8 @@ export default function App() {
         const music = new Audio();
         music.loop = true;
         music.preload = 'auto';
-        music.volume = 0;
+        ensureMusicGraph(music);
+        setMusicOutputVolume(music, 0);
         musicRef.current = music;
 
         let hasResumed = false;
@@ -399,6 +467,10 @@ export default function App() {
             hasResumed = true;
             setAudioUnlocked(true);
             void sfxEngine.resume();
+            const musicContext = musicContextRef.current;
+            if (musicContext?.state === 'suspended') {
+                void musicContext.resume().catch(() => undefined);
+            }
             const currentMusic = musicRef.current;
             if (!currentMusic) return;
             const desiredTrack = getDesiredMusicTrack(phaseRef.current, roundRef.current);
@@ -413,18 +485,18 @@ export default function App() {
                 musicTrackRef.current = desiredTrack;
                 currentMusic.src = desiredTrack;
                 currentMusic.currentTime = 0;
-                currentMusic.volume = 0;
+                setMusicOutputVolume(currentMusic, 0);
                 playMusic(currentMusic);
                 fadeMusicTo(currentMusic, 0, desiredVolume, MUSIC_FADE_IN_MS);
                 return;
             }
 
             if (currentMusic.paused) {
-                currentMusic.volume = 0;
+                setMusicOutputVolume(currentMusic, 0);
                 playMusic(currentMusic);
                 fadeMusicTo(currentMusic, 0, desiredVolume, MUSIC_FADE_IN_MS);
             } else {
-                currentMusic.volume = desiredVolume;
+                setMusicOutputVolume(currentMusic, desiredVolume);
             }
         };
 
@@ -442,6 +514,13 @@ export default function App() {
             music.pause();
             music.src = '';
             musicTrackRef.current = null;
+            const musicContext = musicContextRef.current;
+            musicContextRef.current = null;
+            musicSourceRef.current = null;
+            musicGainRef.current = null;
+            if (musicContext) {
+                void musicContext.close().catch(() => undefined);
+            }
         };
     }, []);
 
@@ -457,7 +536,7 @@ export default function App() {
             musicTrackRef.current = desiredTrack;
             music.src = desiredTrack;
             music.currentTime = 0;
-            music.volume = 0;
+            setMusicOutputVolume(music, 0);
             playMusic(music);
             fadeMusicTo(music, 0, desiredVolume, MUSIC_FADE_IN_MS);
         };
@@ -465,17 +544,17 @@ export default function App() {
         if (musicTrackRef.current === desiredTrack && hasDesiredTrackLoaded) {
             if (!audioUnlocked || desiredVolume === 0) {
                 stopMusicFade();
-                music.volume = 0;
+                setMusicOutputVolume(music, 0);
                 if (!music.paused) music.pause();
                 return;
             }
             if (music.paused) {
-                music.volume = 0;
+                setMusicOutputVolume(music, 0);
                 playMusic(music);
                 fadeMusicTo(music, 0, desiredVolume, MUSIC_FADE_IN_MS);
                 return;
             }
-            music.volume = desiredVolume;
+            setMusicOutputVolume(music, desiredVolume);
             return;
         }
 
@@ -484,7 +563,7 @@ export default function App() {
             musicTrackRef.current = desiredTrack;
             music.src = desiredTrack;
             music.currentTime = 0;
-            music.volume = 0;
+            setMusicOutputVolume(music, 0);
             music.pause();
             return;
         }
@@ -532,6 +611,11 @@ export default function App() {
         sfxEngine.play('click');
     }, [sfxMuted, sfxVolume]);
 
+    const playClickDown = React.useCallback(() => {
+        if (sfxMuted || sfxVolume <= 0) return;
+        sfxEngine.play('clickDown');
+    }, [sfxMuted, sfxVolume]);
+
     const playCardFlip = React.useCallback(() => {
         if (sfxMuted || sfxVolume <= 0) return;
         sfxEngine.play('cardFlip');
@@ -559,6 +643,167 @@ export default function App() {
         playCardPlace();
     }, [playCardPlace]);
 
+    const handleShopRelicPurchased = React.useCallback((payload: ShopRelicPurchaseLaunch) => {
+        const inventoryKind = payload.relicType === 'Charm' ? 'charm' : 'angle';
+        setPendingInventoryHide({ kind: inventoryKind, id: payload.relicId });
+        setShopRelicPurchaseLaunch(payload);
+    }, []);
+
+    useEffect(() => {
+        if (!shopRelicPurchaseLaunch) return;
+        if (shopRelicFlight) return;
+        let cancelled = false;
+        let attempts = 0;
+        const inventoryKind = shopRelicPurchaseLaunch.relicType === 'Charm' ? 'charm' : 'angle';
+
+        const tryResolveTarget = () => {
+            if (cancelled) return;
+            const rows = Array.from(
+                document.querySelectorAll(
+                    `[data-inventory-row="true"][data-inventory-kind="${inventoryKind}"][data-relic-id="${shopRelicPurchaseLaunch.relicId}"]`
+                )
+            ) as HTMLDivElement[];
+
+            if (rows.length === 0) {
+                attempts += 1;
+                if (attempts <= 15) {
+                    shopRelicRetryTimeoutRef.current = window.setTimeout(tryResolveTarget, 25);
+                } else {
+                    setShopRelicPurchaseLaunch(null);
+                    setPendingInventoryHide(null);
+                }
+                return;
+            }
+
+            const targetRow = rows[rows.length - 1];
+            const targetIconEl = targetRow.querySelector('[data-inventory-icon="true"]') as HTMLElement | null;
+            const targetLabelEl = targetRow.querySelector('[data-inventory-label="true"]') as HTMLElement | null;
+            const targetIconRect = targetIconEl?.getBoundingClientRect();
+            const targetLabelRect = targetLabelEl?.getBoundingClientRect();
+            const targetIndex = Number(targetRow.dataset.inventoryIndex ?? -1);
+            if (targetIndex < 0 || !targetIconRect || !targetLabelRect) {
+                setShopRelicPurchaseLaunch(null);
+                setPendingInventoryHide(null);
+                return;
+            }
+
+            const targetLabelText = targetLabelEl?.textContent?.trim();
+            const sourceRect = shopRelicPurchaseLaunch.sourceRect;
+            const left = Math.min(targetIconRect.left, targetLabelRect.left);
+            const top = Math.min(targetIconRect.top, targetLabelRect.top);
+            const right = Math.max(targetIconRect.right, targetLabelRect.right);
+            const bottom = Math.max(targetIconRect.bottom, targetLabelRect.bottom);
+            const targetRect = new DOMRect(left, top, right - left, bottom - top);
+            const relicConfig = RelicManager.getRelicConfig(shopRelicPurchaseLaunch.relicId);
+            const rarityFrameColor = getRelicRarityFrameColor(relicConfig?.rarity ?? 'common');
+
+            setHiddenInventoryEntry({
+                kind: inventoryKind,
+                id: shopRelicPurchaseLaunch.relicId,
+                index: targetIndex
+            });
+            setShopRelicFlight({
+                key: `${shopRelicPurchaseLaunch.relicId}-${Date.now()}`,
+                relicType: shopRelicPurchaseLaunch.relicType,
+                icon: shopRelicPurchaseLaunch.icon,
+                name: targetLabelText || shopRelicPurchaseLaunch.name,
+                rarityFrameColor,
+                start: {
+                    left: sourceRect.left,
+                    top: sourceRect.top,
+                    width: Math.max(1, sourceRect.width),
+                    height: Math.max(1, sourceRect.height)
+                },
+                target: {
+                    left: targetRect.left,
+                    top: targetRect.top,
+                    width: Math.max(1, targetRect.width),
+                    height: Math.max(1, targetRect.height)
+                }
+            });
+            setShopRelicPurchaseLaunch(null);
+        };
+
+        shopRelicRetryTimeoutRef.current = window.setTimeout(tryResolveTarget, 0);
+        return () => {
+            cancelled = true;
+            if (shopRelicRetryTimeoutRef.current !== null) {
+                window.clearTimeout(shopRelicRetryTimeoutRef.current);
+                shopRelicRetryTimeoutRef.current = null;
+            }
+        };
+    }, [shopRelicPurchaseLaunch, shopRelicFlight]);
+
+    useEffect(() => {
+        if (!shopRelicFlight) return;
+        const cardEl = shopRelicFlyCardRef.current;
+        if (!cardEl) return;
+
+        if (shopRelicFlyAnimationRef.current) {
+            shopRelicFlyAnimationRef.current.cancel();
+            shopRelicFlyAnimationRef.current = null;
+        }
+
+        let rafId: number | null = null;
+        cardEl.style.opacity = '0';
+        rafId = window.requestAnimationFrame(() => {
+            const actualStart = cardEl.getBoundingClientRect();
+            const source = shopRelicFlight.start;
+            const target = shopRelicFlight.target;
+            const startDx = source.left - actualStart.left;
+            const startDy = source.top - actualStart.top;
+            const endDx = target.left - actualStart.left;
+            const endDy = target.top - actualStart.top;
+            const startScaleX = actualStart.width > 0 ? (source.width / actualStart.width) : 1;
+            const startScaleY = actualStart.height > 0 ? (source.height / actualStart.height) : 1;
+            const endScaleX = actualStart.width > 0 ? (target.width / actualStart.width) : 1;
+            const endScaleY = actualStart.height > 0 ? (target.height / actualStart.height) : 1;
+            const startTransform = `translate(${startDx}px, ${startDy}px) scale(${startScaleX}, ${startScaleY})`;
+            const baseEndTransform = `translate(${endDx}px, ${endDy}px) scale(${endScaleX}, ${endScaleY})`;
+
+            cardEl.style.transform = startTransform;
+            // Calibrate destination against actual rendered box to eliminate residual sub-pixel drift.
+            cardEl.style.transform = baseEndTransform;
+            const projectedEnd = cardEl.getBoundingClientRect();
+            const correctionX = target.left - projectedEnd.left;
+            const correctionY = target.top - projectedEnd.top;
+            const endTransform = `translate(${endDx + correctionX}px, ${endDy + correctionY}px) scale(${endScaleX}, ${endScaleY})`;
+            cardEl.style.transform = startTransform;
+            cardEl.style.opacity = '1';
+            const animation = cardEl.animate(
+                [
+                    { transform: startTransform, opacity: 1 },
+                    { transform: endTransform, opacity: 1 }
+                ],
+                {
+                    duration: SHOP_RELIC_FLY_MS,
+                    easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)',
+                    fill: 'forwards'
+                }
+            );
+
+            shopRelicFlyAnimationRef.current = animation;
+            animation.onfinish = () => {
+                if (shopRelicFlyAnimationRef.current === animation) {
+                    shopRelicFlyAnimationRef.current = null;
+                }
+                setShopRelicFlight(null);
+                setHiddenInventoryEntry(null);
+                setPendingInventoryHide(null);
+            };
+        });
+
+        return () => {
+            if (rafId !== null) {
+                window.cancelAnimationFrame(rafId);
+            }
+            if (shopRelicFlyAnimationRef.current) {
+                shopRelicFlyAnimationRef.current.cancel();
+                shopRelicFlyAnimationRef.current = null;
+            }
+        };
+    }, [shopRelicFlight]);
+
     const hasClearedAtlanticCity = isCityCleared('atlantic_city');
     const shouldShowSkipTutorial = selectedCityId === 'atlantic_city';
 
@@ -579,17 +824,46 @@ export default function App() {
     const confettiFiredRef = useRef(false);
 
     const [showSelectionUI, setShowSelectionUI] = useState(false);
+    const [giftShopEnterComplete, setGiftShopEnterComplete] = useState(false);
+    const [isGiftShopExiting, setIsGiftShopExiting] = useState(false);
     const [hasSettledFirstOverlay, setHasSettledFirstOverlay] = useState(false);
     const [, setProgressionRevision] = useState(0);
     const pendingDrawAnimationIds = useRef<Set<string>>(new Set());
     const isDrawAnimationActive = useRef(false);
+    const giftShopExitTimeoutRef = useRef<number | null>(null);
     useEffect(() => {
         return () => {
             if (standWarningTimeoutRef.current !== null) {
                 window.clearTimeout(standWarningTimeoutRef.current);
             }
+            if (shopRelicRetryTimeoutRef.current !== null) {
+                window.clearTimeout(shopRelicRetryTimeoutRef.current);
+                shopRelicRetryTimeoutRef.current = null;
+            }
+            if (shopRelicFlyAnimationRef.current) {
+                shopRelicFlyAnimationRef.current.cancel();
+                shopRelicFlyAnimationRef.current = null;
+            }
+            if (giftShopExitTimeoutRef.current !== null) {
+                window.clearTimeout(giftShopExitTimeoutRef.current);
+                giftShopExitTimeoutRef.current = null;
+            }
         };
     }, []);
+
+    useEffect(() => {
+        if (phase === 'gift_shop') {
+            setGiftShopEnterComplete(false);
+            setIsGiftShopExiting(false);
+            return;
+        }
+        setGiftShopEnterComplete(false);
+        setIsGiftShopExiting(false);
+        if (giftShopExitTimeoutRef.current !== null) {
+            window.clearTimeout(giftShopExitTimeoutRef.current);
+            giftShopExitTimeoutRef.current = null;
+        }
+    }, [phase]);
 
     useEffect(() => {
         if (!standWarningMessage) {
@@ -1260,6 +1534,48 @@ export default function App() {
         signalTotalWinningsOnce();
     };
 
+    const currentCity = CITY_DEFINITIONS.find(c => c.id === selectedCityId) || CITY_DEFINITIONS[0];
+    const isLastCasino = round >= currentCity.casinoTargets.length;
+
+    const handleRoundAdvanceAction = React.useCallback(() => {
+        const tutorialManager = TutorialManager.getInstance();
+        if (phase === 'round_over' && round === 1 && totalScore >= targetScore) {
+            tutorialManager.completeStep(NEXT_CASINO_TUTORIAL_ID);
+        }
+        if (phase === 'entering_casino') {
+            dealFirstHand();
+        } else if (totalScore >= targetScore && isLastCasino) {
+            winGame();
+        } else {
+            nextRound();
+        }
+    }, [phase, round, totalScore, targetScore, isLastCasino, dealFirstHand, winGame, nextRound]);
+
+    const finalizeGiftShopExit = React.useCallback(() => {
+        if (giftShopExitTimeoutRef.current !== null) {
+            window.clearTimeout(giftShopExitTimeoutRef.current);
+            giftShopExitTimeoutRef.current = null;
+        }
+        if (phase !== 'gift_shop' || !isGiftShopExiting) return;
+        if (isLastCasino) {
+            winGame();
+        } else {
+            leaveShop();
+        }
+    }, [isGiftShopExiting, isLastCasino, leaveShop, phase, winGame]);
+
+    const startGiftShopExit = React.useCallback(() => {
+        if (phase !== 'gift_shop' || isGiftShopExiting || !giftShopEnterComplete) return;
+        setIsGiftShopExiting(true);
+        if (giftShopExitTimeoutRef.current !== null) {
+            window.clearTimeout(giftShopExitTimeoutRef.current);
+        }
+        giftShopExitTimeoutRef.current = window.setTimeout(() => {
+            giftShopExitTimeoutRef.current = null;
+            finalizeGiftShopExit();
+        }, GIFT_SHOP_EXIT_DURATION_MS + 60);
+    }, [finalizeGiftShopExit, giftShopEnterComplete, isGiftShopExiting, phase]);
+
     if (phase === 'init') {
         const canStartRun = isCityUnlocked(selectedCityId) && isGamblerUnlocked(selectedGamblerId);
 
@@ -1459,8 +1775,6 @@ export default function App() {
             </div>
         );
     }
-
-
     // Construct Dealer Props
     const dealerHandProps: PlayerHand = {
         id: -1,
@@ -1493,12 +1807,16 @@ export default function App() {
         if (canDrawNow) {
             handleDraw();
         } else if (phase === 'round_over') {
-            // When the player can leave/clear the casino, require an explicit tap on the action button.
-            if (totalScore >= targetScore) return;
+            // Allow click-anywhere for Leave Casino, but keep Victory as button-only.
+            if (totalScore >= targetScore) {
+                if (isLastCasino) return;
+                handleRoundAdvanceAction();
+                return;
+            }
             nextRound();
         } else if (phase === 'entering_casino') {
             // Allow global click to start dealing 
-            dealFirstHand();
+            handleRoundAdvanceAction();
         }
     };
 
@@ -1537,9 +1855,6 @@ export default function App() {
     
     // Compromise spacing if needed to fit in board
     const buttonOffset = Math.min(targetOffset, maxOffset);
-
-    const currentCity = CITY_DEFINITIONS.find(c => c.id === selectedCityId) || CITY_DEFINITIONS[0];
-    const isLastCasino = round >= currentCity.casinoTargets.length;
 
     return (
         <div
@@ -1701,6 +2016,9 @@ export default function App() {
                         </div>
                         <RelicInventory
                             enabledCategories={['Charm']}
+                            inventoryKind="charm"
+                            hiddenEntry={hiddenInventoryEntry?.kind === 'charm' ? { id: hiddenInventoryEntry.id, index: hiddenInventoryEntry.index } : null}
+                            pendingHiddenRelicId={pendingInventoryHide?.kind === 'charm' ? pendingInventoryHide.id : null}
                         />
                     </div>
                     <div className={styles.sidebar}>
@@ -1726,6 +2044,9 @@ export default function App() {
                         <RelicInventory
                             enabledCategories={['Angle']}
                             viewMode="table"
+                            inventoryKind="angle"
+                            hiddenEntry={hiddenInventoryEntry?.kind === 'angle' ? { id: hiddenInventoryEntry.id, index: hiddenInventoryEntry.index } : null}
+                            pendingHiddenRelicId={pendingInventoryHide?.kind === 'angle' ? pendingInventoryHide.id : null}
                         />
                     </div>
                 </div>
@@ -2152,17 +2473,7 @@ export default function App() {
                                     className={styles.nextRoundButton}
                                     onClick={(e) => {
                                         e.stopPropagation();
-                                        const tutorialManager = TutorialManager.getInstance();
-                                        if (phase === 'round_over' && round === 1 && totalScore >= targetScore) {
-                                            tutorialManager.completeStep(NEXT_CASINO_TUTORIAL_ID);
-                                        }
-                                        if (phase === 'entering_casino') {
-                                            dealFirstHand();
-                                        } else if (totalScore >= targetScore && isLastCasino) {
-                                            winGame();
-                                        } else {
-                                            nextRound();
-                                        }
+                                        handleRoundAdvanceAction();
                                     }}
                                     disabled={phase === 'playing' && isInitialDeal}
                                     style={phase === 'round_over' && totalScore < targetScore && handsRemaining <= 0 ? { color: '#ff4444', borderColor: '#ff4444' } : {}}
@@ -2173,19 +2484,19 @@ export default function App() {
                                     )}
                                 </button>
                             ) : (phase === 'gift_shop') ? (
-                                <button
-                                    className={styles.nextRoundButton}
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (isLastCasino) {
-                                            winGame();
-                                        } else {
-                                            leaveShop();
-                                        }
-                                    }}
-                                >
-                                    {isLastCasino ? 'Victory' : 'Next Casino'}
-                                </button>
+                                giftShopEnterComplete && !isGiftShopExiting ? (
+                                    <button
+                                        className={styles.nextRoundButton}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            startGiftShopExit();
+                                        }}
+                                    >
+                                        {isLastCasino ? 'Victory' : 'Next Casino'}
+                                    </button>
+                                ) : (
+                                    <div className={styles.actionPlaceholder} />
+                                )
                             ) : (
                                 <div className={styles.actionPlaceholder} />
                             )}
@@ -2203,7 +2514,7 @@ export default function App() {
                     activeCards={activeCards}
 
                     onClose={() => {
-                        playClick();
+                        playClickDown();
                         setShowDeck(false);
                         setIsRemovingCards(false);
                         setIsSelectingDebugCard(false);
@@ -2225,7 +2536,7 @@ export default function App() {
                 <CasinoListingView
                     currentRound={round}
                     onClose={() => {
-                        playClick();
+                        playClickDown();
                         setShowCasinoListing(false);
                     }}
                 />
@@ -2236,18 +2547,24 @@ export default function App() {
             )}
             {phase === 'gift_shop' && (
                 <GiftShop
+                    isExiting={isGiftShopExiting}
+                    onEnterAnimationComplete={() => setGiftShopEnterComplete(true)}
+                    onExitAnimationComplete={finalizeGiftShopExit}
                     onOpenDeckRemoval={() => {
+                        if (isGiftShopExiting || !giftShopEnterComplete) return;
                         playClick();
                         setIsEnhancingCards(false);
                         setIsRemovingCards(true);
                         setShowDeck(true);
                     }}
                     onOpenEnhanceCards={() => {
+                        if (isGiftShopExiting || !giftShopEnterComplete) return;
                         playClick();
                         setIsRemovingCards(false);
                         setIsEnhancingCards(true);
                         setShowDeck(true);
                     }}
+                    onRelicPurchased={handleShopRelicPurchased}
                 />
             )}
             {showCompsWindow && (
@@ -2287,6 +2604,42 @@ export default function App() {
                             />
                         </div>
                     ))}
+                </div>
+            )}
+
+            {shopRelicFlight && (
+                <div className={styles.shopRelicFlyOverlay}>
+                    <div
+                        ref={shopRelicFlyCardRef}
+                        key={shopRelicFlight.key}
+                        className={`${styles.shopRelicFlyCard} ${shopRelicFlight.relicType === 'Angle' ? styles.shopRelicFlyCardAngle : ''}`}
+                        style={{
+                            left: shopRelicFlight.start.left,
+                            top: shopRelicFlight.start.top,
+                            width: shopRelicFlight.start.width,
+                            height: shopRelicFlight.start.height,
+                            // @ts-ignore
+                            '--relic-fly-ui-scale': `${scale}`
+                        }}
+                    >
+                            <div
+                                className={styles.shopRelicFlyIcon}
+                                style={{ borderColor: shopRelicFlight.rarityFrameColor }}
+                            >
+                            {shopRelicFlight.icon && (shopRelicFlight.icon.includes('.') || shopRelicFlight.icon.includes('/')) ? (
+                                <img src={shopRelicFlight.icon} alt={shopRelicFlight.name} />
+                            ) : shopRelicFlight.icon ? (
+                                <span>{shopRelicFlight.icon}</span>
+                            ) : (
+                                <span>{shopRelicFlight.name.slice(0, 2).toUpperCase()}</span>
+                            )}
+                        </div>
+                        <div
+                            className={`${styles.shopRelicFlyLabel} ${shopRelicFlight.relicType === 'Angle' ? styles.shopRelicFlyLabelAngle : styles.shopRelicFlyLabelCharm}`}
+                        >
+                            {shopRelicFlight.name}
+                        </div>
+                    </div>
                 </div>
             )}
 

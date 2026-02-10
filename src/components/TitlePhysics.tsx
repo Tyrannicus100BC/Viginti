@@ -38,7 +38,7 @@ const COLLISION_CATEGORY = {
 export const TitlePhysics: React.FC = () => {
   const { viewportWidth, viewportHeight, scale } = useLayout();
   const debugEnabled = useGameStore(state => state.debugEnabled);
-  const debugVisualizationEnabled = true;
+  const debugVisualizationEnabled = false;
   
   // Refs for Matter.js instances
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -170,8 +170,12 @@ export const TitlePhysics: React.FC = () => {
         if (buttonEl) {
             const el = buttonEl as HTMLElement;
             const rect = el.getBoundingClientRect();
-            const scaledW = el.offsetWidth / scale;
-            const scaledH = el.offsetHeight / scale;
+            // Keep collision size stable while rotating:
+            // getBoundingClientRect() expands/contracts as the element rotates because it
+            // returns an axis-aligned bounds box. offsetWidth/offsetHeight stay constant
+            // in virtual layout units and should not be divided by scale.
+            const scaledW = el.offsetWidth;
+            const scaledH = el.offsetHeight;
 
             const cx = (rect.left + rect.width / 2) / scale;
             const cy = (rect.top + rect.height / 2) / scale;

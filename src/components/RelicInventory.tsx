@@ -11,9 +11,18 @@ import { getRelicRarityFrameColor } from '../logic/relics/rarity';
 interface RelicInventoryProps {
     enabledCategories?: string[];
     viewMode?: 'icons' | 'table';
+    inventoryKind?: 'charm' | 'angle';
+    hiddenEntry?: { id: string; index: number } | null;
+    pendingHiddenRelicId?: string | null;
 }
 
-export const RelicInventory: React.FC<RelicInventoryProps> = ({ enabledCategories, viewMode = 'icons' }) => {
+export const RelicInventory: React.FC<RelicInventoryProps> = ({
+    enabledCategories,
+    viewMode = 'icons',
+    inventoryKind,
+    hiddenEntry = null,
+    pendingHiddenRelicId = null
+}) => {
     const { inventory, activeRelicId } = useGameStore();
 
     const visibleInventory = inventory.filter(instance => {
@@ -40,14 +49,12 @@ export const RelicInventory: React.FC<RelicInventoryProps> = ({ enabledCategorie
     // Usually debug buttons are always there.
 
     if (viewMode === 'table') {
-        const sortedInventory = [...visibleInventory].sort((a, b) => {
-             const configA = RelicManager.getRelicConfig(a.id);
-             const configB = RelicManager.getRelicConfig(b.id);
-             // Sort by order if available, else name
-             const orderA = configA?.handType?.order ?? 999;
-             const orderB = configB?.handType?.order ?? 999;
-             return orderA - orderB; 
-        });
+        const tableInventory = visibleInventory;
+        const pendingHiddenIndex = pendingHiddenRelicId
+            ? tableInventory.reduce<number>((lastIndex, instance, index) => (
+                instance.id === pendingHiddenRelicId ? index : lastIndex
+            ), -1)
+            : -1;
 
         // Use the same container style as Charms view but with 100% width default for the list
         return (
@@ -63,16 +70,23 @@ export const RelicInventory: React.FC<RelicInventoryProps> = ({ enabledCategorie
                 position: 'relative',
                 pointerEvents: 'none'
             }}>
-                {sortedInventory.map((instance, index) => {
+                {tableInventory.map((instance, index) => {
                     const config = RelicManager.getRelicConfig(instance.id);
                     if (!config) return null;
                     const rarityFrameColor = getRelicRarityFrameColor(config.rarity);
                     
                     const isActive = activeRelicId === instance.id || instance.state?.armed;
                     const isHovered = hoveredIndex === index;
+                    const isTemporarilyHidden =
+                        (hiddenEntry?.id === instance.id && hiddenEntry.index === index) ||
+                        (pendingHiddenRelicId === instance.id && index === pendingHiddenIndex);
 
                     return (
                         <div key={`${instance.id}-${index}`} 
+                            data-inventory-row="true"
+                            data-inventory-kind={inventoryKind}
+                            data-relic-id={instance.id}
+                            data-inventory-index={index}
                             onMouseEnter={(e) => {
                                 setHoveredIndex(index);
                                 const target = e.currentTarget;
@@ -98,11 +112,15 @@ export const RelicInventory: React.FC<RelicInventoryProps> = ({ enabledCategorie
                                 zIndex: isHovered ? 100 : (isActive ? 10 : 1),
                                 pointerEvents: 'auto',
                                 paddingLeft: 8, // Reduced space
-                                paddingRight: 0 
+                                paddingRight: 0,
+                                opacity: isTemporarilyHidden ? 0 : 1,
+                                visibility: isTemporarilyHidden ? 'hidden' : 'visible'
                             }}
                         >
                             {/* Name Label (Left of Icon) */}
-                            <div style={{
+                            <div
+                                data-inventory-label="true"
+                                style={{
                                 marginRight: 10,
                                 color: isActive ? '#f1c40f' : (instance.state?.used_this_round ? '#4a5568' : '#ecf0f1'),
                                 fontWeight: 'bold',
@@ -110,12 +128,15 @@ export const RelicInventory: React.FC<RelicInventoryProps> = ({ enabledCategorie
                                 whiteSpace: 'nowrap',
                                 textShadow: instance.state?.used_this_round ? 'none' : '0 1px 2px rgba(0,0,0,0.8)',
                                 textAlign: 'left' 
-                            }}>
+                                }}
+                            >
                                 {config.handType?.name || config.name}
                             </div>
 
                             {/* Icon Circle */}
-                            <div style={{
+                            <div
+                                data-inventory-icon="true"
+                                style={{
                                 width: 40,
                                 height: 40,
                                 borderRadius: '50%',
@@ -128,7 +149,8 @@ export const RelicInventory: React.FC<RelicInventoryProps> = ({ enabledCategorie
                                 boxShadow: '0 2px 10px rgba(0,0,0,0.3)',
                                 marginRight: 0,
                                 overflow: 'hidden'
-                            }}>
+                                }}
+                            >
                                 {config.icon && (config.icon.includes('.') || config.icon.includes('/')) ? (
                                     <img 
                                         src={config.icon} 
@@ -169,10 +191,10 @@ export const RelicInventory: React.FC<RelicInventoryProps> = ({ enabledCategorie
                 })}
 
 
-                {hoveredIndex !== null && sortedInventory[hoveredIndex] && RelicManager.getRelicConfig(sortedInventory[hoveredIndex].id) && (
+                {hoveredIndex !== null && tableInventory[hoveredIndex] && RelicManager.getRelicConfig(tableInventory[hoveredIndex].id) && (
                     <RelicTooltip 
-                        relic={RelicManager.getRelicConfig(sortedInventory[hoveredIndex].id)!}
-                        displayValues={sortedInventory[hoveredIndex].state}
+                        relic={RelicManager.getRelicConfig(tableInventory[hoveredIndex].id)!}
+                        displayValues={tableInventory[hoveredIndex].state}
                         hideIcon={true}
                         isRightAligned={true}
                         layout="horizontal"
@@ -204,109 +226,131 @@ export const RelicInventory: React.FC<RelicInventoryProps> = ({ enabledCategorie
             position: 'relative', // Enable absolute positioning for children (tooltips)
             pointerEvents: 'none'
         }}>
-            {visibleInventory.map((instance, index) => {
-                const config = RelicManager.getRelicConfig(instance.id);
-                if (!config) return null;
-                const rarityFrameColor = getRelicRarityFrameColor(config.rarity);
+            {(() => {
+                const pendingHiddenIndex = pendingHiddenRelicId
+                    ? visibleInventory.reduce<number>((lastIndex, instance, index) => (
+                        instance.id === pendingHiddenRelicId ? index : lastIndex
+                    ), -1)
+                    : -1;
+                return visibleInventory.map((instance, index) => {
+                    const config = RelicManager.getRelicConfig(instance.id);
+                    if (!config) return null;
+                    const rarityFrameColor = getRelicRarityFrameColor(config.rarity);
 
-                const isActive = activeRelicId === instance.id || instance.state?.armed;
-                const isHovered = hoveredIndex === index;
+                    const isActive = activeRelicId === instance.id || instance.state?.armed;
+                    const isHovered = hoveredIndex === index;
+                    const isTemporarilyHidden =
+                        (hiddenEntry?.id === instance.id && hiddenEntry.index === index) ||
+                        (pendingHiddenRelicId === instance.id && index === pendingHiddenIndex);
 
-                return (
-                    <div 
-                        key={`${instance.id}-${index}`} 
-                        onMouseEnter={(e) => {
-                            setHoveredIndex(index);
-                            const target = e.currentTarget;
-                            setTooltipPos({ 
-                                top: target.offsetTop, 
-                                left: target.offsetLeft
-                            });
-                        }}
-                        onMouseLeave={() => setHoveredIndex(null)}
-                        style={{
-                            minWidth: 40, // Allow expansion
-                            height: 40,
-                            borderRadius: '20px', // Adjusted for 40px height
-                            background: 'transparent',
-                            border: 'none',
-                            transform: isActive ? 'scale(1.05)' : 'scale(1)',
-                            transition: 'transform 0.2s ease',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'flex-start', // Icon on left
-                            position: 'relative',
-                            cursor: 'help',
-                            zIndex: isHovered ? 100 : (isActive ? 10 : 1),
-                            pointerEvents: 'auto',
-                            willChange: 'z-index',
-                            paddingRight: 8 // Reduced space
-                        }}
-                    >
-                        <div style={{
-                            width: 40,
-                            height: 40,
-                            borderRadius: '50%',
-                            background: isActive ? '#f1c40f' : (instance.state?.used_this_round ? '#151e26' : '#2c3e50'),
-                            border: `3px solid ${rarityFrameColor}`,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            flexShrink: 0,
-                            boxShadow: '0 2px 10px rgba(0,0,0,0.3)',
-                            marginLeft: 0,
-                            overflow: 'hidden'
-                        }}>
-                             {config.icon && (config.icon.includes('.') || config.icon.includes('/')) ? (
-                                 <img 
-                                    src={config.icon} 
-                                    alt={config.name} 
-                                    style={{ 
-                                        width: '100%', 
-                                        height: '100%', 
-                                        objectFit: 'cover',
-                                        filter: isActive ? 'brightness(1.2) drop-shadow(0 0 5px rgba(255,255,255,0.5))' : (instance.state?.used_this_round ? 'brightness(0.5) grayscale(0.8)' : 'none')
-                                    }} 
-                                 />
-                             ) : config.icon ? (
-                                <div style={{
-                                    fontSize: '1.5rem',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    width: '100%',
-                                    height: '100%',
-                                    filter: instance.state?.used_this_round ? 'grayscale(0.8) opacity(0.5)' : 'none'
-                                }}>
-                                    {config.icon}
-                                </div>
-                             ) : (
-                                 <div style={{
-                                     fontSize: '0.6rem',
-                                     fontWeight: 'bold',
-                                     textAlign: 'center',
-                                     color: isActive ? '#fff' : '#ecf0f1',
-                                     padding: 2
-                                 }}>
-                                     {config.name.substring(0, 2).toUpperCase()}
-                                 </div>
-                             )}
+                    return (
+                        <div 
+                            key={`${instance.id}-${index}`} 
+                            data-inventory-row="true"
+                            data-inventory-kind={inventoryKind}
+                            data-relic-id={instance.id}
+                            data-inventory-index={index}
+                            onMouseEnter={(e) => {
+                                setHoveredIndex(index);
+                                const target = e.currentTarget;
+                                setTooltipPos({ 
+                                    top: target.offsetTop, 
+                                    left: target.offsetLeft
+                                });
+                            }}
+                            onMouseLeave={() => setHoveredIndex(null)}
+                            style={{
+                                minWidth: 40, // Allow expansion
+                                height: 40,
+                                borderRadius: '20px', // Adjusted for 40px height
+                                background: 'transparent',
+                                border: 'none',
+                                transform: isActive ? 'scale(1.05)' : 'scale(1)',
+                                transition: 'transform 0.2s ease',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'flex-start', // Icon on left
+                                position: 'relative',
+                                cursor: 'help',
+                                zIndex: isHovered ? 100 : (isActive ? 10 : 1),
+                                pointerEvents: 'auto',
+                                willChange: 'z-index',
+                                paddingRight: 8, // Reduced space
+                                opacity: isTemporarilyHidden ? 0 : 1,
+                                visibility: isTemporarilyHidden ? 'hidden' : 'visible'
+                            }}
+                        >
+                            <div
+                                data-inventory-icon="true"
+                                style={{
+                                width: 40,
+                                height: 40,
+                                borderRadius: '50%',
+                                background: isActive ? '#f1c40f' : (instance.state?.used_this_round ? '#151e26' : '#2c3e50'),
+                                border: `3px solid ${rarityFrameColor}`,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                flexShrink: 0,
+                                boxShadow: '0 2px 10px rgba(0,0,0,0.3)',
+                                marginLeft: 0,
+                                overflow: 'hidden'
+                                }}
+                            >
+                                 {config.icon && (config.icon.includes('.') || config.icon.includes('/')) ? (
+                                     <img 
+                                        src={config.icon} 
+                                        alt={config.name} 
+                                        style={{ 
+                                            width: '100%', 
+                                            height: '100%', 
+                                            objectFit: 'cover',
+                                            filter: isActive ? 'brightness(1.2) drop-shadow(0 0 5px rgba(255,255,255,0.5))' : (instance.state?.used_this_round ? 'brightness(0.5) grayscale(0.8)' : 'none')
+                                        }} 
+                                     />
+                                 ) : config.icon ? (
+                                    <div style={{
+                                        fontSize: '1.5rem',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        width: '100%',
+                                        height: '100%',
+                                        filter: instance.state?.used_this_round ? 'grayscale(0.8) opacity(0.5)' : 'none'
+                                    }}>
+                                        {config.icon}
+                                    </div>
+                                 ) : (
+                                     <div style={{
+                                         fontSize: '0.6rem',
+                                         fontWeight: 'bold',
+                                         textAlign: 'center',
+                                         color: isActive ? '#fff' : '#ecf0f1',
+                                         padding: 2
+                                     }}>
+                                         {config.name.substring(0, 2).toUpperCase()}
+                                     </div>
+                                 )}
+                            </div>
+                            
+                            {/* Name Label */}
+                            <div
+                                data-inventory-label="true"
+                                style={{
+                                marginLeft: 10,
+                                color: isActive ? '#f1c40f' : (instance.state?.used_this_round ? '#4a5568' : '#ecf0f1'),
+                                fontWeight: 'bold',
+                                fontSize: '0.9rem',
+                                whiteSpace: 'nowrap',
+                                textShadow: instance.state?.used_this_round ? 'none' : '0 1px 2px rgba(0,0,0,0.8)'
+                                }}
+                            >
+                                {config.name}
+                            </div>
                         </div>
-                        
-                        {/* Name Label */}
-                        <div style={{
-                            marginLeft: 10,
-                            color: isActive ? '#f1c40f' : (instance.state?.used_this_round ? '#4a5568' : '#ecf0f1'),
-                            fontWeight: 'bold',
-                            fontSize: '0.9rem',
-                            whiteSpace: 'nowrap',
-                            textShadow: instance.state?.used_this_round ? 'none' : '0 1px 2px rgba(0,0,0,0.8)'
-                        }}>
-                            {config.name}
-                        </div>
-                    </div>
-                );
-            })}
+                    );
+                });
+            })()}
 
 
 
@@ -329,4 +373,3 @@ export const RelicInventory: React.FC<RelicInventoryProps> = ({ enabledCategorie
         </div>
     );
 };
-

@@ -3,13 +3,17 @@ import { useGameStore } from '../store/gameStore';
 import { BonusPhysics } from './BonusPhysics';
 import styles from './CasinoWinScreen.module.css';
 import appStyles from '../App.module.css';
+import { sfxEngine } from '../utils/sfxEngine';
 
 const INTRO_DELAY_MS = 1500;
 const ROW_REVEAL_MS = 500;
 const SLAM_MS = 220;
 const BETWEEN_ROW_MS = 700;
+const TOTAL_HUD_CREDIT_DELAY_MS = 500;
 const END_HOLD_MS = 1400;
-const FAST_FORWARD_SPEED = 3;
+const FAST_FORWARD_SPEED = 4;
+const FAST_FORWARD_AUTOTRANSITION_DELAY_MS = 500;
+const EXIT_FADE_MS = 200;
 
 export const CasinoWinScreen: React.FC = () => {
     const {
@@ -30,25 +34,57 @@ export const CasinoWinScreen: React.FC = () => {
     const [showDoubleDown, setShowDoubleDown] = React.useState(false);
     const [showInterested, setShowInterested] = React.useState(false);
     const [showWin, setShowWin] = React.useState(false);
+    const [showTotal, setShowTotal] = React.useState(false);
     const [sequenceComplete, setSequenceComplete] = React.useState(false);
     const [usedFastForward, setUsedFastForward] = React.useState(false);
+    const [isExiting, setIsExiting] = React.useState(false);
     const transitionedRef = React.useRef(false);
-    const creditedRowsRef = React.useRef<Set<string>>(new Set());
+    const creditedTotalRef = React.useRef(false);
     const speedRef = React.useRef(animationSpeed);
+    const autoTransitionTimeoutRef = React.useRef<number | null>(null);
+    const exitTimeoutRef = React.useRef<number | null>(null);
 
-    const transitionToShop = React.useCallback(() => {
+    const finalizeTransitionToShop = React.useCallback(() => {
         if (transitionedRef.current) return;
         transitionedRef.current = true;
         setAnimationSpeed(1);
         enterGiftShop();
     }, [enterGiftShop, setAnimationSpeed]);
 
+    const transitionToShop = React.useCallback(() => {
+        if (transitionedRef.current || exitTimeoutRef.current !== null) return;
+        setIsExiting(true);
+        exitTimeoutRef.current = window.setTimeout(() => {
+            exitTimeoutRef.current = null;
+            finalizeTransitionToShop();
+        }, EXIT_FADE_MS);
+    }, [finalizeTransitionToShop]);
+
     React.useEffect(() => {
         speedRef.current = animationSpeed;
     }, [animationSpeed]);
 
     React.useEffect(() => {
+        if (!sequenceComplete || !usedFastForward) return;
+        if (autoTransitionTimeoutRef.current !== null) {
+            window.clearTimeout(autoTransitionTimeoutRef.current);
+        }
+        autoTransitionTimeoutRef.current = window.setTimeout(() => {
+            autoTransitionTimeoutRef.current = null;
+            transitionToShop();
+        }, FAST_FORWARD_AUTOTRANSITION_DELAY_MS);
+
+        return () => {
+            if (autoTransitionTimeoutRef.current !== null) {
+                window.clearTimeout(autoTransitionTimeoutRef.current);
+                autoTransitionTimeoutRef.current = null;
+            }
+        };
+    }, [sequenceComplete, transitionToShop, usedFastForward]);
+
+    React.useEffect(() => {
         let cancelled = false;
+        transitionedRef.current = false;
         setAnimationSpeed(1);
         setShowIntro(false);
         setShowDeals(false);
@@ -56,10 +92,13 @@ export const CasinoWinScreen: React.FC = () => {
         setShowDoubleDown(false);
         setShowInterested(false);
         setShowWin(false);
+        setShowTotal(false);
         setSequenceComplete(false);
         setUsedFastForward(false);
-        creditedRowsRef.current.clear();
+        setIsExiting(false);
+        creditedTotalRef.current = false;
         resetScoreRowPitch();
+        const rewardSummary = shopRewardSummary;
 
         const wait = (ms: number) => new Promise<void>(resolve => {
             if (cancelled || ms <= 0) {
@@ -79,14 +118,17 @@ export const CasinoWinScreen: React.FC = () => {
             }
         };
 
-        const creditBonus = (key: string, amount: number) => {
-            if (cancelled || amount <= 0) return;
-            if (creditedRowsRef.current.has(key)) return;
-            creditedRowsRef.current.add(key);
-            addComps(amount);
+        const creditTotal = () => {
+            if (cancelled || creditedTotalRef.current) return;
+            creditedTotalRef.current = true;
+            if (rewardSummary && rewardSummary.total > 0) {
+                addComps(rewardSummary.total);
+                sfxEngine.play('totalWinnings');
+            }
         };
 
         const seq = async () => {
+            if (!rewardSummary) return;
             setShowIntro(true);
             await waitScaled(INTRO_DELAY_MS);
             if (cancelled) return;
@@ -97,7 +139,6 @@ export const CasinoWinScreen: React.FC = () => {
             playScoreRowSfx();
             await waitScaled(SLAM_MS);
             if (cancelled) return;
-            creditBonus('deals', shopRewardSummary.dealsBonus);
             await waitScaled(BETWEEN_ROW_MS);
             if (cancelled) return;
 
@@ -108,7 +149,6 @@ export const CasinoWinScreen: React.FC = () => {
                 playScoreRowSfx();
                 await waitScaled(SLAM_MS);
                 if (cancelled) return;
-                creditBonus('surrender', shopRewardSummary.surrenderBonus);
                 await waitScaled(BETWEEN_ROW_MS);
                 if (cancelled) return;
             }
@@ -120,7 +160,6 @@ export const CasinoWinScreen: React.FC = () => {
                 playScoreRowSfx();
                 await waitScaled(SLAM_MS);
                 if (cancelled) return;
-                creditBonus('doubleDown', shopRewardSummary.doubleDownBonus);
                 await waitScaled(BETWEEN_ROW_MS);
                 if (cancelled) return;
             }
@@ -131,7 +170,6 @@ export const CasinoWinScreen: React.FC = () => {
             playScoreRowSfx();
             await waitScaled(SLAM_MS);
             if (cancelled) return;
-            creditBonus('interested', shopRewardSummary.interestedBonus);
             await waitScaled(BETWEEN_ROW_MS);
             if (cancelled) return;
 
@@ -141,7 +179,19 @@ export const CasinoWinScreen: React.FC = () => {
             playScoreRowSfx();
             await waitScaled(SLAM_MS);
             if (cancelled) return;
-            creditBonus('win', shopRewardSummary.winBonus);
+
+            await waitScaled(BETWEEN_ROW_MS);
+            if (cancelled) return;
+
+            setShowTotal(true);
+            await waitScaled(ROW_REVEAL_MS);
+            if (cancelled) return;
+            playScoreRowSfx();
+            await waitScaled(SLAM_MS);
+            if (cancelled) return;
+            await wait(TOTAL_HUD_CREDIT_DELAY_MS);
+            if (cancelled) return;
+            creditTotal();
             await waitScaled(END_HOLD_MS);
             if (cancelled) return;
 
@@ -149,15 +199,23 @@ export const CasinoWinScreen: React.FC = () => {
         };
 
         if (!shopRewardSummary) {
-            transitionToShop();
+            finalizeTransitionToShop();
         } else {
             void seq();
         }
 
         return () => {
             cancelled = true;
+            if (autoTransitionTimeoutRef.current !== null) {
+                window.clearTimeout(autoTransitionTimeoutRef.current);
+                autoTransitionTimeoutRef.current = null;
+            }
+            if (exitTimeoutRef.current !== null) {
+                window.clearTimeout(exitTimeoutRef.current);
+                exitTimeoutRef.current = null;
+            }
         };
-    }, [addComps, hasDoubleDownRelic, hasSurrenderRelic, playScoreRowSfx, resetScoreRowPitch, setAnimationSpeed, shopRewardSummary, transitionToShop]);
+    }, [addComps, finalizeTransitionToShop, hasDoubleDownRelic, hasSurrenderRelic, playScoreRowSfx, resetScoreRowPitch, setAnimationSpeed, shopRewardSummary]);
 
     if (!shopRewardSummary) {
         return null;
@@ -166,7 +224,10 @@ export const CasinoWinScreen: React.FC = () => {
     const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
         e.stopPropagation();
 
-        if (sequenceComplete) return;
+        if (sequenceComplete) {
+            transitionToShop();
+            return;
+        }
 
         if (!sequenceComplete) {
             if (usedFastForward) return;
@@ -186,54 +247,66 @@ export const CasinoWinScreen: React.FC = () => {
                 '--win-slam-duration': `${SLAM_MS / Math.max(0.1, animationSpeed)}ms`
             } as React.CSSProperties}
         >
-            <BonusPhysics />
-            <div className={styles.content}>
-                {showIntro && (
-                    <div className={styles.introTextMain}>CASINO PAYOUT</div>
-                )}
+            <div className={`${styles.fadeLayer} ${isExiting ? styles.exiting : ''}`}>
+                <BonusPhysics />
+                <div className={styles.content}>
+                    {showIntro && (
+                        <div className={styles.introTextMain}>CASINO PAYOUT</div>
+                    )}
 
-                {showDeals && (
-                    <div className={styles.bonusLine}>
-                        <span className={styles.bonusLabel}>Deals Bonus</span>
-                        <span className={styles.bonusValue}>₵{shopRewardSummary.dealsBonus}</span>
-                    </div>
-                )}
+                    {showDeals && (
+                        <div className={styles.bonusLine}>
+                            <span className={styles.bonusLabel}>Deals Bonus</span>
+                            <span className={styles.bonusValue}>₵{shopRewardSummary.dealsBonus}</span>
+                        </div>
+                    )}
 
-                {showSurrender && hasSurrenderRelic && (
-                    <div className={styles.bonusLine}>
-                        <span className={styles.bonusLabel}>Surrenders Bonus</span>
-                        <span className={styles.bonusValue}>₵{shopRewardSummary.surrenderBonus}</span>
-                    </div>
-                )}
+                    {showSurrender && hasSurrenderRelic && (
+                        <div className={styles.bonusLine}>
+                            <span className={styles.bonusLabel}>Surrenders Bonus</span>
+                            <span className={styles.bonusValue}>₵{shopRewardSummary.surrenderBonus}</span>
+                        </div>
+                    )}
 
-                {showDoubleDown && hasDoubleDownRelic && (
-                    <div className={styles.bonusLine}>
-                        <span className={styles.bonusLabel}>Double Down Bonus</span>
-                        <span className={styles.bonusValue}>₵{shopRewardSummary.doubleDownBonus}</span>
-                    </div>
-                )}
+                    {showDoubleDown && hasDoubleDownRelic && (
+                        <div className={styles.bonusLine}>
+                            <span className={styles.bonusLabel}>Double Down Bonus</span>
+                            <span className={styles.bonusValue}>₵{shopRewardSummary.doubleDownBonus}</span>
+                        </div>
+                    )}
 
-                {showInterested && (
-                    <div className={styles.bonusLine}>
-                        <span className={styles.bonusLabel}>Interested Bonus</span>
-                        <span className={styles.bonusValue}>₵{shopRewardSummary.interestedBonus}</span>
-                    </div>
-                )}
+                    {showInterested && (
+                        <div className={styles.bonusLine}>
+                            <span className={styles.bonusLabel}>Interested Bonus</span>
+                            <span className={styles.bonusValue}>₵{shopRewardSummary.interestedBonus}</span>
+                        </div>
+                    )}
 
-                {showWin && (
-                    <div className={styles.bonusLine}>
-                        <span className={styles.bonusLabel}>Win Bonus</span>
-                        <span className={styles.bonusValue}>₵{shopRewardSummary.winBonus}</span>
+                    {showWin && (
+                        <div className={styles.bonusLine}>
+                            <span className={styles.bonusLabel}>Win Bonus</span>
+                            <span className={styles.bonusValue}>₵{shopRewardSummary.winBonus}</span>
+                        </div>
+                    )}
+
+                    {showTotal && (
+                        <div className={styles.totalSection}>
+                            <div className={styles.totalDivider} />
+                            <div className={styles.bonusLine}>
+                                <span className={styles.totalLabel}>Total</span>
+                                <span className={`${styles.bonusValue} ${styles.totalValue}`}>₵{shopRewardSummary.total}</span>
+                            </div>
+                        </div>
+                    )}
+                </div>
+                {sequenceComplete && (
+                    <div className={styles.actionButtonDock}>
+                        <button className={appStyles.nextRoundButton} onClick={transitionToShop}>
+                            VISIT GIFT SHOP
+                        </button>
                     </div>
                 )}
             </div>
-            {sequenceComplete && (
-                <div className={styles.actionButtonDock}>
-                    <button className={appStyles.nextRoundButton} onClick={transitionToShop}>
-                        VISIT GIFT SHOP
-                    </button>
-                </div>
-            )}
         </div>
     );
 };

@@ -3,6 +3,8 @@ type SfxId =
     | 'win'
     | 'loss'
     | 'click'
+    | 'clickDown'
+    | 'purchase'
     | 'cardDeal'
     | 'cardFlip'
     | 'cardPlace'
@@ -11,7 +13,8 @@ type SfxId =
     | 'totalWinnings'
     | 'score'
     | 'tutorial'
-    | 'confetti';
+    | 'confetti'
+    | 'restock';
 
 const CARD_FLIP_GAIN = 2;
 const CARD_DEAL_GAIN = 1;
@@ -21,11 +24,14 @@ const SFX_SOURCES = {
     win: '/sounds/Win.mp3',
     loss: '/sounds/Loss.mp3',
     click: '/sounds/Click.mp3',
+    clickDown: '/sounds/ClickDown.mp3',
+    purchase: '/sounds/Purchase.mp3',
     bust: '/sounds/Bust.mp3',
     stand: '/sounds/Stand.mp3',
     totalWinnings: '/sounds/TotalWinnings.mp3',
     score: '/sounds/Score.mp3',
     tutorial: '/sounds/Tutorial.wav',
+    restock: '/sounds/Restock.mp3',
     confetti: [
         '/sounds/Confetti-01.wav',
         '/sounds/Confetti-02.wav',
@@ -142,11 +148,14 @@ class SfxEngine {
             SFX_SOURCES.win,
             SFX_SOURCES.loss,
             SFX_SOURCES.click,
+            SFX_SOURCES.clickDown,
+            SFX_SOURCES.purchase,
             SFX_SOURCES.bust,
             SFX_SOURCES.stand,
             SFX_SOURCES.totalWinnings,
             SFX_SOURCES.score,
             SFX_SOURCES.tutorial,
+            SFX_SOURCES.restock,
             ...SFX_SOURCES.confetti,
             ...SFX_SOURCES.cardPlace,
             ...SFX_SOURCES.cardDeal,
@@ -247,6 +256,12 @@ class SfxEngine {
             case 'click':
                 this.playBySrc(SFX_SOURCES.click, volume, playbackRate);
                 break;
+            case 'clickDown':
+                this.playBySrc(SFX_SOURCES.clickDown, volume, playbackRate);
+                break;
+            case 'purchase':
+                this.playBySrc(SFX_SOURCES.purchase, volume, playbackRate);
+                break;
             case 'bust':
                 this.playBySrc(SFX_SOURCES.bust, volume, playbackRate);
                 break;
@@ -261,6 +276,9 @@ class SfxEngine {
                 break;
             case 'tutorial':
                 this.playBySrc(SFX_SOURCES.tutorial, volume, playbackRate);
+                break;
+            case 'restock':
+                this.playBySrc(SFX_SOURCES.restock, volume, playbackRate);
                 break;
             case 'confetti': {
                 const confettiOptions = SFX_SOURCES.confetti;
