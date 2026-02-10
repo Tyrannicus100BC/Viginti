@@ -38,7 +38,7 @@ const COLLISION_CATEGORY = {
 export const TitlePhysics: React.FC = () => {
   const { viewportWidth, viewportHeight, scale } = useLayout();
   const debugEnabled = useGameStore(state => state.debugEnabled);
-  const debugVisualizationEnabled = false;
+  const debugVisualizationEnabled = true;
   
   // Refs for Matter.js instances
   const canvasRef = useRef<HTMLCanvasElement>(null);
