@@ -785,9 +785,9 @@ export const TutorialOverlay: React.FC = () => {
 
         return {
             position: 'absolute',
-            left: `${viewportWidth / 2}px`,
-            top: `${centerY}px`,
-            transform: 'translate(-50%, -50%)',
+            left: `${centerX}px`,
+            top: `${top}px`,
+            transform: 'translateX(-50%)',
             maxWidth: `${maxHudWidth}px`
         };
     })() : activeStep.id === 'comp_tickets' && hudCompsRect ? (() => {
