@@ -81,7 +81,7 @@ export const TableActionButton: React.FC<TableActionButtonProps> = ({
     const labelLines = label.split('\n');
 
     return (
-        <div className={styles.container} style={{ ...style, ...colorVars }} data-table-action-id={tableActionId}>
+        <div id={`table-action-${tableActionId}`} className={styles.container} style={{ ...style, ...colorVars }} data-table-action-id={tableActionId}>
             <svg className={styles.chargeSvg} viewBox={`0 0 ${size} ${size}`}>
                 <defs>
                     <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">

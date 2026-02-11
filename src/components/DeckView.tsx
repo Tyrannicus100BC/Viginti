@@ -9,7 +9,10 @@ interface DeckViewProps {
   onSelectCard?: (cardId: string) => void;
   mode?: 'view' | 'remove' | 'enhance';
   onRemoveCard?: (cardId: string) => void;
+  onDeductRemovalCost?: () => void;
   onEnhanceCard?: (cardId: string, effect: { type: 'chip' | 'mult' | 'score', value: number }) => void;
+  removalCount?: number;
+  comps?: number;
 }
 
 const SUITS_MAP: Record<string, string> = {
@@ -22,9 +25,38 @@ const SUITS_MAP: Record<string, string> = {
 const SUIT_ORDER: Suit[] = ['hearts', 'diamonds', 'clubs', 'spades'];
 const RANK_ORDER: Rank[] = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
 
-export const DeckView: React.FC<DeckViewProps> = ({ remainingDeck, activeCards, onClose, onSelectCard, mode = 'view', onRemoveCard, onEnhanceCard }) => {
+export const DeckView: React.FC<DeckViewProps> = ({ remainingDeck, activeCards, onClose, onSelectCard, mode = 'view', onRemoveCard, onDeductRemovalCost, onEnhanceCard, removalCount = 0, comps = 0 }) => {
     
     const [selectedEnhancement, setSelectedEnhancement] = React.useState<{ type: 'chip' | 'mult' | 'score', value: number } | null>(null);
+    const [destroyingIds, setDestroyingIds] = React.useState<Set<string>>(new Set());
+
+    const handleRemove = (id: string) => {
+        if (destroyingIds.has(id)) return;
+        setDestroyingIds(prev => new Set(prev).add(id));
+        onDeductRemovalCost?.();
+        setTimeout(() => {
+            onRemoveCard?.(id);
+            setDestroyingIds(prev => {
+                const next = new Set(prev);
+                next.delete(id);
+                return next;
+            });
+        }, 300);
+    };
+
+    const currentCost = React.useMemo(() => {
+        if (mode === 'remove') {
+            return 2 + (removalCount * 2);
+        }
+        if (mode === 'enhance' && selectedEnhancement) {
+            let level = 0;
+            if (selectedEnhancement.type === 'score') level = [-1, -2, -3, -4].indexOf(-selectedEnhancement.value);
+            if (selectedEnhancement.type === 'mult') level = [1, 2, 3, 4].indexOf(selectedEnhancement.value);
+            if (selectedEnhancement.type === 'chip') level = [5, 10, 20, 50].indexOf(selectedEnhancement.value);
+            return [1, 3, 5, 7][level] || 0;
+        }
+        return 0;
+    }, [mode, removalCount, selectedEnhancement]);
     
     // Combine all cards with status
     const allCards = React.useMemo(() => {
@@ -78,16 +110,17 @@ export const DeckView: React.FC<DeckViewProps> = ({ remainingDeck, activeCards, 
             style = { color: '#e74c3c' };
         }
 
-        const isSelectable = (onSelectCard && !isDealt) || (mode === 'remove' && !isDealt) || (mode === 'enhance' && !isDealt && selectedEnhancement);
+        const isDestroying = destroyingIds.has(card.id);
+        const isSelectable = (onSelectCard && !isDealt) || (mode === 'remove' && !isDealt && comps >= currentCost) || (mode === 'enhance' && !isDealt && selectedEnhancement && comps >= currentCost);
 
         return (
             <div 
                 key={`${card.id}-${index}`}
-                className={`${styles.miniCard} ${isDealt ? styles.dealt : ''} ${isSelectable ? styles.selectable : ''} ${mode === 'remove' && !isDealt ? styles.removable : ''}`}
+                className={`${styles.miniCard} ${isDealt ? styles.dealt : ''} ${isSelectable ? styles.selectable : ''} ${mode === 'remove' && !isDealt ? styles.removable : ''} ${isDestroying ? styles.destroying : ''}`}
                 style={{ ...style, position: 'relative' }}
                 onClick={() => {
                     if (mode === 'remove' && !isDealt) {
-                        onRemoveCard?.(card.id);
+                        handleRemove(card.id);
                     } else if (mode === 'enhance' && !isDealt && selectedEnhancement) {
                         onEnhanceCard?.(card.id, selectedEnhancement);
                     } else if (onSelectCard && !isDealt) {
@@ -102,7 +135,9 @@ export const DeckView: React.FC<DeckViewProps> = ({ remainingDeck, activeCards, 
                 
                 {/* Special Effect Indicator for Standard Cards */}
                 {card.specialEffect && (
-                    <div className={styles.specialIndicator}
+                    <div 
+                         key={`${card.specialEffect.type}-${card.specialEffect.value}`}
+                         className={styles.specialIndicator}
                          style={
                            card.specialEffect.type === 'chip' ? { color: '#4ade80', borderColor: '#166534' } as React.CSSProperties :
                            card.specialEffect.type === 'mult' ? { color: '#facc15', borderColor: '#854d0e' } as React.CSSProperties :
@@ -129,9 +164,19 @@ export const DeckView: React.FC<DeckViewProps> = ({ remainingDeck, activeCards, 
         <div className={styles.overlay} onClick={onClose}>
             <div className={styles.modal} onClick={e => e.stopPropagation()}>
                 <h2 className={styles.title}>
-                    {mode === 'remove' ? 'Remove Cards' : 
-                     mode === 'enhance' ? 'Enhance Cards' :
-                     onSelectCard ? 'Select a Card' : 'Deck Details'}
+                    <div className={styles.titleSpacer} />
+                    <span className={styles.titleText}>
+                        {mode === 'remove' ? 'Remove Cards' : 
+                         mode === 'enhance' ? 'Enhance Cards' :
+                         onSelectCard ? 'Select a Card' : 'Deck Details'}
+                    </span>
+                    <div className={styles.titleSide}>
+                        {mode !== 'view' && !onSelectCard && (mode === 'remove' || (mode === 'enhance' && selectedEnhancement)) && (
+                            <div className={styles.costIndicator} style={comps < currentCost ? { color: '#ff4d4d', borderColor: '#ff4d4d' } : {}}>
+                                Cost ₵{currentCost}
+                            </div>
+                        )}
+                    </div>
                 </h2>
                 
                 <div className={styles.scrollContent}>

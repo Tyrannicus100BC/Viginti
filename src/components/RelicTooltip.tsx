@@ -15,6 +15,7 @@ interface RelicTooltipProps {
     layout?: 'vertical' | 'horizontal';
     direction?: 'ltr' | 'rtl';
     isFlexible?: boolean;
+    sellPrice?: number;
 }
 
 export const RelicTooltip: React.FC<RelicTooltipProps> = ({ 
@@ -26,7 +27,8 @@ export const RelicTooltip: React.FC<RelicTooltipProps> = ({
     isRightAligned,
     layout = 'vertical',
     direction = 'ltr',
-    isFlexible
+    isFlexible,
+    sellPrice
 }) => {
     const formatDescription = (text: string, values?: Record<string, any>) => {
         const hand = relic.handType;
@@ -163,7 +165,18 @@ export const RelicTooltip: React.FC<RelicTooltipProps> = ({
                         </div>
                     )}
                 </div>
-                <div className={styles.titleBlock} style={{ textAlign: (isRightAligned && !isHorizontal) ? 'right' : 'left' }}>
+                <div className={styles.titleBlock} style={{ textAlign: isRightAligned ? 'right' : 'left' }}>
+                    {sellPrice !== undefined && (
+                        <div 
+                            className={styles.sellPriceTag}
+                            style={{
+                                left: isRightAligned ? 'auto' : 0,
+                                right: isRightAligned ? 0 : 'auto',
+                            }}
+                        >
+                            Sell ₵{sellPrice}
+                        </div>
+                    )}
                     <div className={styles.title} data-relic-title="true">
                         {relic.handType?.name || relic.name}
                     </div>
@@ -196,6 +209,7 @@ export const RelicTooltip: React.FC<RelicTooltipProps> = ({
                     {renderDescription(relic.description)}
                 </div>
             </div>
+
         </div>
     );
 };

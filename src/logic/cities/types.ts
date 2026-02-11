@@ -18,5 +18,6 @@ export interface CityDefinition {
     casinoTargets: number[]; // Scores required to clear each consecutive casino
     getRewards: (casinoIndex: number) => RewardConfig[];
     getShopPriceOverrides?: (casinoIndex: number) => ShopPriceOverrides;
+    getGiftShopDisabledButtons?: (casinoIndex: number) => ('sell' | 'enhance' | 'destroy' | 'restock')[];
     unlockCondition: UnlockCondition;
 }

@@ -6,6 +6,7 @@ import { RelicManager } from '../logic/relics/manager';
 import { RelicTooltip } from './RelicTooltip';
 import { useLayout } from './ResponsiveLayout';
 import styles from './GiftShop.module.css';
+import { CITY_DEFINITIONS } from '../logic/cities/definitions';
 
 interface GiftShopProps {
     onOpenDeckRemoval: () => void;
@@ -33,12 +34,17 @@ export const GiftShop: React.FC<GiftShopProps> = ({
     onExitAnimationComplete,
     onRelicPurchased
 }) => {
-    const { shopItems, buyShopItem, comps, restockGiftShop, giftShopRestockCost } = useGameStore();
+    const { inventory, shopItems, buyShopItem, comps, restockGiftShop, giftShopRestockCost, getMaxCharms, getMaxAngles, isSellingMode, toggleSellingMode, selectedCityId, round } = useGameStore();
+    const city = CITY_DEFINITIONS.find(c => c.id === selectedCityId);
+    const disabledButtons = city?.getGiftShopDisabledButtons?.(round - 1) || [];
+
+    const [fullSlotErrorItemId, setFullSlotErrorItemId] = React.useState<string | null>(null);
 
     const signRef = useRef<HTMLDivElement>(null);
     const rope1Ref = useRef<SVGPolylineElement>(null);
     const rope2Ref = useRef<SVGPolylineElement>(null);
     const isExitingRef = useRef(isExiting);
+    const isSellingModeRef = useRef(isSellingMode);
     const hasFiredEnterCompleteRef = useRef(false);
     const hasFiredExitCompleteRef = useRef(false);
     const exitStartTimeRef = useRef<number | null>(null);
@@ -54,6 +60,15 @@ export const GiftShop: React.FC<GiftShopProps> = ({
     useEffect(() => {
         isExitingRef.current = isExiting;
     }, [isExiting]);
+
+    useEffect(() => {
+        if (isSellingModeRef.current && !isSellingMode) {
+            hasFiredEnterCompleteRef.current = false;
+            exitStartTimeRef.current = null;
+            hasAppliedSignExitBoostRef.current = false;
+        }
+        isSellingModeRef.current = isSellingMode;
+    }, [isSellingMode]);
 
     useEffect(() => {
         const signEl = signRef.current;
@@ -183,7 +198,9 @@ export const GiftShop: React.FC<GiftShopProps> = ({
                 const angle = signBody.angle;
                 let signExitOffsetY = 0;
                 let signOpacity = 1;
-                if (isExitingRef.current) {
+                const effectiveExiting = isExitingRef.current || isSellingModeRef.current;
+                
+                if (effectiveExiting) {
                     if (exitStartTimeRef.current === null) {
                         exitStartTimeRef.current = performance.now();
                     }
@@ -195,6 +212,9 @@ export const GiftShop: React.FC<GiftShopProps> = ({
                     const progress = Math.max(0, Math.min(1, elapsed / SHOP_EXIT_MS));
                     signExitOffsetY = -220 * progress;
                     signOpacity = 1 - progress;
+                } else {
+                    // Sign is visible/active
+                    // If it was previously exiting, we reset the boost flag in the useEffect above
                 }
                 signEl.style.opacity = `${signOpacity}`;
                 signEl.style.transform = `translate3d(${x - width / 2}px, ${y - height / 2 + signExitOffsetY}px, 0) rotate(${angle}rad)`;
@@ -279,6 +299,9 @@ export const GiftShop: React.FC<GiftShopProps> = ({
                     zIndex: 1
                 }}
             >
+                {fullSlotErrorItemId === item.id && (
+                    <div className={styles.slotsFullPopup}>Slots Full</div>
+                )}
                 <div
                     onClick={(event) => {
                         if (isDisabled) return;
@@ -296,6 +319,33 @@ export const GiftShop: React.FC<GiftShopProps> = ({
                             const bottom = Math.max(iconRect.bottom, titleRect.bottom);
                             return new DOMRect(left, top, right - left, bottom - top);
                         })();
+                        const isCharm = config.categories.includes('Charm');
+                        const isAngle = config.categories.includes('Angle');
+
+                        if (isCharm) {
+                            const currentCharms = inventory.filter(inst => {
+                                const cfg = RelicManager.getRelicConfig(inst.id);
+                                return cfg?.categories.includes('Charm');
+                            }).length;
+                            if (currentCharms >= getMaxCharms()) {
+                                setFullSlotErrorItemId(item.id);
+                                setTimeout(() => setFullSlotErrorItemId(null), 1500);
+                                return;
+                            }
+                        }
+
+                        if (isAngle) {
+                            const currentAngles = inventory.filter(inst => {
+                                const cfg = RelicManager.getRelicConfig(inst.id);
+                                return cfg?.categories.includes('Angle');
+                            }).length;
+                            if (currentAngles >= getMaxAngles()) {
+                                setFullSlotErrorItemId(item.id);
+                                setTimeout(() => setFullSlotErrorItemId(null), 1500);
+                                return;
+                            }
+                        }
+
                         flushSync(() => {
                             onRelicPurchased?.({
                                 relicId: item.id,
@@ -346,15 +396,18 @@ export const GiftShop: React.FC<GiftShopProps> = ({
             return;
         }
         if (event.animationName === 'giftShopShelvesExit') {
+            if (!isExiting) return;
             if (hasFiredExitCompleteRef.current) return;
             hasFiredExitCompleteRef.current = true;
             onExitAnimationComplete?.();
         }
     };
 
+    const effectiveExiting = isExiting || isSellingMode;
+
     return (
         <div className={`${styles.giftShopContainer} ${isExiting ? styles.giftShopContainerExiting : ''}`}>
-            <svg className={`${styles.ropesLayer} ${isExiting ? styles.ropesLayerExiting : ''}`}>
+            <svg className={`${styles.ropesLayer} ${effectiveExiting ? styles.ropesLayerExiting : ''}`}>
                 <polyline ref={rope1Ref} fill="none" stroke="#8d6e63" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
                 <polyline ref={rope2Ref} fill="none" stroke="#8d6e63" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
@@ -364,13 +417,13 @@ export const GiftShop: React.FC<GiftShopProps> = ({
             </div>
 
             <div
-                className={`${styles.shelvesContainer} ${isExiting ? styles.shelvesContainerExiting : ''}`}
+                className={`${styles.shelvesContainer} ${effectiveExiting ? styles.shelvesContainerExiting : ''}`}
                 onAnimationEnd={handleShelvesAnimationEnd}
             >
                 <div className={styles.shelvesContentRow}>
                     <div className={styles.leftShelf}>
                         <div className={styles.zoneHeader}>CHARMS</div>
-                        <div className={styles.charmsList}>
+                        <div id="gift-shop-charms" className={styles.charmsList}>
                             {charmSlots.map((item, index) => (
                                 <div key={item?.id ?? `empty_charm_${index}`} className={styles.itemSlot}>
                                     {item ? renderItem(item) : <div className={styles.emptySlot} />}
@@ -383,41 +436,53 @@ export const GiftShop: React.FC<GiftShopProps> = ({
                     <div className={styles.rightShelf}>
                         <div className={styles.zoneHeader}>ANGLES</div>
                         <div className={styles.rightShelfRows}>
-                            <div className={`${styles.itemSlot} ${styles.rightShelfRow}`}>
+                            <div id="gift-shop-angles" className={`${styles.itemSlot} ${styles.rightShelfRow}`}>
                                 {angleSlot ? renderItem(angleSlot) : <div className={styles.emptySlot} />}
                                 {hasNoAngles && <div className={styles.soldOutStamp}>NO STOCK</div>}
                             </div>
                             <div className={`${styles.itemSlot} ${styles.rightShelfSpacer}`}>
                                 <div className={styles.emptySlot} />
                             </div>
-                            <div className={`${styles.itemSlot} ${styles.rightShelfRow}`}>
+                            <div id="gift-shop-table-actions" className={`${styles.itemSlot} ${styles.rightShelfRow}`}>
                                 <div className={`${styles.zoneHeader} ${styles.tableActionHeader}`}>TABLE ACTION</div>
                                 {tableActionSlot ? renderItem(tableActionSlot) : <div className={styles.emptySlot} />}
                                 {hasNoTableActions && <div className={styles.soldOutStamp}>NO STOCK</div>}
                             </div>
-                        </div>
                     </div>
                 </div>
-
+            </div>
                 <div className={styles.bottomActionRow}>
                     <button
-                        className={`${styles.bottomActionButton} ${styles.enhanceActionButton}`}
-                        onClick={onOpenEnhanceCards}
+                        id="gift-shop-sell-button"
+                        className={`${styles.bottomActionButton} ${styles.sellActionButton} ${disabledButtons.includes('sell') ? styles.actionButtonDisabled : ''}`}
+                        onClick={() => !disabledButtons.includes('sell') && toggleSellingMode(true)}
+                        disabled={disabledButtons.includes('sell')}
                     >
-                        ENHANCE CARDS
+                        SELL
                     </button>
                     <button
-                        className={`${styles.bottomActionButton} ${styles.removeActionButton}`}
-                        onClick={onOpenDeckRemoval}
+                        id="gift-shop-enhance-button"
+                        className={`${styles.bottomActionButton} ${styles.enhanceActionButton} ${disabledButtons.includes('enhance') ? styles.actionButtonDisabled : ''}`}
+                        onClick={() => !disabledButtons.includes('enhance') && onOpenEnhanceCards()}
+                        disabled={disabledButtons.includes('enhance')}
                     >
-                        REMOVE CARDS
+                        ENHANCE
                     </button>
                     <button
-                        className={`${styles.bottomActionButton} ${styles.restockActionButton} ${!canAffordRestock ? styles.actionButtonDisabled : ''}`}
+                        id="gift-shop-destroy-button"
+                        className={`${styles.bottomActionButton} ${styles.destroyActionButton} ${disabledButtons.includes('destroy') ? styles.actionButtonDisabled : ''}`}
+                        onClick={() => !disabledButtons.includes('destroy') && onOpenDeckRemoval()}
+                        disabled={disabledButtons.includes('destroy')}
+                    >
+                        DESTROY
+                    </button>
+                    <button
+                        id="gift-shop-restock-button"
+                        className={`${styles.bottomActionButton} ${styles.restockActionButton} ${(!canAffordRestock || disabledButtons.includes('restock')) ? styles.actionButtonDisabled : ''}`}
                         onClick={restockGiftShop}
-                        disabled={!canAffordRestock}
+                        disabled={!canAffordRestock || disabledButtons.includes('restock')}
                     >
-                        {`RESTOCK ₵${giftShopRestockCost}`}
+                        {disabledButtons.includes('restock') ? 'RESTOCK' : `RESTOCK ₵${giftShopRestockCost}`}
                     </button>
                 </div>
             </div>

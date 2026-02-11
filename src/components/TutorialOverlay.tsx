@@ -23,6 +23,8 @@ export const TutorialOverlay: React.FC = () => {
     const [hudRect, setHudRect] = useState<DOMRect | null>(null);
     const [totalWinningsRect, setTotalWinningsRect] = useState<DOMRect | null>(null);
     const [hudDrawsRect, setHudDrawsRect] = useState<DOMRect | null>(null);
+    const [hudCompsRect, setHudCompsRect] = useState<DOMRect | null>(null);
+    const [charmsRect, setCharmsRect] = useState<DOMRect | null>(null);
     const [messageBoxSize, setMessageBoxSize] = useState({ width: 0, height: 0 });
     const manager = TutorialManager.getInstance();
     const { scale, viewportWidth, viewportHeight, idealWidth } = useLayout();
@@ -310,7 +312,7 @@ export const TutorialOverlay: React.FC = () => {
 
     // Track draw indicator zone for draw + placement messaging
     useEffect(() => {
-        if (!activeStep || (activeStep.id !== 'draw_indicator' && activeStep.id !== 'place_card' && activeStep.id !== 'get_close')) {
+        if (!activeStep || (activeStep.id !== 'draw_indicator' && activeStep.id !== 'place_card' && activeStep.id !== 'get_close' && activeStep.id !== 'keep_playing')) {
             setIndicatorRect(null);
             return;
         }
@@ -416,6 +418,70 @@ export const TutorialOverlay: React.FC = () => {
     }, [activeStep, scale]);
 
     useEffect(() => {
+        if (!activeStep || activeStep.id !== 'comp_tickets') {
+            setHudCompsRect(null);
+            return;
+        }
+
+        const updateRect = () => {
+            const compsEl = document.getElementById('hud-comps');
+            const wrapper = document.getElementById('game-scale-wrapper');
+            if (!compsEl || !wrapper) return;
+
+            const wrapperRect = wrapper.getBoundingClientRect();
+            const rect = compsEl.getBoundingClientRect();
+
+            const left = (rect.left - wrapperRect.left) / scale;
+            const top = (rect.top - wrapperRect.top) / scale;
+            const width = rect.width / scale;
+            const height = rect.height / scale;
+
+            setHudCompsRect(new DOMRect(left, top, width, height));
+        };
+
+        updateRect();
+        const interval = setInterval(updateRect, 100);
+        window.addEventListener('resize', updateRect);
+
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener('resize', updateRect);
+        };
+    }, [activeStep, scale]);
+
+    useEffect(() => {
+        if (!activeStep || activeStep.id !== 'spend_comps') {
+            setCharmsRect(null);
+            return;
+        }
+
+        const updateRect = () => {
+            const el = document.getElementById('gift-shop-charms');
+            const wrapper = document.getElementById('game-scale-wrapper');
+            if (!el || !wrapper) return;
+
+            const wrapperRect = wrapper.getBoundingClientRect();
+            const rect = el.getBoundingClientRect();
+
+            const left = (rect.left - wrapperRect.left) / scale;
+            const top = (rect.top - wrapperRect.top) / scale;
+            const width = rect.width / scale;
+            const height = rect.height / scale;
+
+            setCharmsRect(new DOMRect(left, top, width, height));
+        };
+
+        updateRect();
+        const interval = setInterval(updateRect, 100);
+        window.addEventListener('resize', updateRect);
+
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener('resize', updateRect);
+        };
+    }, [activeStep, scale]);
+
+    useEffect(() => {
         if (!activeStep || activeStep.id !== 'dealer_turn') {
             setDealerRect(null);
             setDealerActionRect(null);
@@ -463,13 +529,16 @@ export const TutorialOverlay: React.FC = () => {
         };
     }, [activeStep, scale]);
 
-    const defaultPositionSteps = new Set(['welcome', 'win_money_first', 'hud_debt', 'hud_draws', NEXT_CASINO_TUTORIAL_ID]);
+    const defaultPositionSteps = new Set(['welcome', 'win_money_first', 'hud_debt', 'hud_draws', 'comp_tickets', 'spend_comps', NEXT_CASINO_TUTORIAL_ID]);
     const shouldAnchorAbovePlayerHands = Boolean(
         activeStep &&
         !defaultPositionSteps.has(activeStep.id) &&
         activeStep.id !== 'draw_indicator' &&
         activeStep.id !== 'place_card' &&
-        activeStep.id !== 'get_close'
+        activeStep.id !== 'get_close' &&
+        activeStep.id !== 'keep_playing' &&
+        activeStep.id !== 'comp_tickets' &&
+        activeStep.id !== 'spend_comps'
     );
 
     useEffect(() => {
@@ -523,7 +592,7 @@ export const TutorialOverlay: React.FC = () => {
     const scrimMode = activeStep.scrim ?? 'auto';
     const shouldDim = scrimMode === 'dim' || (scrimMode === 'auto' && !activeStep.highlight);
     const hideHighlightScrim = scrimMode === 'none' || !activeStep.highlight;
-    const isDrawIndicator = (activeStep.id === 'draw_indicator' || activeStep.id === 'get_close') && indicatorRect;
+    const isDrawIndicator = (activeStep.id === 'draw_indicator' || activeStep.id === 'get_close' || activeStep.id === 'keep_playing') && indicatorRect;
     const isPlaceCardStep = activeStep.id === 'place_card';
     const isDealerTurnStep = activeStep.id === 'dealer_turn';
     const isDealerCardsStep = activeStep.id === 'dealer_cards';
@@ -543,7 +612,41 @@ export const TutorialOverlay: React.FC = () => {
         borderRadius: activeStep.highlight?.type === 'circle' ? '50%' : '8px'
     } : {};
 
-    const messageBoxStyle: React.CSSProperties | undefined = isDrawIndicator ? (() => {
+    const messageBoxStyle: React.CSSProperties | undefined = activeStep.messagePosition ? (() => {
+        const safeMargin = 18;
+        const targetX = (activeStep.messagePosition === 'left' || activeStep.messagePosition === 'right' || activeStep.messagePosition === 'center') 
+            ? viewportWidth / 2 : (highlightRect ? highlightRect.left + highlightRect.width / 2 : viewportWidth / 2);
+        const targetY = highlightRect ? highlightRect.top + highlightRect.height / 2 : viewportHeight / 2;
+
+        if (activeStep.messagePosition === 'left') {
+            return {
+                position: 'absolute',
+                left: `${leftAnchoredMessageLeft}px`,
+                top: `${targetY}px`,
+                transform: 'translate(0, -50%)',
+                maxWidth: '360px'
+            };
+        }
+        if (activeStep.messagePosition === 'right') {
+            const rightEdge = viewportWidth - leftAnchoredMessageLeft;
+            return {
+                position: 'absolute',
+                right: `${viewportWidth - rightEdge}px`,
+                top: `${targetY}px`,
+                transform: 'translate(100%, -50%)', // Wait, 'right' style doesn't need translate 100%
+                maxWidth: '360px'
+            };
+        }
+        if (activeStep.messagePosition === 'center') {
+            return {
+                position: 'absolute',
+                left: `${viewportWidth / 2}px`,
+                top: `${viewportHeight / 2}px`,
+                transform: 'translate(-50%, -50%)'
+            };
+        }
+        return undefined; // Fallback to existing logic for top/bottom etc if I didn't implement fully
+    })() : isDrawIndicator ? (() => {
         const padding = 2;
         const paddedLeft = indicatorRect!.left - padding;
         const paddedTop = indicatorRect!.top - padding;
@@ -682,10 +785,55 @@ export const TutorialOverlay: React.FC = () => {
 
         return {
             position: 'absolute',
+            left: `${viewportWidth / 2}px`,
+            top: `${centerY}px`,
+            transform: 'translate(-50%, -50%)',
+            maxWidth: `${maxHudWidth}px`
+        };
+    })() : activeStep.id === 'comp_tickets' && hudCompsRect ? (() => {
+        const safeMargin = 18;
+        const gapBelow = 22;
+        const halfWidth = messageBoxSize.width / 2;
+
+        const targetTop = hudCompsRect.top + hudCompsRect.height + gapBelow;
+        const minTop = safeMargin;
+        const maxTop = viewportHeight - safeMargin - messageBoxSize.height;
+        const top = Math.min(Math.max(targetTop, minTop), maxTop);
+
+        const targetCenterX = hudCompsRect.left + hudCompsRect.width / 2;
+        const minX = safeMargin + halfWidth;
+        const maxX = viewportWidth - safeMargin - halfWidth;
+        const centerX = Math.min(Math.max(targetCenterX, minX), maxX);
+        const maxHudWidth = Math.min(idealWidth - 32, viewportWidth - 32);
+
+        return {
+            position: 'absolute',
             left: `${centerX}px`,
             top: `${top}px`,
             transform: 'translateX(-50%)',
             maxWidth: `${maxHudWidth}px`
+        };
+    })() : activeStep.id === 'spend_comps' && charmsRect ? (() => {
+        const safeMargin = 18;
+        const gapRight = 16;
+        const halfHeight = messageBoxSize.height / 2;
+
+        const targetLeft = charmsRect.left + charmsRect.width + gapRight;
+        const minLeft = safeMargin;
+        const maxLeft = viewportWidth - safeMargin - messageBoxSize.width;
+        const left = Math.min(Math.max(targetLeft, minLeft), maxLeft);
+
+        const targetCenterY = charmsRect.top + charmsRect.height / 2;
+        const minY = safeMargin + halfHeight;
+        const maxY = viewportHeight - safeMargin - halfHeight;
+        const centerY = Math.min(Math.max(targetCenterY, minY), maxY);
+
+        return {
+            position: 'absolute',
+            left: `${left}px`,
+            top: `${centerY}px`,
+            transform: 'translateY(-50%)',
+            maxWidth: '360px'
         };
     })() : isOutcomeStep && outcomeHandRect && playerHandsRect ? (() => {
         const gapAboveHands = 64;
@@ -738,25 +886,62 @@ export const TutorialOverlay: React.FC = () => {
     })() : undefined;
     const shouldPositionMessageBox = Boolean(messageBoxStyle);
 
+    const hole = (renderedHighlightRect && activeStep.highlight) ? {
+        top: renderedHighlightRect.top - (activeStep.highlight?.padding || 0),
+        left: renderedHighlightRect.left - (activeStep.highlight?.padding || 0),
+        width: renderedHighlightRect.width + (activeStep.highlight?.padding || 0) * 2,
+        height: renderedHighlightRect.height + (activeStep.highlight?.padding || 0) * 2,
+    } : null;
+
+    const holeBottom = hole ? hole.top + hole.height : 0;
+    const holeRight = hole ? hole.left + hole.width : 0;
+
     return (
         <div 
-            className={`${styles.container} ${isClickToContinue ? styles.blockingMode : styles.interactiveMode} ${shouldDim ? styles.dimmed : styles.noDim} ${isExiting ? styles.exiting : ''} ${isOverlayFading ? styles.fading : ''}`}
-            onClick={(event) => {
-                event.stopPropagation();
-                if (!isClickToContinue || isExiting || !allowClickRef.current) return;
-                if (!manager.canDismissActiveStep()) return;
-                exitingRef.current = true;
-                setIsExiting(true);
-                setIsOverlayFading(true);
-                void manager.handleOverlayClick();
-            }}
+            className={`${styles.container} ${styles.interactiveMode} ${shouldDim ? styles.dimmed : styles.noDim} ${isExiting ? styles.exiting : ''} ${isOverlayFading ? styles.fading : ''}`}
             style={{
                 width: `${viewportWidth}px`,
                 height: `${viewportHeight}px`,
                 ...(highlightRect && shouldDim ? { background: 'transparent' } : {})
             }}
         >
-            {/* Highlight Hole */}
+            {/* Click-to-Dismiss Scrim */}
+            {isClickToContinue && !isExiting && (
+                <div 
+                    className={styles.blocker}
+                    style={{ inset: 0, zIndex: 4999 }}
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        if (!allowClickRef.current) return;
+                        if (!manager.canDismissActiveStep()) return;
+                        exitingRef.current = true;
+                        setIsExiting(true);
+                        setIsOverlayFading(true);
+                        void manager.handleOverlayClick();
+                    }}
+                />
+            )}
+
+            {/* Block Input Scrims (Interactive Mode with Hole) */}
+            {!isClickToContinue && activeStep.blockInput && !isExiting && (
+                hole ? (
+                    <>
+                        {/* Top */}
+                        <div className={styles.blocker} style={{ top: 0, left: 0, width: '100%', height: Math.max(0, hole.top) }} />
+                        {/* Bottom */}
+                        <div className={styles.blocker} style={{ top: Math.max(0, holeBottom), left: 0, width: '100%', height: Math.max(0, viewportHeight - holeBottom) }} />
+                        {/* Left */}
+                        <div className={styles.blocker} style={{ top: Math.max(0, hole.top), left: 0, width: Math.max(0, hole.left), height: Math.max(0, hole.height) }} />
+                        {/* Right */}
+                        <div className={styles.blocker} style={{ top: Math.max(0, hole.top), left: Math.max(0, holeRight), width: Math.max(0, viewportWidth - holeRight), height: Math.max(0, hole.height) }} />
+                    </>
+                ) : (
+                    /* Full screen blocker if no highlight */
+                    <div className={styles.blocker} style={{ inset: 0 }} />
+                )
+            )}
+
+            {/* Highlight Hole (Visual Only) */}
             {renderedHighlightRect && (
                 <div 
                     className={`${styles.highlightHole} ${highlightVisible ? styles.highlightVisible : ''} ${hideHighlightScrim ? styles.highlightNoScrim : ''} ${activeStep.id === 'draw_indicator' ? styles.highlightTight : ''}`}

@@ -205,3 +205,10 @@
     position: relative !important;
     z-index: 5004 !important;
 }
+
+.blocker {
+    position: absolute;
+    background: transparent;
+    pointer-events: auto;
+    z-index: 5002;
+}

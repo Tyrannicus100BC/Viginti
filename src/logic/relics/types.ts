@@ -134,6 +134,8 @@ export type RelicHooks = {
     getDrawCount?: ValueHook<(value: number, context: GameContext, relicState: any, config: RelicConfig) => number>;
     getPlaceCount?: ValueHook<(value: number, context: GameContext, relicState: any, config: RelicConfig) => number>;
     getCardValue?: ValueHook<(value: number, context: CardValueContext, relicState: any, config: RelicConfig) => number>;
+    getMaxCharms?: ValueHook<(value: number, context: GameContext, relicState: any, config: RelicConfig) => number>;
+    getMaxAngles?: ValueHook<(value: number, context: GameContext, relicState: any, config: RelicConfig) => number>;
     adjustBlackjackScore?: ValueHook<(value: number, context: { handCards: Card[] }, relicState: any, config: RelicConfig) => number>;
     onEvaluateHandScore?: ValueHook<(score: HandScore, context: HandContext, relicState: any, config: RelicConfig) => HandScore>;
     

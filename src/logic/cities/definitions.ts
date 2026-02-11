@@ -13,25 +13,40 @@ export const CITY_DEFINITIONS: CityDefinition[] = [
         name: 'Atlantic City', // Tutorial City
         description: 'The Boardwalk Empire. A short trip to get your feet wet.',
         unlockCondition: { type: 'always' },
-        casinoTargets: [20, 50, 80, 125],
+        casinoTargets: [20, 50, 80, 200],
         getRewards: (index) => {
-            if (index === 1) { // 2nd Reward (after Casino 2)
+            if (index == 0) {// 1st Reward (after Casino 1)
                 return [
-                    { type: 'Charm', count: 3, categories: ['Suite', 'Global', 'Cards'] },
-                    { type: 'Angle', count: 1 },
-                    { type: 'TableAction', count: 1, specificIds: ['redraw', 'switch'] }
+                    { type: 'Charm', count: 3, categories: ['Suite', 'Global', 'Cards'] }
                 ];
             }
-            return STANDARD_REWARD_CONFIG;
+            if (index === 1) { // 2nd Reward (after Casino 2)
+                return [
+                    { type: 'TableAction', count: 1, specificIds: ['redraw'] }
+                ];
+            }
+            if (index === 2) { // 3rd Reward (after Casino 3)
+                return [
+                    { type: 'Angle', count: 1, specificIds: ['flush_pair_mult'] }
+                ];
+            }
+            return [];
         },
         getShopPriceOverrides: (index): ShopPriceOverrides => {
             if (index === 1) {
                 return {
-                    redraw: 0,
-                    switch: 0
+                    'redraw': 0
+                };
+            }
+            if (index === 2) {
+                return {
+                    'flush_pair_mult': 0
                 };
             }
             return {};
+        },
+        getGiftShopDisabledButtons: (_) => {
+            return ['sell', 'enhance', 'destroy', 'restock'];
         }
     },
     {
@@ -39,7 +54,7 @@ export const CITY_DEFINITIONS: CityDefinition[] = [
         name: 'Las Vegas', // Complex City
         description: 'The Neon Oasis. A moderate challenge with varied options.',
         unlockCondition: { type: 'beat_city', cityId: 'atlantic_city' },
-        casinoTargets: [450, 700, 1100, 1700, 2600, 4000, 6200, 10000],
+        casinoTargets: [450, 700, 1100, 1500, 2000, 3000, 3750, 4500],
         getRewards: (index) => {
             return [
                 { 

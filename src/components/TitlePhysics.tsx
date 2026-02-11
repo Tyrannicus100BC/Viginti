@@ -515,6 +515,7 @@ export const TitlePhysics: React.FC = () => {
     };
 
     const scheduleBurst = (side: 'left' | 'right', isFirstLoad = false) => {
+        if (!engineRef.current) return;
         const minTime = isFirstLoad ? 675 : 1350;
         const maxTime = isFirstLoad ? 3300 : 6600;
         const nextTime = minTime + Math.random() * (maxTime - minTime);
@@ -548,6 +549,8 @@ export const TitlePhysics: React.FC = () => {
             clearTimeout(rightTimer);
             removeMouseCollider();
         } else {
+            clearTimeout(leftTimer);
+            clearTimeout(rightTimer);
             scheduleBurst('left', true);
             scheduleBurst('right', true);
         }
@@ -556,6 +559,7 @@ export const TitlePhysics: React.FC = () => {
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
+      engineRef.current = null;
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       clearInterval(cleanupId);
       cancelAnimationFrame(animationFrameId);

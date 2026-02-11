@@ -46,6 +46,12 @@ export interface TutorialStep {
     // The hook effectively is "on[Event]" -> check logic -> if passed, call manager.completeStep(id)
     hooks?: RelicHooks;
     
+    // If set to true, blocks HUD and other UI interactions even for 'custom' completion type
+    blockInput?: boolean;
+
+    // Optional manual override for message position
+    messagePosition?: 'left' | 'right' | 'top' | 'bottom' | 'center';
+
     // Next step in chain (optional)
     nextStepId?: string;
 }
@@ -360,6 +366,10 @@ export class TutorialManager {
         this.updateInputLock();
     }
 
+    public clearEvent(eventId: string) {
+        this.firedEvents.delete(eventId);
+    }
+
     public signalEvent(eventId: string, context?: any) {
         this.firedEvents.add(eventId);
         if (context !== undefined) {
@@ -398,7 +408,28 @@ export class TutorialManager {
             this.waitingSteps.delete(stepId);
 
             if (conditionMet && !this.activeStep) {
-                this.activateStep(step);
+                if (step.startDelayMs && step.startDelayMs > 0) {
+                    if (this.pendingActivation?.stepId === stepId) break;
+
+                    this.clearPendingActivation();
+
+                    const timeoutId = window.setTimeout(() => {
+                        this.pendingActivation = null;
+
+                        if (this.activeStep || this.isStepCompleted(stepId, step)) return;
+                        if (!step.condition(this.lastContext)) {
+                            this.updateInputLock();
+                            return;
+                        }
+
+                        this.activateStep(step);
+                    }, step.startDelayMs);
+
+                    this.pendingActivation = { stepId, timeoutId };
+                    this.updateInputLock();
+                } else {
+                    this.activateStep(step);
+                }
                 break;
             }
         }
@@ -412,7 +443,7 @@ export class TutorialManager {
 
     private updateInputLock() {
         const waitingBlocks = Array.from(this.waitingSteps.values()).some(w => w.blockInput);
-        const activeBlocks = this.activeStep?.completionType === 'click';
+        const activeBlocks = this.activeStep?.completionType === 'click' || !!this.activeStep?.blockInput;
         const pendingStep = this.pendingActivation ? this.allSteps[this.pendingActivation.stepId] : null;
         const pendingBlocks = !!pendingStep?.blockInputDuringDelay;
         this.inputLocked = waitingBlocks || !!activeBlocks || pendingBlocks;

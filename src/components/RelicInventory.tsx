@@ -5,6 +5,8 @@ import { useGameStore } from '../store/gameStore';
 import { RelicManager } from '../logic/relics/manager';
 import { RelicTooltip } from './RelicTooltip';
 import { getRelicRarityFrameColor } from '../logic/relics/rarity';
+import { getRelicCompCost } from '../logic/rewards/generator';
+
 
 
 
@@ -23,7 +25,7 @@ export const RelicInventory: React.FC<RelicInventoryProps> = ({
     hiddenEntry = null,
     pendingHiddenRelicId = null
 }) => {
-    const { inventory, activeRelicId } = useGameStore();
+    const { inventory, activeRelicId, isSellingMode, sellRelic, rewardRelicSell } = useGameStore();
 
     const visibleInventory = inventory.filter(instance => {
         // 'win' and 'viginti' are now handled by categories (they are 'Angle's)
@@ -43,6 +45,7 @@ export const RelicInventory: React.FC<RelicInventoryProps> = ({
     // Track index because we might have duplicate relic types
     const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
     const [tooltipPos, setTooltipPos] = useState({ top: 0, left: 0 });
+    const [sellingIndex, setSellingIndex] = useState<number | null>(null);
 
     // if (visibleInventory.length === 0) return null; // Remove this to always show Manage button if needed, or keep it if it should only show if you have relics. 
     // Wait, the user said "at the end of the relic list". If list is empty, should it show? 
@@ -96,24 +99,39 @@ export const RelicInventory: React.FC<RelicInventoryProps> = ({
                                 });
                             }}
                             onMouseLeave={() => setHoveredIndex(null)}
+                            onClick={() => {
+                                if (!isSellingMode) return;
+                                if (sellingIndex !== null) return;
+                                
+                                rewardRelicSell(instance.id);
+                                setSellingIndex(index);
+                                setTimeout(() => {
+                                    // Find absolute index in main inventory
+                                    const absoluteIndex = inventory.findIndex((inst, i) => inst === instance);
+                                    if (absoluteIndex !== -1) {
+                                        sellRelic(instance.id, absoluteIndex);
+                                    }
+                                    setSellingIndex(null);
+                                }, 300);
+                            }}
                             style={{ 
-                                minWidth: 40,
+                                width: 40, // Changed from minWidth
                                 height: 40,
                                 // Removed frame
                                 background: 'transparent',
                                 border: 'none',
-                                transform: isActive ? 'scale(1.05)' : 'scale(1)',
-                                transition: 'transform 0.2s ease',
+                                transform: isActive ? 'scale(1.2)' : 'scale(1)',
+                                transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), filter 0.3s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), color 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1)' + (sellingIndex === index ? ', opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1)' : ''),
                                 display: 'flex',
                                 alignItems: 'center',
-                                justifyContent: 'flex-end', // Icon on right, content aligned to end
+                                justifyContent: 'flex-end',
                                 position: 'relative',
-                                cursor: 'help',
+                                cursor: isSellingMode ? 'pointer' : 'help',
                                 zIndex: isHovered ? 100 : (isActive ? 10 : 1),
                                 pointerEvents: 'auto',
-                                paddingLeft: 8, // Reduced space
+                                paddingLeft: 8,
                                 paddingRight: 0,
-                                opacity: isTemporarilyHidden ? 0 : 1,
+                                opacity: (isTemporarilyHidden || sellingIndex === index) ? 0 : 1,
                                 visibility: isTemporarilyHidden ? 'hidden' : 'visible'
                             }}
                         >
@@ -196,16 +214,20 @@ export const RelicInventory: React.FC<RelicInventoryProps> = ({
                         relic={RelicManager.getRelicConfig(tableInventory[hoveredIndex].id)!}
                         displayValues={tableInventory[hoveredIndex].state}
                         hideIcon={true}
-                        isRightAligned={true}
+                        isRightAligned={inventoryKind === 'angle'}
                         layout="horizontal"
-                        direction="rtl"
+                        direction={inventoryKind === 'angle' ? "rtl" : "ltr"}
+                        sellPrice={isSellingMode ? Math.ceil(getRelicCompCost(tableInventory[hoveredIndex].id) / 3) : undefined}
                         style={{
                             position: 'absolute',
                             top: tooltipPos.top - 11, // Offset: 10px padding + 1px border
                             left: 'auto',
                             right: -21, // Offset: 20px padding + 1px border
                             pointerEvents: 'none',
-                            zIndex: 50
+                            zIndex: 50,
+                            opacity: sellingIndex === hoveredIndex ? 0 : 1,
+                            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                            animation: sellingIndex === hoveredIndex ? 'none' : undefined
                         }}
                     />
                 )}
@@ -259,6 +281,21 @@ export const RelicInventory: React.FC<RelicInventoryProps> = ({
                                 });
                             }}
                             onMouseLeave={() => setHoveredIndex(null)}
+                            onClick={() => {
+                                if (!isSellingMode) return;
+                                if (sellingIndex !== null) return;
+
+                                rewardRelicSell(instance.id);
+                                setSellingIndex(index);
+                                setTimeout(() => {
+                                    // Find absolute index in main inventory
+                                    const absoluteIndex = inventory.findIndex((inst, i) => inst === instance);
+                                    if (absoluteIndex !== -1) {
+                                        sellRelic(instance.id, absoluteIndex);
+                                    }
+                                    setSellingIndex(null);
+                                }, 300);
+                            }}
                             style={{
                                 minWidth: 40, // Allow expansion
                                 height: 40,
@@ -266,17 +303,17 @@ export const RelicInventory: React.FC<RelicInventoryProps> = ({
                                 background: 'transparent',
                                 border: 'none',
                                 transform: isActive ? 'scale(1.05)' : 'scale(1)',
-                                transition: 'transform 0.2s ease',
+                                transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), filter 0.3s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), color 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1)' + (sellingIndex === index ? ', opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1)' : ''),
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'flex-start', // Icon on left
                                 position: 'relative',
-                                cursor: 'help',
+                                cursor: isSellingMode ? 'pointer' : 'help',
                                 zIndex: isHovered ? 100 : (isActive ? 10 : 1),
                                 pointerEvents: 'auto',
-                                willChange: 'z-index',
+                                willChange: 'z-index, transform, opacity',
                                 paddingRight: 8, // Reduced space
-                                opacity: isTemporarilyHidden ? 0 : 1,
+                                opacity: (isTemporarilyHidden || sellingIndex === index) ? 0 : 1,
                                 visibility: isTemporarilyHidden ? 'hidden' : 'visible'
                             }}
                         >
@@ -358,15 +395,19 @@ export const RelicInventory: React.FC<RelicInventoryProps> = ({
                 <RelicTooltip 
                     relic={RelicManager.getRelicConfig(visibleInventory[hoveredIndex].id)!}
                     displayValues={visibleInventory[hoveredIndex].state}
-                    hideIcon={true}
+                    isRightAligned={inventoryKind === 'angle'}
                     layout="horizontal"
-                    direction="ltr"
+                    direction={inventoryKind === 'angle' ? "rtl" : "ltr"}
+                    sellPrice={isSellingMode ? Math.ceil(getRelicCompCost(visibleInventory[hoveredIndex].id) / 3) : undefined}
                     style={{
                         position: 'absolute',
                         top: tooltipPos.top - 11, // Offset: 10px padding + 1px border
                         left: tooltipPos.left - 21, // Offset: 20px padding + 1px border
                         pointerEvents: 'none',
-                        zIndex: 50 // Between items (1) and hovered-top (100)
+                        zIndex: 50, // Between items (1) and hovered-top (100)
+                        opacity: sellingIndex === hoveredIndex ? 0 : 1,
+                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                        animation: sellingIndex === hoveredIndex ? 'none' : undefined
                     }}
                 />
             )}

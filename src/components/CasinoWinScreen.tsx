@@ -4,6 +4,7 @@ import { BonusPhysics } from './BonusPhysics';
 import styles from './CasinoWinScreen.module.css';
 import appStyles from '../App.module.css';
 import { sfxEngine } from '../utils/sfxEngine';
+import { TutorialManager } from '../logic/tutorials/tutorials';
 
 const INTRO_DELAY_MS = 1500;
 const ROW_REVEAL_MS = 500;
@@ -66,6 +67,11 @@ export const CasinoWinScreen: React.FC = () => {
 
     React.useEffect(() => {
         if (!sequenceComplete || !usedFastForward) return;
+        
+        // Suppress auto-transition if the comp_tickets tutorial is about to show or is showing
+        const manager = TutorialManager.getInstance();
+        if (!manager.isCompleted('comp_tickets')) return;
+
         if (autoTransitionTimeoutRef.current !== null) {
             window.clearTimeout(autoTransitionTimeoutRef.current);
         }
@@ -98,6 +104,14 @@ export const CasinoWinScreen: React.FC = () => {
         setIsExiting(false);
         creditedTotalRef.current = false;
         resetScoreRowPitch();
+
+        const manager = TutorialManager.getInstance();
+        manager.registerActions({
+            proceed_to_gift_shop: async () => {
+                transitionToShop();
+            }
+        });
+
         const rewardSummary = shopRewardSummary;
 
         const wait = (ms: number) => new Promise<void>(resolve => {
@@ -192,6 +206,7 @@ export const CasinoWinScreen: React.FC = () => {
             await wait(TOTAL_HUD_CREDIT_DELAY_MS);
             if (cancelled) return;
             creditTotal();
+            TutorialManager.getInstance().signalEvent('total_comps_calculated');
             await waitScaled(END_HOLD_MS);
             if (cancelled) return;
 

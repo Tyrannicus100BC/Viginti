@@ -59,8 +59,8 @@ import { NEXT_CASINO_TUTORIAL_ID, STAND_TUTORIAL_ID, TUTORIAL_STEPS, shouldPromp
 
 // Constants for layout
 const POT_TOP_Y = 380; // Anchor pots to this Y value
-const MUSIC_FADE_IN_MS = 280;
-const MUSIC_SWITCH_FADE_OUT_MS = 180;
+const MUSIC_FADE_IN_MS = 0;
+const MUSIC_SWITCH_FADE_OUT_MS = 800;
 const MUSIC_VOLUME_SCALE = 0.5;
 const MENU_MUSIC = '/sounds/Music-Menu.mp3';
 const GIFT_SHOP_MUSIC = '/sounds/Music-GiftShop.mp3';
@@ -71,14 +71,6 @@ const GAME_MUSIC_TRACKS = [
     '/sounds/Music-Game-04.mp3'
 ];
 
-type WebkitWindow = Window & typeof globalThis & {
-    webkitAudioContext?: typeof AudioContext;
-};
-
-const getAudioContextCtor = (): typeof AudioContext | null => {
-    if (typeof window === 'undefined') return null;
-    return window.AudioContext ?? (window as WebkitWindow).webkitAudioContext ?? null;
-};
 
 type SwapAnimationItem = {
     key: string;
@@ -186,6 +178,7 @@ export default function App() {
         toggleDebug,
         triggerDebugChips,
         removeCard,
+        deductRemovalCost,
         enhanceCard,
         leaveShop,
         cardsPlacedThisTurn,
@@ -214,6 +207,11 @@ export default function App() {
         onInitialDealAnimationsComplete,
         signalTotalWinningsAnimationComplete,
         drawTutorialReady,
+        getMaxCharms,
+        getMaxAngles,
+        isSellingMode,
+        toggleSellingMode,
+        removalCount
     } = useGameStore();
 
     const { scale, viewportWidth, viewportHeight } = useLayout();
@@ -279,10 +277,8 @@ export default function App() {
     const [audioUnlocked, setAudioUnlocked] = useState(false);
     const musicRef = useRef<HTMLAudioElement | null>(null);
     const musicTrackRef = useRef<string | null>(null);
-    const musicFadeRef = useRef<number | null>(null);
-    const musicContextRef = useRef<AudioContext | null>(null);
-    const musicSourceRef = useRef<MediaElementAudioSourceNode | null>(null);
-    const musicGainRef = useRef<GainNode | null>(null);
+    const musicFadesRef = useRef<Map<HTMLAudioElement, number>>(new Map());
+    const outgoingAudiosRef = useRef<Set<HTMLAudioElement>>(new Set());
     const phaseRef = useRef(phase);
     const roundRef = useRef(round);
     const musicVolumeRef = useRef(musicVolume);
@@ -337,47 +333,26 @@ export default function App() {
         );
     }, [phase]);
 
-    const stopMusicFade = () => {
-        if (musicFadeRef.current !== null) {
-            cancelAnimationFrame(musicFadeRef.current);
-            musicFadeRef.current = null;
+    const stopMusicFade = (audio: HTMLAudioElement) => {
+        const rafId = musicFadesRef.current.get(audio);
+        if (rafId !== undefined) {
+            cancelAnimationFrame(rafId);
+            musicFadesRef.current.delete(audio);
         }
     };
 
     const playMusic = (audio: HTMLAudioElement) => {
+        if (!audio.src) return;
         const playPromise = audio.play();
-        if (!playPromise) return;
-        void playPromise
-            .catch(() => {
+        if (playPromise !== undefined) {
+            playPromise.catch(() => {
                 // Ignore autoplay errors; playback is retried on user gesture.
             });
+        }
     };
 
     const setMusicOutputVolume = (audio: HTMLAudioElement, volume: number) => {
-        const nextVolume = Math.max(0, Math.min(1, volume));
-        if (musicGainRef.current) {
-            musicGainRef.current.gain.value = nextVolume;
-            return;
-        }
-        audio.volume = nextVolume;
-    };
-
-    const ensureMusicGraph = (audio: HTMLAudioElement) => {
-        if (musicContextRef.current && musicSourceRef.current && musicGainRef.current) return;
-        const ctor = getAudioContextCtor();
-        if (!ctor) return;
-        const ctx = new ctor();
-        try {
-            const source = ctx.createMediaElementSource(audio);
-            const gain = ctx.createGain();
-            source.connect(gain);
-            gain.connect(ctx.destination);
-            musicContextRef.current = ctx;
-            musicSourceRef.current = source;
-            musicGainRef.current = gain;
-        } catch {
-            void ctx.close().catch(() => undefined);
-        }
+        audio.volume = Math.max(0, Math.min(1, volume));
     };
 
     const fadeMusicTo = (
@@ -387,7 +362,7 @@ export default function App() {
         durationMs: number,
         onComplete?: () => void
     ) => {
-        stopMusicFade();
+        stopMusicFade(audio);
         if (durationMs <= 0) {
             setMusicOutputVolume(audio, to);
             onComplete?.();
@@ -399,13 +374,13 @@ export default function App() {
             const nextVolume = from + (to - from) * progress;
             setMusicOutputVolume(audio, nextVolume);
             if (progress < 1) {
-                musicFadeRef.current = requestAnimationFrame(tick);
+                musicFadesRef.current.set(audio, requestAnimationFrame(tick));
             } else {
-                musicFadeRef.current = null;
+                musicFadesRef.current.delete(audio);
                 onComplete?.();
             }
         };
-        musicFadeRef.current = requestAnimationFrame(tick);
+        musicFadesRef.current.set(audio, requestAnimationFrame(tick));
     };
 
     const getGameMusicForRound = (casinoRound: number) => {
@@ -456,7 +431,6 @@ export default function App() {
         const music = new Audio();
         music.loop = true;
         music.preload = 'auto';
-        ensureMusicGraph(music);
         setMusicOutputVolume(music, 0);
         musicRef.current = music;
 
@@ -467,21 +441,20 @@ export default function App() {
             hasResumed = true;
             setAudioUnlocked(true);
             void sfxEngine.resume();
-            const musicContext = musicContextRef.current;
-            if (musicContext?.state === 'suspended') {
-                void musicContext.resume().catch(() => undefined);
-            }
+
             const currentMusic = musicRef.current;
             if (!currentMusic) return;
+
             const desiredTrack = getDesiredMusicTrack(phaseRef.current, roundRef.current);
             const desiredVolume = getScaledMusicVolume(musicVolumeRef.current, musicMutedRef.current);
             const hasDesiredTrackLoaded = isAudioOnTrack(currentMusic, desiredTrack);
+            
             if (desiredVolume <= 0) {
                 return;
             }
 
             if (musicTrackRef.current !== desiredTrack || !hasDesiredTrackLoaded) {
-                stopMusicFade();
+                stopMusicFade(currentMusic);
                 musicTrackRef.current = desiredTrack;
                 currentMusic.src = desiredTrack;
                 currentMusic.currentTime = 0;
@@ -510,72 +483,83 @@ export default function App() {
             gestureEvents.forEach(eventName => {
                 window.removeEventListener(eventName, resumeOnGesture);
             });
-            stopMusicFade();
-            music.pause();
-            music.src = '';
+            const allAudios = [musicRef.current, ...Array.from(outgoingAudiosRef.current)];
+            allAudios.forEach(audio => {
+                if (audio) {
+                    stopMusicFade(audio);
+                    audio.pause();
+                    audio.src = '';
+                }
+            });
+            outgoingAudiosRef.current.clear();
             musicTrackRef.current = null;
-            const musicContext = musicContextRef.current;
-            musicContextRef.current = null;
-            musicSourceRef.current = null;
-            musicGainRef.current = null;
-            if (musicContext) {
-                void musicContext.close().catch(() => undefined);
-            }
         };
     }, []);
 
     useEffect(() => {
-        const music = musicRef.current;
-        if (!music) return;
+        const currentMusic = musicRef.current;
+        if (!currentMusic) return;
 
         const desiredTrack = getDesiredMusicTrack(phase, round);
         const desiredVolume = getScaledMusicVolume(musicVolume, musicMuted);
-        const hasDesiredTrackLoaded = isAudioOnTrack(music, desiredTrack);
+        const hasDesiredTrackLoaded = isAudioOnTrack(currentMusic, desiredTrack);
 
-        const startTrack = () => {
+        const startNext = () => {
+            const nextMusic = new Audio();
+            nextMusic.loop = true;
+            nextMusic.preload = 'auto';
+            nextMusic.src = desiredTrack;
+            nextMusic.currentTime = 0;
+            musicRef.current = nextMusic;
             musicTrackRef.current = desiredTrack;
-            music.src = desiredTrack;
-            music.currentTime = 0;
-            setMusicOutputVolume(music, 0);
-            playMusic(music);
-            fadeMusicTo(music, 0, desiredVolume, MUSIC_FADE_IN_MS);
+
+            if (audioUnlocked && desiredVolume > 0) {
+                // No fade up for incoming tracks per request
+                setMusicOutputVolume(nextMusic, desiredVolume);
+                playMusic(nextMusic);
+            }
         };
 
-        if (musicTrackRef.current === desiredTrack && hasDesiredTrackLoaded) {
+        const createAndPlayNextTrack = () => {
+            if (currentMusic.src && !currentMusic.paused) {
+                const outgoing = currentMusic;
+                outgoingAudiosRef.current.add(outgoing);
+                
+                // Fade down to 0, but trigger next track at the 50% mark (400ms)
+                fadeMusicTo(outgoing, outgoing.volume, 0, MUSIC_SWITCH_FADE_OUT_MS, () => {
+                    outgoing.pause();
+                    outgoing.src = '';
+                    outgoingAudiosRef.current.delete(outgoing);
+                });
+
+                // Start next track after 50% of the fade-out duration
+                setTimeout(startNext, MUSIC_SWITCH_FADE_OUT_MS / 2);
+            } else {
+                startNext();
+            }
+        };
+
+        // Same track logic
+        if (musicTrackRef.current === desiredTrack && (hasDesiredTrackLoaded || !currentMusic.src)) {
             if (!audioUnlocked || desiredVolume === 0) {
-                stopMusicFade();
-                setMusicOutputVolume(music, 0);
-                if (!music.paused) music.pause();
+                stopMusicFade(currentMusic);
+                setMusicOutputVolume(currentMusic, 0);
+                if (!currentMusic.paused) currentMusic.pause();
                 return;
             }
-            if (music.paused) {
-                setMusicOutputVolume(music, 0);
-                playMusic(music);
-                fadeMusicTo(music, 0, desiredVolume, MUSIC_FADE_IN_MS);
+            if (currentMusic.paused) {
+                setMusicOutputVolume(currentMusic, 0);
+                playMusic(currentMusic);
+                fadeMusicTo(currentMusic, 0, desiredVolume, MUSIC_FADE_IN_MS);
                 return;
             }
-            setMusicOutputVolume(music, desiredVolume);
+            // Just update volume for current track
+            fadeMusicTo(currentMusic, currentMusic.volume, desiredVolume, MUSIC_FADE_IN_MS);
             return;
         }
 
-        if (!audioUnlocked || desiredVolume === 0) {
-            stopMusicFade();
-            musicTrackRef.current = desiredTrack;
-            music.src = desiredTrack;
-            music.currentTime = 0;
-            setMusicOutputVolume(music, 0);
-            music.pause();
-            return;
-        }
-
-        if (!music.paused) {
-            const from = music.volume;
-            fadeMusicTo(music, from, 0, MUSIC_SWITCH_FADE_OUT_MS, () => {
-                startTrack();
-            });
-        } else {
-            startTrack();
-        }
+        // Different track - Crossfade
+        createAndPlayNextTrack();
     }, [phase, round, audioUnlocked, musicMuted, musicVolume]);
 
     useEffect(() => {
@@ -1912,7 +1896,7 @@ export default function App() {
                         <span className={styles.statLabel}>Draws</span>
                         <span key={handsRemaining} className={`${styles.statValue} ${handsAnimate ? styles.statValueAnimate : ''}`}>{handsRemaining}</span>
                     </div>
-                    <div className={styles.stat}>
+                    <div id="hud-comps" className={styles.stat}>
                         <span className={styles.statLabel}>Comps</span>
                         <span key={displayComps} className={`${styles.statValue} ${compsAnimate ? styles.statValueAnimate : ''}`}>
                             ₵{displayComps}
@@ -2012,7 +1996,10 @@ export default function App() {
                                 setShowRelicStore(true);
                             } : undefined}
                         >
-                            Charms
+                            {`Charms ${inventory.filter(inst => {
+                                const cfg = RelicManager.getRelicConfig(inst.id);
+                                return cfg?.categories.includes('Charm');
+                            }).length} of ${getMaxCharms()}`}
                         </div>
                         <RelicInventory
                             enabledCategories={['Charm']}
@@ -2039,7 +2026,10 @@ export default function App() {
                                 setShowRelicStore(true);
                             } : undefined}
                         >
-                            Angles
+                            {`${inventory.filter(inst => {
+                                const cfg = RelicManager.getRelicConfig(inst.id);
+                                return cfg?.categories.includes('Angle');
+                            }).length} of ${getMaxAngles()} Angles`}
                         </div>
                         <RelicInventory
                             enabledCategories={['Angle']}
@@ -2485,15 +2475,27 @@ export default function App() {
                                 </button>
                             ) : (phase === 'gift_shop') ? (
                                 giftShopEnterComplete && !isGiftShopExiting ? (
-                                    <button
-                                        className={styles.nextRoundButton}
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            startGiftShopExit();
-                                        }}
-                                    >
-                                        {isLastCasino ? 'Victory' : 'Next Casino'}
-                                    </button>
+                                    isSellingMode ? (
+                                        <button
+                                            className={styles.nextRoundButton}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                toggleSellingMode(false);
+                                            }}
+                                        >
+                                            Done Selling
+                                        </button>
+                                    ) : (
+                                        <button
+                                            className={styles.nextRoundButton}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                startGiftShopExit();
+                                            }}
+                                        >
+                                            {isLastCasino ? 'Victory' : 'Next Casino'}
+                                        </button>
+                                    )
                                 ) : (
                                     <div className={styles.actionPlaceholder} />
                                 )
@@ -2512,7 +2514,8 @@ export default function App() {
                 <DeckView
                     remainingDeck={[...deck, ...((!dealer.isRevealed && dealer.cards.length > 0) ? [dealer.cards[0]] : [])]}
                     activeCards={activeCards}
-
+                    removalCount={removalCount}
+                    comps={comps}
                     onClose={() => {
                         playClickDown();
                         setShowDeck(false);
@@ -2522,6 +2525,7 @@ export default function App() {
                     }}
                     mode={isRemovingCards ? 'remove' : isEnhancingCards ? 'enhance' : 'view'}
                     onRemoveCard={isRemovingCards ? (id) => removeCard(id) : undefined}
+                    onDeductRemovalCost={isRemovingCards ? () => deductRemovalCost() : undefined}
                     onEnhanceCard={isEnhancingCards ? (id, effect) => enhanceCard(id, effect) : undefined}
                     onSelectCard={isSelectingDebugCard ? (cardId) => {
                         drawSpecificCard(cardId);
@@ -2548,7 +2552,10 @@ export default function App() {
             {phase === 'gift_shop' && (
                 <GiftShop
                     isExiting={isGiftShopExiting}
-                    onEnterAnimationComplete={() => setGiftShopEnterComplete(true)}
+                    onEnterAnimationComplete={() => {
+                        setGiftShopEnterComplete(true);
+                        TutorialManager.getInstance().signalEvent('gift_shop_animated_in');
+                    }}
                     onExitAnimationComplete={finalizeGiftShopExit}
                     onOpenDeckRemoval={() => {
                         if (isGiftShopExiting || !giftShopEnterComplete) return;

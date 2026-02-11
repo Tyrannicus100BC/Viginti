@@ -212,6 +212,103 @@ export const ATLANTIC_CITY_TUTORIAL_STEPS: TutorialStep[] = [
         )
     },
     {
+        id: 'comp_tickets',
+        text: "Play Well for Comp Tickets",
+        highlight: { elementId: 'hud-comps', type: 'rect', padding: 6 },
+        scrim: 'dim',
+        completionType: 'click',
+        scope: 'session',
+        autoTrigger: true,
+        waitForEventId: 'total_comps_calculated',
+        condition: (context: any) => context.phase === 'casino_win' && context.round === 1
+    },
+    {
+        id: 'spend_comps',
+        text: "Spend Comps for Charms\n\nTilt the Odds in your Favor",
+        highlight: { elementId: 'gift-shop-charms', type: 'rect', padding: 12 },
+        scrim: 'none',
+        completionType: 'click',
+        scope: 'session',
+        autoTrigger: true,
+        startDelayMs: 500,
+        waitForEventId: 'gift_shop_animated_in',
+        condition: (context: any) => context.phase === 'gift_shop' && context.round === 1
+    },
+    {
+        id: 'keep_playing',
+        text: "Keep On Playing\n\nDon't Go Over 21",
+        scrim: 'none',
+        completionType: 'custom',
+        scope: 'session',
+        autoTrigger: true,
+        hooks: TutorialHooks.onCardPlaced('keep_playing'),
+        condition: (context: any) => (
+            context.phase === 'entering_casino' &&
+            context.round === 2
+        )
+    },
+    {
+        id: 'gift_shop_table_actions',
+        text: "Table Actions Change the Game\n\nThis one's on the House",
+        highlight: { elementId: 'gift-shop-table-actions', type: 'rect', padding: 12 },
+        scrim: 'dim',
+        completionType: 'custom',
+        scope: 'session',
+        autoTrigger: true,
+        blockInput: true,
+        messagePosition: 'left',
+        waitForEventId: 'gift_shop_animated_in',
+        completeOnEventId: 'relic_purchased',
+        condition: (context: any) => context.phase === 'gift_shop' && context.round === 2
+    },
+    {
+        id: 'gift_shop_angle_intro',
+        text: "Angles Increase Winnings\n\nThis Earns on Flushes\n\nFirst One's Always Free",
+        highlight: { elementId: 'gift-shop-angles', type: 'rect', padding: 12 },
+        scrim: 'dim',
+        completionType: 'custom',
+        scope: 'session',
+        autoTrigger: true,
+        blockInput: true,
+        messagePosition: 'left',
+        waitForEventId: 'gift_shop_animated_in',
+        completeOnEventId: 'relic_purchased',
+        condition: (context: any) => context.phase === 'gift_shop' && context.round === 3
+    },
+    {
+        id: 'casino_3_redraw_intro',
+        text: "Redraw Gives a New Card\n\nTry Activating It Now",
+        highlight: { elementId: 'table-action-redraw', type: 'rect', padding: 8 },
+        scrim: 'none',
+        completionType: 'custom',
+        scope: 'session',
+        autoTrigger: true,
+        blockInput: true,
+        messagePosition: 'left',
+        waitForEventId: 'player_hit',
+        completeOnEventId: 'table_action_activated',
+        condition: (context: any) => (
+            context.phase === 'playing' && 
+            context.round === 3 && 
+            context.dealsTaken === 1 &&
+            (context.drawnCards ?? []).some((c: any) => c !== null)
+        ),
+        nextStepId: 'casino_3_redraw_complete'
+    },
+    {
+        id: 'casino_3_redraw_complete',
+        text: "Choose This Card",
+        highlight: { elementId: 'draw-indicator-zone', type: 'rect', padding: 12 },
+        scrim: 'none',
+        completionType: 'custom',
+        scope: 'session',
+        autoTrigger: false,
+        blockInput: true,
+        messagePosition: 'left',
+        completeOnEventId: 'table_action_completed',
+        condition: (context: any) => true
+    },
+    {
         id: 'lost_all_hands',
         text: "You Lost Every Hand\n\nYou'll Never Get Out of Debt",
         completionType: 'click',

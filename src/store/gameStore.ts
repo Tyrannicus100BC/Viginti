@@ -37,7 +37,9 @@ const buildTutorialContext = (state: GameState) => ({
     totalScore: state.totalScore,
     targetScore: state.targetScore,
     runningSummary: state.runningSummary,
-    handsRemaining: state.handsRemaining
+    handsRemaining: state.handsRemaining,
+    dealsTaken: state.dealsTaken,
+    inventory: state.inventory
 });
 
 const getTableActionConfig = (relicId: string) => {
@@ -122,10 +124,15 @@ interface GameState {
     shopItems: { id: string, type: 'Charm' | 'Angle' | 'TableAction', purchased?: boolean, cost: number, nameOverride?: string }[];
     giftShopRestockCost: number;
     selectedShopItemId: string | null;
-    buyShopItem: (itemId: string) => void;
+    buyShopItem: (itemId: string) => { success: boolean, reason?: 'full' | 'insufficient_funds' };
     restockGiftShop: () => void;
     addComps: (amount: number) => void;
     enterGiftShop: () => void;
+    isSellingMode: boolean;
+    toggleSellingMode: (enabled: boolean) => void;
+    rewardRelicSell: (relicId: string) => void;
+    sellRelic: (instanceId: string, index: number) => void;
+
 
     isInitialDeal: boolean;
     isShaking: boolean; // For >300 score celebration
@@ -136,6 +143,10 @@ interface GameState {
     drawTutorialReady: boolean;
     vigintiSoundKey: number;
     scoreSfxStep: number;
+    removalCount: number;
+
+    getMaxCharms: () => number;
+    getMaxAngles: () => number;
 
 
 
@@ -180,6 +191,7 @@ interface GameState {
     selectDrawnCard: (index: number) => void;
     getProjectedDrawCount: () => number;
     getProjectedPlaceCount: () => number;
+    deductRemovalCost: () => void;
     removeCard: (cardId: string) => void;
     enhanceCard: (cardId: string, effect: { type: 'chip' | 'mult' | 'score', value: number }) => void;
     leaveShop: () => void;
@@ -278,6 +290,30 @@ export const useGameStore = create<GameState>((set, get) => {
     tableActionCharges: {},
     tableActionHeldCards: {},
     shopItems: [],
+    removalCount: 0,
+    isSellingMode: false,
+    toggleSellingMode: (enabled) => set({ isSellingMode: enabled }),
+    rewardRelicSell: (relicId) => {
+        const purchaseCost = getRelicCompCost(relicId);
+        const sellPrice = Math.ceil(purchaseCost / 3);
+        const { comps } = get();
+        set({ comps: comps + sellPrice });
+        sfxEngine.play('purchase');
+    },
+    sellRelic: (instanceId, index) => {
+        const { inventory, tableActionCharges, tableActionHeldCards } = get();
+        const instance = inventory[index];
+        if (!instance || instance.id !== instanceId) return;
+
+        const newInventory = [...inventory];
+        newInventory.splice(index, 1);
+
+        set({
+            inventory: newInventory,
+            tableActionCharges: buildTableActionCharges(newInventory, tableActionCharges),
+            tableActionHeldCards: buildTableActionHeldCards(newInventory, tableActionHeldCards)
+        });
+    },
     giftShopRestockCost: 3,
     selectedShopItemId: null,
     vigintiSoundKey: 0,
@@ -403,6 +439,16 @@ export const useGameStore = create<GameState>((set, get) => {
         return placeCount;
     },
 
+    getMaxCharms: () => {
+        const { inventory } = get();
+        return RelicManager.executeValueHook('getMaxCharms', 5, { inventory, dryRun: true });
+    },
+
+    getMaxAngles: () => {
+        const { inventory } = get();
+        return RelicManager.executeValueHook('getMaxAngles', 5, { inventory, dryRun: true });
+    },
+
     incrementScore: (amount) => set(state => ({ totalScore: state.totalScore + amount })),
 
     triggerDebugChips: () => {
@@ -526,6 +572,18 @@ export const useGameStore = create<GameState>((set, get) => {
             tableActionHeldCards: buildTableActionHeldCards(initialInventory, {}, { resetPerCasino: true }),
             animationSpeed: 1,
         });
+    },
+
+    deductRemovalCost: () => {
+        const { removalCount, comps } = get();
+        const cost = 2 + (removalCount * 2);
+        if (comps < cost) return;
+
+        set(state => ({
+            comps: state.comps - cost,
+            removalCount: state.removalCount + 1
+        }));
+        sfxEngine.play('purchase');
     },
 
     removeCard: (cardId: string) => {
@@ -718,6 +776,7 @@ export const useGameStore = create<GameState>((set, get) => {
         // Auto select center
         const centerIndex = Math.floor((cardsToDraw.length - 1) / 2);
         set({ selectedDrawIndex: Math.max(0, centerIndex) });
+        TutorialManager.getInstance().signalEvent('player_hit');
     },
 
     selectDrawnCard: (index: number) => {
@@ -786,6 +845,7 @@ export const useGameStore = create<GameState>((set, get) => {
 
         if (!nextMode) return;
         set({ activeTableActionId: relicId, interactionMode: nextMode });
+        TutorialManager.getInstance().signalEvent('table_action_activated', { relicId });
     },
 
     cancelTableAction: () => {
@@ -1253,6 +1313,7 @@ export const useGameStore = create<GameState>((set, get) => {
                 interactionMode: 'default',
                 activeTableActionId: null
             });
+            TutorialManager.getInstance().signalEvent('table_action_completed', { relicId: 'redraw' });
 
             await new Promise(resolve => setTimeout(resolve, 320));
 
@@ -2364,6 +2425,7 @@ export const useGameStore = create<GameState>((set, get) => {
             interactionMode: 'default',
             activeTableActionId: null
         });
+        TutorialManager.getInstance().signalEvent('player_hit');
     },
 
     addRelic: (relicId) => {
@@ -2430,33 +2492,72 @@ export const useGameStore = create<GameState>((set, get) => {
     },
 
     enhanceCard: (cardId, effect) => {
+        const { comps } = get();
+        let level = 0;
+        if (effect.type === 'score') level = [-1, -2, -3, -4].indexOf(-effect.value);
+        if (effect.type === 'mult') level = [1, 2, 3, 4].indexOf(effect.value);
+        if (effect.type === 'chip') level = [5, 10, 20, 50].indexOf(effect.value);
+
+        const costs = [1, 3, 5, 7];
+        const cost = costs[level] || 0;
+
+        if (comps < cost) return;
+
         set(state => ({
             deck: state.deck.map(c =>
                 c.id === cardId
                     ? { ...c, specialEffect: effect }
                     : c
-            )
+            ),
+            comps: state.comps - cost
         }));
-    }, // Add comma
+        sfxEngine.play('purchase');
+    },
 
     buyShopItem: (itemId: string) => {
-        const { comps, inventory, shopItems } = get();
+        const { comps, inventory, shopItems, getMaxCharms, getMaxAngles } = get();
 
         const item = shopItems.find(i => i.id === itemId);
-        if (!item || item.purchased) return;
+        if (!item || item.purchased) return { success: false };
 
         const fallbackCost = getRelicCompCost(item.id);
         const cost = item.cost ?? fallbackCost;
 
         if (comps < cost) {
-            return;
+            return { success: false, reason: 'insufficient_funds' };
+        }
+
+        // Check slots
+        const baseRelic = RelicManager.getRelicConfig(item.id);
+        if (!baseRelic) return { success: false };
+
+        const isCharm = baseRelic.categories.includes('Charm');
+        const isAngle = baseRelic.categories.includes('Angle');
+
+        if (isCharm) {
+            const currentCharms = inventory.filter(inst => {
+                const config = RelicManager.getRelicConfig(inst.id);
+                return config?.categories.includes('Charm');
+            }).length;
+            if (currentCharms >= getMaxCharms()) {
+                return { success: false, reason: 'full' };
+            }
+        }
+
+        if (isAngle) {
+            const currentAngles = inventory.filter(inst => {
+                const config = RelicManager.getRelicConfig(inst.id);
+                return config?.categories.includes('Angle');
+            }).length;
+            if (currentAngles >= getMaxAngles()) {
+                return { success: false, reason: 'full' };
+            }
         }
 
         // Deduct Cost
         set({ comps: comps - cost });
 
         // Add Angle/Charm/TableAction relic to inventory
-        const baseRelic = RelicManager.getRelicConfig(item.id);
         if (baseRelic) {
             const newInstance: RelicInstance = {
                 id: item.id,
@@ -2480,6 +2581,8 @@ export const useGameStore = create<GameState>((set, get) => {
             shopItems: shopItems.map(i => i.id === itemId ? { ...i, purchased: true } : i)
         });
         sfxEngine.play('purchase');
+        TutorialManager.getInstance().signalEvent('relic_purchased', { relicId: itemId });
+        return { success: true };
     },
     restockGiftShop: () => {
         const { phase, comps, giftShopRestockCost, inventory } = get();
@@ -2497,9 +2600,11 @@ export const useGameStore = create<GameState>((set, get) => {
         }));
     },
     enterGiftShop: () => {
+        TutorialManager.getInstance().clearEvent('gift_shop_animated_in');
         set({
             phase: 'gift_shop',
-            giftShopRestockCost: 3
+            giftShopRestockCost: 3,
+            removalCount: 0
         });
     }
     });
