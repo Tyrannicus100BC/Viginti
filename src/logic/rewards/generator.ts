@@ -1,6 +1,7 @@
 import type { RewardConfig, ShopPriceOverrides } from '../cities/types';
 import { RelicManager } from '../relics/manager';
 import type { RelicInstance, RelicRarity } from '../relics/types';
+import type { SeededRNG } from '../../engine/rng';
 
 export interface ShopItem {
     id: string;
@@ -25,11 +26,15 @@ export const getRelicCompCost = (relicId: string): number => {
 export function generateShopItems(
     configList: RewardConfig[],
     currentInventory: RelicInstance[],
-    priceOverrides?: ShopPriceOverrides
+    priceOverrides?: ShopPriceOverrides,
+    rng?: SeededRNG
 ): ShopItem[] {
     const items: ShopItem[] = [];
     const currentIds = currentInventory.map(i => i.id);
     const pickedRelicIds = new Set<string>();
+
+    // Use seeded RNG if provided, otherwise fall back to Math.random()
+    const nextRandom = rng ? () => rng.next() : () => Math.random();
 
     for (const config of configList) {
         for (let i = 0; i < config.count; i++) {
@@ -67,7 +72,7 @@ export function generateShopItems(
                 continue;
             }
 
-            const pick = candidates[Math.floor(Math.random() * candidates.length)];
+            const pick = candidates[Math.floor(nextRandom() * candidates.length)];
 
             items.push({
                 id: pick.id,
@@ -87,3 +92,4 @@ export function generateShopItems(
         return { ...item, cost: Math.max(0, overrideCost) };
     });
 }
+

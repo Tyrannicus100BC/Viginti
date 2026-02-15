@@ -85,6 +85,14 @@ const shouldGainCharge = (recharge: string, event: 'bust' | 'loss') => {
     return recharge === event;
 };
 
+// ─── Debug Ledger ───────────────────────────────────────
+
+export interface DebugLedgerEntry {
+    state: Record<string, unknown>;
+    action: string;
+    timestamp: number;
+}
+
 interface GameState {
     deck: Card[];
     dealer: DealerHand;
@@ -151,6 +159,7 @@ interface GameState {
 
 
     debugEnabled: boolean;
+    debugLedger: DebugLedgerEntry[];
     
     // Actions
     startGame: (gamblerId?: string, cityId?: string, options?: { skipAtlanticTutorials?: boolean }) => void;
@@ -196,6 +205,7 @@ interface GameState {
     enhanceCard: (cardId: string, effect: { type: 'chip' | 'mult' | 'score', value: number }) => void;
     leaveShop: () => void;
     revealDealerHiddenCard: () => void;
+    loadGameState: (json: string) => boolean;
     goToTitle: () => void;
     winGame: () => void;
     isReshuffling: boolean;
@@ -214,7 +224,56 @@ interface GameState {
 const INITIAL_HAND_COUNT = 3;
 const BASE_DEALS_PER_CASINO = 3;
 
+const DEBUG_LEDGER_MAX = 200;
+
+/** Extract the pure game-logic fields from the store for debug snapshots */
+function extractGameSnapshot(s: GameState): Record<string, unknown> {
+    return {
+        phase: s.phase,
+        round: s.round,
+        totalScore: s.totalScore,
+        targetScore: s.targetScore,
+        comps: s.comps,
+        dealsTaken: s.dealsTaken,
+        handsRemaining: s.handsRemaining,
+        selectedCityId: s.selectedCityId,
+        interactionMode: s.interactionMode,
+        deck: s.deck,
+        discardPile: s.discardPile,
+        dealer: s.dealer,
+        playerHands: s.playerHands,
+        drawnCards: s.drawnCards,
+        selectedDrawIndex: s.selectedDrawIndex,
+        cardsPlacedThisTurn: s.cardsPlacedThisTurn,
+        inventory: s.inventory,
+        tableActionCharges: s.tableActionCharges,
+        tableActionHeldCards: s.tableActionHeldCards,
+        activeTableActionId: s.activeTableActionId,
+        modifiers: s.modifiers,
+        shopItems: s.shopItems,
+        giftShopRestockCost: s.giftShopRestockCost,
+        shopRewardSummary: s.shopRewardSummary,
+        runningSummary: s.runningSummary,
+        removalCount: s.removalCount,
+        redrawDiscard: s.redrawDiscard,
+    };
+}
+
 export const useGameStore = create<GameState>((set, get) => {
+    /** Record a debug snapshot before an action is processed */
+    const recordDebugSnapshot = (action: string) => {
+        const state = get();
+        if (!state.debugEnabled) return;
+        const entry: DebugLedgerEntry = {
+            state: extractGameSnapshot(state),
+            action,
+            timestamp: Date.now(),
+        };
+        set(prev => ({
+            debugLedger: [...prev.debugLedger.slice(-(DEBUG_LEDGER_MAX - 1)), entry],
+        }));
+    };
+
     const addTableActionCharge = (event: 'bust' | 'loss') => {
         set(state => {
             const next = { ...state.tableActionCharges };
@@ -325,6 +384,7 @@ export const useGameStore = create<GameState>((set, get) => {
     isDealerPlaying: false,
     drawTutorialReady: false,
     debugEnabled: getDebugSettingsEnabled(),
+    debugLedger: [] as DebugLedgerEntry[],
     animationSpeed: 1,
     scoreSfxStep: 0,
     setAnimationSpeed: (speed) => set({ animationSpeed: speed }),
@@ -405,7 +465,65 @@ export const useGameStore = create<GameState>((set, get) => {
         manager.signalEvent('total_winnings_shown', context);
     },
 
-    goToTitle: () => set({ phase: 'init' }),
+    goToTitle: () => set({ phase: 'init', debugLedger: [] }),
+
+    loadGameState: (json: string): boolean => {
+        try {
+            const parsed = JSON.parse(json);
+            // Validate it has at least a phase field
+            if (!parsed || typeof parsed.phase !== 'string') return false;
+
+            set({
+                // Core game state
+                phase: parsed.phase ?? 'playing',
+                round: parsed.round ?? 1,
+                totalScore: parsed.totalScore ?? 0,
+                targetScore: parsed.targetScore ?? 0,
+                comps: parsed.comps ?? 5,
+                dealsTaken: parsed.dealsTaken ?? 0,
+                handsRemaining: parsed.handsRemaining ?? 3,
+                selectedCityId: parsed.selectedCityId ?? null,
+                interactionMode: parsed.interactionMode ?? 'default',
+                deck: parsed.deck ?? [],
+                discardPile: parsed.discardPile ?? [],
+                dealer: parsed.dealer ?? { cards: [], isRevealed: false, blackjackValue: 0 },
+                playerHands: parsed.playerHands ?? [],
+                drawnCards: parsed.drawnCards ?? [],
+                selectedDrawIndex: parsed.selectedDrawIndex ?? null,
+                cardsPlacedThisTurn: parsed.cardsPlacedThisTurn ?? 0,
+                inventory: parsed.inventory ?? [],
+                tableActionCharges: parsed.tableActionCharges ?? {},
+                tableActionHeldCards: parsed.tableActionHeldCards ?? {},
+                activeTableActionId: parsed.activeTableActionId ?? null,
+                modifiers: parsed.modifiers ?? { drawCountMod: 0, placeCountMod: 0 },
+                shopItems: parsed.shopItems ?? [],
+                giftShopRestockCost: parsed.giftShopRestockCost ?? 3,
+                shopRewardSummary: parsed.shopRewardSummary ?? null,
+                runningSummary: parsed.runningSummary ?? null,
+                removalCount: parsed.removalCount ?? 0,
+                redrawDiscard: parsed.redrawDiscard ?? null,
+                // Reset UI state
+                isInitialDeal: false,
+                isShaking: false,
+                isReshuffling: false,
+                allWinnersEnlarged: false,
+                dealerVisible: true,
+                isDealerPlaying: false,
+                dealerMessage: null,
+                dealerMessageExiting: false,
+                scoringHandIndex: -1,
+                roundSummary: null,
+                isCollectingChips: false,
+                animationSpeed: 1,
+                isRedrawAnimating: false,
+                isSellingMode: false,
+                selectedShopItemId: null,
+            });
+            return true;
+        } catch {
+            return false;
+        }
+    },
     setDrawTutorialReady: (ready) => set({ drawTutorialReady: ready }),
 
     winGame: () => {
@@ -504,6 +622,7 @@ export const useGameStore = create<GameState>((set, get) => {
     },
 
     startGame: (gamblerId: string = 'newbie', cityId: string = 'atlantic_city', options?: { skipAtlanticTutorials?: boolean }) => {
+        recordDebugSnapshot(`start_game(${gamblerId}, ${cityId})`);
         const gambler = GAMBLER_DEFINITIONS.find(g => g.id === gamblerId) || GAMBLER_DEFINITIONS[0];
         const city = CITY_DEFINITIONS.find(c => c.id === cityId) || CITY_DEFINITIONS[0];
 
@@ -593,6 +712,7 @@ export const useGameStore = create<GameState>((set, get) => {
     },
 
     dealFirstHand: async () => {
+        recordDebugSnapshot('deal');
         const { deck, round, targetScore, totalScore, isInitialDeal, phase } = get();
         if (isInitialDeal && phase === 'playing') return; // Already dealing
 
@@ -717,6 +837,7 @@ export const useGameStore = create<GameState>((set, get) => {
     },
 
     drawCard: async () => {
+        recordDebugSnapshot('draw');
         const { deck, drawnCards, phase, modifiers, inventory } = get();
         if (phase !== 'playing' || drawnCards.length > 0) return;
 
@@ -787,6 +908,7 @@ export const useGameStore = create<GameState>((set, get) => {
     },
 
     startTableAction: (relicId: string) => {
+        recordDebugSnapshot(`activate_table_action(${relicId})`);
         const { phase, drawnCards, isDealerPlaying, isInitialDeal, playerHands, dealer, interactionMode, tableActionCharges, tableActionHeldCards } = get();
         if (phase !== 'playing' || isDealerPlaying || isInitialDeal) return;
         if (interactionMode !== 'default') return;
@@ -853,6 +975,7 @@ export const useGameStore = create<GameState>((set, get) => {
     },
 
     selectTableActionHand: async (handIndex: number) => {
+        recordDebugSnapshot(`select_table_action_target(hand=${handIndex})`);
         const { interactionMode, activeTableActionId } = get();
         if (interactionMode !== 'select_hand' || !activeTableActionId) return;
 
@@ -1359,6 +1482,7 @@ export const useGameStore = create<GameState>((set, get) => {
     },
 
     assignCard: async (handIndex) => {
+        recordDebugSnapshot(`place_card(hand=${handIndex})`);
         const { playerHands, drawnCards, selectedDrawIndex, cardsPlacedThisTurn, modifiers, inventory, discardPile } = get();
         if (selectedDrawIndex === null || !drawnCards[selectedDrawIndex]) return;
 
@@ -1576,6 +1700,7 @@ export const useGameStore = create<GameState>((set, get) => {
     },
 
     holdReturns: async (forceDealerBust = false) => {
+        recordDebugSnapshot('stand');
         // Reset speed to normal at start of sequence
         set({ animationSpeed: 1 });
         sfxEngine.play('stand');
@@ -2183,6 +2308,7 @@ export const useGameStore = create<GameState>((set, get) => {
     },
 
     nextRound: async (forceContinue = false) => {
+        recordDebugSnapshot(`next_round(force=${forceContinue})`);
         const currentState = get();
         const { deck, dealer, playerHands, totalScore, targetScore, handsRemaining, isInitialDeal } = currentState;
         if (isInitialDeal) return; // Already dealing

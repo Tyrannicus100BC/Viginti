@@ -28,6 +28,9 @@ import { RelicManager } from './logic/relics/manager';
 import { getRelicRarityFrameColor } from './logic/relics/rarity';
 import { AudioControls } from './components/AudioControls';
 import { sfxEngine } from './utils/sfxEngine';
+import { DebugLogOverlay } from './components/DebugLogOverlay';
+import { DebugLoadDialog } from './components/DebugLoadDialog';
+import debugStyles from './components/DebugOverlays.module.css';
 
 import { TutorialOverlay } from './components/TutorialOverlay';
 import { TutorialManager } from './logic/tutorials/tutorials';
@@ -231,6 +234,8 @@ export default function App() {
         : null;
 
     const [showDeck, setShowDeck] = useState(false);
+    const [showDebugLog, setShowDebugLog] = useState(false);
+    const [showDebugLoad, setShowDebugLoad] = useState(false);
     const [isRemovingCards, setIsRemovingCards] = useState(false);
     const [isEnhancingCards, setIsEnhancingCards] = useState(false);
     const [isSelectingDebugCard, setIsSelectingDebugCard] = useState(false);
@@ -1595,11 +1600,19 @@ export default function App() {
                             playClick();
                             startGame(selectedGamblerId, selectedCityId, { skipAtlanticTutorials });
                         }}
-                        disabled={!canStartRun}
                         title={canStartRun ? 'Start Run' : 'Select unlocked city and gambler'}
                     >
                         Start Run
                     </button>
+                    {debugEnabled && (
+                        <button
+                            className={styles.debugMenuButton}
+                            onClick={(e) => { e.stopPropagation(); setShowDebugLoad(true); }}
+                            style={{ marginTop: 10, alignSelf: 'center' }}
+                        >
+                            Load State
+                        </button>
+                    )}
                 </div>
 
                 {hasClearedAtlanticCity ? (
@@ -2055,7 +2068,27 @@ export default function App() {
                 <div className={styles.board}>
                     <div className={styles.topContent}>
                         <div id="dealer-hand-zone" className={`${styles.dealerZone} ${!dealerVisible ? styles.dealerZoneHidden : ''}`}>
-                            <div className={styles.zoneLabel}>Dealer</div>
+                            {debugEnabled ? (
+                                <div style={{ display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'space-between' }}>
+                                    <button 
+                                        className={styles.subtleDebugBtn} 
+                                        style={{ width: 'auto', padding: '2px 8px', fontSize: '0.6rem' }}
+                                        onClick={() => setShowDebugLog(true)}
+                                    >
+                                        Log
+                                    </button>
+                                    <div className={styles.zoneLabel}>Dealer</div>
+                                    <button 
+                                        className={styles.subtleDebugBtn} 
+                                        style={{ width: 'auto', padding: '2px 8px', fontSize: '0.6rem' }}
+                                        onClick={() => setShowDebugLoad(true)}
+                                    >
+                                        Load
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className={styles.zoneLabel}>Dealer</div>
+                            )}
                             <div style={{ pointerEvents: dealerSelectableCardIds && dealerSelectableCardIds.length > 0 ? 'auto' : 'none', position: 'relative' }}>
                                 <Hand
                                     key={`dealer-${dealerHandProps.id}-${round}-${dealsTaken}`}
@@ -2698,6 +2731,8 @@ export default function App() {
             <TutorialOverlay />
             
             <div id="tooltip-portal-root" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 3000 }} />
+            {showDebugLog && <DebugLogOverlay onClose={() => setShowDebugLog(false)} />}
+            {showDebugLoad && <DebugLoadDialog onClose={() => setShowDebugLoad(false)} />}
         </div>
     );
 }
