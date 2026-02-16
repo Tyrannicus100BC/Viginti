@@ -67,7 +67,7 @@ export const ATLANTIC_CITY_TUTORIAL_STEPS: TutorialStep[] = [
         blockInputDuringDelay: true,
         continueActionId: 'deal_first_hand',
         autoTrigger: true,
-        condition: (context: any) => context.phase === 'entering_casino' && context.round === 1,
+        condition: (context: any) => context.phase === 'entering_casino' && context.deal === 1,
         nextStepId: 'dealer_cards'
     },
     {
@@ -99,13 +99,13 @@ export const ATLANTIC_CITY_TUTORIAL_STEPS: TutorialStep[] = [
     },
     {
         id: 'draw_indicator',
-        text: "Hit to Take a Card",
+        text: "Draw to Take a Card",
         highlight: { elementId: 'draw-hit-spot-anchor', type: 'rect', padding: 0 },
         scrim: 'none',
         completionType: 'custom',
         scope: 'session',
         autoTrigger: false,
-        hooks: TutorialHooks.onPlayerHit('draw_indicator'),
+        hooks: TutorialHooks.onPlayerDraw('draw_indicator'),
         condition: (context: any) => true, // Chained
         nextStepId: 'place_card'
     },
@@ -206,8 +206,8 @@ export const ATLANTIC_CITY_TUTORIAL_STEPS: TutorialStep[] = [
         scope: 'session',
         autoTrigger: true,
         condition: (context: any) => (
-            context.phase === 'round_over' &&
-            context.round === 1 &&
+            context.phase === 'deal_over' &&
+            context.deal === 1 &&
             (context.totalScore ?? 0) >= (context.targetScore ?? 0)
         )
     },
@@ -220,7 +220,7 @@ export const ATLANTIC_CITY_TUTORIAL_STEPS: TutorialStep[] = [
         scope: 'session',
         autoTrigger: true,
         waitForEventId: 'total_comps_calculated',
-        condition: (context: any) => context.phase === 'casino_win' && context.round === 1
+        condition: (context: any) => context.phase === 'casino_payout' && context.deal === 1
     },
     {
         id: 'spend_comps',
@@ -232,7 +232,7 @@ export const ATLANTIC_CITY_TUTORIAL_STEPS: TutorialStep[] = [
         autoTrigger: true,
         startDelayMs: 500,
         waitForEventId: 'gift_shop_animated_in',
-        condition: (context: any) => context.phase === 'gift_shop' && context.round === 1
+        condition: (context: any) => context.phase === 'gift_shop' && context.deal === 1
     },
     {
         id: 'keep_playing',
@@ -244,7 +244,7 @@ export const ATLANTIC_CITY_TUTORIAL_STEPS: TutorialStep[] = [
         hooks: TutorialHooks.onCardPlaced('keep_playing'),
         condition: (context: any) => (
             context.phase === 'entering_casino' &&
-            context.round === 2
+            context.deal === 2
         )
     },
     {
@@ -259,7 +259,7 @@ export const ATLANTIC_CITY_TUTORIAL_STEPS: TutorialStep[] = [
         messagePosition: 'left',
         waitForEventId: 'gift_shop_animated_in',
         completeOnEventId: 'relic_purchased',
-        condition: (context: any) => context.phase === 'gift_shop' && context.round === 2
+        condition: (context: any) => context.phase === 'gift_shop' && context.deal === 2
     },
     {
         id: 'gift_shop_angle_intro',
@@ -273,7 +273,7 @@ export const ATLANTIC_CITY_TUTORIAL_STEPS: TutorialStep[] = [
         messagePosition: 'left',
         waitForEventId: 'gift_shop_animated_in',
         completeOnEventId: 'relic_purchased',
-        condition: (context: any) => context.phase === 'gift_shop' && context.round === 3
+        condition: (context: any) => context.phase === 'gift_shop' && context.deal === 3
     },
     {
         id: 'casino_3_redraw_intro',
@@ -285,11 +285,11 @@ export const ATLANTIC_CITY_TUTORIAL_STEPS: TutorialStep[] = [
         autoTrigger: true,
         blockInput: true,
         messagePosition: 'left',
-        waitForEventId: 'player_hit',
+        waitForEventId: 'player_draw',
         completeOnEventId: 'table_action_activated',
         condition: (context: any) => (
             context.phase === 'playing' && 
-            context.round === 3 && 
+            context.deal === 3 && 
             context.dealsTaken === 1 &&
             (context.drawnCards ?? []).some((c: any) => c !== null)
         ),

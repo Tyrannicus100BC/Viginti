@@ -12,9 +12,11 @@ export type GamePhase =
     | 'init'
     | 'entering_casino'
     | 'playing'
+    | 'dealer_turn'
+    | 'resolving_outcomes'
     | 'scoring'
-    | 'round_over'
-    | 'casino_win'
+    | 'deal_over'
+    | 'casino_payout'
     | 'gift_shop'
     | 'game_over'
     | 'victory';
@@ -59,6 +61,12 @@ export interface ScoredHand extends PlayerHand {
     readonly outcome: 'win' | 'loss' | null;
 }
 
+export interface TutorialState {
+    readonly activeStepId: string | null;
+    readonly completedStepIds: readonly string[]; // Session-scoped
+    readonly globalCompletedStepIds: readonly string[]; // Global-scoped
+}
+
 // ─── Game State ─────────────────────────────────────────
 
 export interface GameState {
@@ -66,8 +74,11 @@ export interface GameState {
     readonly selectedCityId: string | null;
     readonly selectedGamblerId: string | null;
 
+    // === Tutorial ===
+    readonly tutorial: TutorialState;
+
     // === Casino Progression ===
-    readonly round: number;
+    readonly deal: number;
     readonly dealsTaken: number;
     readonly handsRemaining: number;
     readonly totalScore: number;

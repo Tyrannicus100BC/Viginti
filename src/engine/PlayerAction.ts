@@ -6,8 +6,8 @@
 
 export type PlayerAction =
     // === Game Setup ===
-    | { type: 'start_game'; cityId: string; gamblerId: string; seed?: number }
-    | { type: 'deal' }
+    | { type: 'start_game'; cityId: string; gamblerId: string; seed?: number; globalTutorialsCompleted?: string[]; skipAtlanticTutorials?: boolean }
+    | { type: 'deal'; forceContinue?: boolean }
 
     // === Core Gameplay ===
     | { type: 'draw' }
@@ -15,6 +15,9 @@ export type PlayerAction =
     | { type: 'place_card'; handIndex: number }
     | { type: 'stand' }
     | { type: 'double_down'; handIndex: number }
+    | { type: 'resolve_dealer_turn' }
+    | { type: 'resolve_hand_outcome' }
+    | { type: 'score_round' }
 
     // === Table Actions (Relics with charges) ===
     | { type: 'activate_table_action'; relicId: string }
@@ -22,10 +25,7 @@ export type PlayerAction =
     | { type: 'select_table_action_card'; target: 'player' | 'dealer'; handIndex?: number; cardId: string }
     | { type: 'select_table_action_draw_card'; drawIndex: number }
     | { type: 'cancel_table_action' }
-
-    // === Round Progression ===
-    | { type: 'next_round'; forceContinue?: boolean }
-    | { type: 'complete_round_early' }
+    | { type: 'complete_deal_early' }
 
     // === Gift Shop ===
     | { type: 'enter_gift_shop' }
@@ -40,5 +40,14 @@ export type PlayerAction =
 
     // === Debug (not available in CLI simulation) ===
     | { type: 'debug_win' }
+    | { type: 'debug_undo' }
+    | { type: 'debug_victory' }
     | { type: 'debug_add_relic'; relicId: string }
-    | { type: 'debug_fill_charges'; relicId: string };
+    | { type: 'debug_remove_relic'; relicId: string }
+    | { type: 'debug_fill_charges'; relicId: string }
+    | { type: 'debug_give_cash'; amount: number }
+    | { type: 'debug_draw_card'; cardId: string }
+
+    // === Tutorial & Animations ===
+    | { type: 'acknowledge_tutorial'; stepId: string }
+    | { type: 'signal_animation_complete'; animationId: string };

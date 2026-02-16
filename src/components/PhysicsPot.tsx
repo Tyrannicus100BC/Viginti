@@ -51,11 +51,11 @@ const [isPulsing, setIsPulsing] = useState(false);
     }
   }, [isCollecting, totalValue, onItemArrived, onCollectionComplete]);
 
-  if (totalValue === 0 && !isCollecting) return null;
+  const isEmpty = totalValue === 0 && !isCollecting;
 
   return (
     <div 
-      className={styles.container}
+      className={`${styles.container} ${isEmpty ? styles.empty : ''}`}
       style={{
         transition: isCollecting ? 'none' : 'transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)'
       }}

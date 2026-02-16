@@ -37,20 +37,18 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
   const isDealerHand = hand.id === -1;
 
   // Is this a winning hand that needs scoring animation?
-  const isWin = !!(hand.finalScore && hand.resultRevealed);
+  const isWin = hand.outcome === 'win';
 
-  // Animation State
+  // Animation state driven by store
+  const visibleScoringRowIndices = useGameStore(state => state.visibleScoringRowIndices[hand.id] || []);
+  const scoringRowValues = useGameStore(state => state.scoringRowValues[hand.id] || {});
+  const scoringCriteria = useGameStore(state => state.scoringCriteria[hand.id] || []);
+  const activeHighlightIds = useGameStore(state => state.activeHighlightIds);
+  const scoringHandIndex = useGameStore(state => state.scoringHandIndex);
+  
+  // Derived local animation flags
   const [displayScore, setDisplayScore] = useState(hand.blackjackValue);
-  const [visibleItems, setVisibleItems] = useState<number[]>([]);
-  const [visibleChips, setVisibleChips] = useState<number[]>([]);
-  const [visibleMults, setVisibleMults] = useState<number[]>([]);
-  const [activeCriteriaIdx, setActiveCriteriaIdx] = useState<number | null>(null);
-
   const [isScoreVisible, setIsScoreVisible] = useState(hand.id !== -1);
-
-  // New State for sequential updates
-  const [rowValues, setRowValues] = useState<Record<number, { chips: number, mult: number, count: number }>>({});
-  const [activeHighlightIds, setActiveHighlightIds] = useState<string[] | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [transformOrigin, setTransformOrigin] = useState('center center');
@@ -244,28 +242,13 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
   // Reset state when hand ID changes (new hand slot content)
   useEffect(() => {
     setDisplayScore(hand.blackjackValue);
-    setVisibleItems([]);
-    setVisibleChips([]);
-    setVisibleMults([]);
-    setActiveCriteriaIdx(null);
-    animationRef.current = false;
-    setRowValues({});
-    setActiveHighlightIds(null);
-
     setIsScoreVisible(hand.id !== -1);
   }, [hand.id]);
 
   // Reset animation state when hand score is cleared (new round with same hand ID)
   useEffect(() => {
     if (!hand.finalScore) {
-      setVisibleItems([]);
-      setVisibleChips([]);
-      setVisibleMults([]);
-      setActiveCriteriaIdx(null);
       animationRef.current = false;
-      setRowValues({});
-      setActiveHighlightIds(null);
-
     }
   }, [hand.finalScore]);
 
@@ -283,150 +266,18 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
     }
   }, [hand.id, baseDelay, stagger]);
 
-  // Ensure displayScore updates immediately when hand value changes (card added)
+  // Ensure displayScore updates only when cards have entered (prevents premature score reveal)
   useEffect(() => {
-    if (!isWin && !hand.resultRevealed) {
+    const hasEnteringCards = visualCards.some(vc => !vc.isDiscarding && !vc.hasEntered);
+    if (!hasEnteringCards) {
       setDisplayScore(hand.blackjackValue);
     }
-  }, [hand.blackjackValue, isWin, hand.resultRevealed]);
+  }, [hand.blackjackValue, visualCards]);
 
   const animationSpeed = useGameStore(state => state.animationSpeed);
 
-  // Scoring Animation Sequence
-  useEffect(() => {
-    if (isWin && hand.finalScore && !animationRef.current && (isScoringFocus || isEnlarged)) {
-      animationRef.current = true;
+// Local scoring animation removed - logic moved to EventPlayer.ts
 
-      let canceled = false;
-      const criteria = hand.finalScore.criteria;
-
-      const runAnimation = async () => {
-        const wait = (ms: number) => {
-          return new Promise(resolve => setTimeout(resolve, ms / animationSpeed));
-        };
-
-        // Initial delay
-        await wait(0);
-
-        // Track totals locally to avoid stale state in async function
-
-        // PHASE 1: Show +Chips
-        for (let i = 0; i < criteria.length; i++) {
-          if (canceled) return;
-          const crit = criteria[i];
-          setActiveHighlightIds(null);
-
-          // Reveal Row Frame and Label
-          setVisibleItems(prev => [...prev, i]);
-          setActiveCriteriaIdx(i);
-          playScoreRowSfx();
-
-          // Default start values
-          setRowValues(prev => ({
-            ...prev,
-            [i]: { chips: 0, mult: 0, count: 0 } // Start at 0, logic updates it
-          }));
-
-          // Wait "a beat" before processing
-          await wait(400);
-
-          // Check if we have granular matches
-          if (crit.matches && crit.matches.length > 0) {
-            // SEQUENTIAL MATCH ANIMATION
-            let currentRowChips = 0;
-            let currentRowMult = 0;
-
-            for (let m = 0; m < crit.matches.length; m++) {
-              if (canceled) return;
-              const match = crit.matches[m];
-
-              // 1. Highlight specific cards
-              setActiveHighlightIds(match.cardIds);
-
-              // 2. Update Row Values
-              currentRowChips += match.chips;
-              currentRowMult += match.multiplier;
-
-              setRowValues(prev => ({
-                ...prev,
-                [i]: {
-                  chips: currentRowChips,
-                  mult: currentRowMult,
-                  count: m + 1
-                }
-              }));
-
-              // Reveal Chips
-              if (m === 0) {
-                setVisibleChips(prev => [...prev, i]);
-              }
-
-              // 3. Add to Chips Pot
-              if (match.chips > 0) {
-                triggerScoringRow(match.chips, 0);
-              }
-
-              // Wait for stagger
-              await wait(200);
-
-              // Reveal Mult if first match
-              if (m === 0) {
-                setVisibleMults(prev => [...prev, i]);
-              }
-
-              // Add to Mult Pot
-              if (match.multiplier > 0) {
-                triggerScoringRow(0, match.multiplier);
-              }
-
-              // 4. Wait for user to see (total wait approx 600ms)
-              await wait(400);
-            }
-          } else {
-            // STANDARD ANIMATION (Win, Viginti, or legacy)
-            // Highlight all involved cards
-            setActiveHighlightIds(crit.cardIds || []);
-
-            // Update Row Values to full immediately
-            setRowValues(prev => ({
-              ...prev,
-              [i]: {
-                chips: crit.chips,
-                mult: crit.multiplier,
-                count: crit.count
-              }
-            }));
-
-            // Reveal Chips & Mult staggered
-            setVisibleChips(prev => [...prev, i]);
-            if (crit.chips > 0) {
-              triggerScoringRow(crit.chips, 0);
-            }
-
-            await wait(200);
-
-            setVisibleMults(prev => [...prev, i]);
-            if (crit.multiplier > 0) {
-              triggerScoringRow(0, crit.multiplier);
-            }
-
-            await wait(500);
-          }
-
-          await wait(200); // Transition beat
-        }
-      };
-
-      runAnimation();
-
-      return () => { canceled = true; setActiveCriteriaIdx(null); setActiveHighlightIds(null); };
-    }
-
-    // If not winning or not revealed, ensure score matches state
-    if (!isWin && !hand.resultRevealed) {
-      setDisplayScore(hand.blackjackValue);
-    }
-  }, [isWin, hand.finalScore, isScoringFocus]);
 
 
   // Effect to determine transform origin
@@ -469,7 +320,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
   const showBustOverlay = hand.isBust && !hasPendingDealerDealAnimation;
   const showVigintiOverlay = isViginti && !hand.isBust && !hasPendingDealerDealAnimation;
   const showOverlay =
-    (showBustOverlay || showVigintiOverlay || hand.isDoubled || (hand.finalScore !== undefined && hand.resultRevealed)) &&
+    (showBustOverlay || showVigintiOverlay || hand.isDoubled || hand.resultRevealed) &&
     hand.cards.length > 0;
   const overlayFanDepthPx = Math.max(0, visualCards.length - 1);
   const useOverlayScrim = isDealerHand && showOverlay;
@@ -489,29 +340,28 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
       id={id}
     >
       {/* Scoring List */}
-      {isWin && hand.finalScore && (
+      {hand.outcome === 'win' && (
         <div
           id={isScoringFocus ? 'score-rows-zone' : undefined}
           className={styles.scoringList}
         >
-          {hand.finalScore.criteria.map((item, idx) => (
+          {scoringCriteria.map((item: any, idx: number) => (
             <div
               key={`${item.id}-${idx}`}
-              className={`${styles.scoringItem} ${visibleItems.includes(idx) ? styles.visible : ''}`}
+              className={`${styles.scoringItem} ${visibleScoringRowIndices.includes(idx) ? styles.visible : ''}`}
             >
               <div className={`${styles.itemName} ${item.id === 'viginti' ? styles.isViginti : ''}`}>
                 {item.name}
-                {/* Use rowValues for dynamic count if available, else static item.count */}
-                {(rowValues[idx]?.count ?? item.count) > 1 && <span className={styles.itemCount}>x{rowValues[idx]?.count ?? item.count}</span>}
+                {(scoringRowValues[idx]?.count ?? 0) > 1 && <span className={styles.itemCount}>x{scoringRowValues[idx].count}</span>}
               </div>
               <div className={`${styles.itemChips} ${item.id === 'viginti' ? styles.isViginti : ''}`}>
-                <span className={visibleChips.includes(idx) ? styles.visible : ''}>
-                  {(rowValues[idx]?.chips ?? item.chips) === 0 ? '-' : `$${rowValues[idx]?.chips ?? item.chips}`}
+                <span className={(scoringRowValues[idx]?.chips !== undefined && visibleScoringRowIndices.length > idx) ? styles.visible : ''}>
+                  {(scoringRowValues[idx]?.chips ?? 0) === 0 ? '-' : `$${scoringRowValues[idx]?.chips}`}
                 </span>
               </div>
               <div className={styles.itemMult}>
-                <span className={visibleMults.includes(idx) ? styles.visible : ''}>
-                  {(rowValues[idx]?.mult ?? item.multiplier) === 0 ? '-' : `x${(rowValues[idx]?.mult ?? item.multiplier).toFixed(1)}`}
+                <span className={(scoringRowValues[idx]?.mult !== undefined && visibleScoringRowIndices.length > idx) ? styles.visible : ''}>
+                  {(scoringRowValues[idx]?.mult ?? 0) === 0 ? '-' : `x${(scoringRowValues[idx]?.mult ?? 0).toFixed(1)}`}
                 </span>
               </div>
             </div>
@@ -558,14 +408,8 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
               const isDoubleCard = card.origin === 'double_down';
 
               // Determine highlighting first to use in placement
-              const currentCrit = activeCriteriaIdx !== null ? hand.finalScore?.criteria[activeCriteriaIdx] : null;
-              let isHighlighted = false;
-              if (activeHighlightIds) {
-                isHighlighted = activeHighlightIds.includes(card.id);
-              } else if (currentCrit && currentCrit.cardIds) {
-                isHighlighted = currentCrit.cardIds.includes(card.id);
-              }
-              const shouldHighlight = !!(isHighlighted && activeCriteriaIdx !== null && currentCrit?.id !== 'win' && currentCrit?.id !== 'viginti');
+              const isHighlighted = !!(activeHighlightIds && activeHighlightIds.includes(card.id));
+              const shouldHighlight = isHighlighted && isScoringFocus;
               const isTableActionSelectable = !!(selectableCardIds && selectableCardIds.includes(card.id));
               const isHidden = !!(hiddenCardIds && hiddenCardIds.includes(card.id));
               const handleCardClick = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -691,10 +535,8 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
 
           {/* Overlay text on cards */}
           {showOverlay && (
-            <div className={`${styles.overlayText} ${(activeCriteriaIdx !== null &&
-              hand.finalScore?.criteria[activeCriteriaIdx].id !== 'win' &&
-              hand.finalScore?.criteria[activeCriteriaIdx].id !== 'viginti') ? styles.faded : ''
-              }`}>
+            <div className={`${styles.overlayText} ${isScoringFocus ? styles.faded : ''}`}>
+
               {showBustOverlay && (
                 <div className={styles.overlayItem}>
                   <div className={`${styles.bustOverlay} ${styles.slamEnter}`}>BUST</div>
@@ -721,7 +563,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
         </div>
 
         <div className={styles.status}>
-          {hand.cards.length > 0 && isScoreVisible && (
+          {hand.cards.length > 0 && isScoreVisible && displayScore > 0 && (
             <div className={`${styles.scoreContainer} ${hand.id === -1 ? styles.scoreFadeIn : ''}`}>
               <div
                 id={`hand-score-${hand.id}`}
@@ -730,7 +572,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
                     isWin ? styles.isWin :
                       (!isWin && hand.resultRevealed && !hand.isBust && !isViginti) ? styles.isLoss : ''
                   }`}>
-                { (hand.resultRevealed || isWin) ? displayScore : hand.blackjackValue }
+                {displayScore}
               </div>
             </div>
           )}

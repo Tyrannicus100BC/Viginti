@@ -130,8 +130,8 @@ export default function App() {
         playerHands,
         deck,
         phase,
-        round,
-        nextRound,
+        deal,
+        nextDeal,
         scoringHandIndex,
         isInitialDeal,
         isCollectingChips,
@@ -164,7 +164,7 @@ export default function App() {
         animationSpeed,
         modifiers,
         inventory,
-        roundSummary,
+        dealSummary,
         getProjectedDrawCount,
         // showFinalScore removed
         // continueFromFinalScore removed
@@ -208,6 +208,7 @@ export default function App() {
         isTutorialInputLocked,
         onTutorialContinue,
         onInitialDealAnimationsComplete,
+
         signalTotalWinningsAnimationComplete,
         drawTutorialReady,
         getMaxCharms,
@@ -285,7 +286,7 @@ export default function App() {
     const musicFadesRef = useRef<Map<HTMLAudioElement, number>>(new Map());
     const outgoingAudiosRef = useRef<Set<HTMLAudioElement>>(new Set());
     const phaseRef = useRef(phase);
-    const roundRef = useRef(round);
+    const dealRef = useRef(deal);
     const musicVolumeRef = useRef(musicVolume);
     const musicMutedRef = useRef(musicMuted);
     const vigintiSoundKey = useGameStore(state => state.vigintiSoundKey);
@@ -388,17 +389,17 @@ export default function App() {
         musicFadesRef.current.set(audio, requestAnimationFrame(tick));
     };
 
-    const getGameMusicForRound = (casinoRound: number) => {
+    const getGameMusicForDeal = (casinoDeal: number) => {
         const total = GAME_MUSIC_TRACKS.length;
-        const safeRound = Math.max(1, casinoRound || 1);
-        const index = (safeRound - 1) % total;
+        const safeDeal = Math.max(1, casinoDeal || 1);
+        const index = (safeDeal - 1) % total;
         return GAME_MUSIC_TRACKS[index];
     };
 
-    const getDesiredMusicTrack = (currentPhase: string, casinoRound: number) => {
+    const getDesiredMusicTrack = (currentPhase: string, casinoDeal: number) => {
         if (currentPhase === 'init') return MENU_MUSIC;
-        if (currentPhase === 'gift_shop' || currentPhase === 'casino_win') return GIFT_SHOP_MUSIC;
-        return getGameMusicForRound(casinoRound);
+        if (currentPhase === 'gift_shop' || currentPhase === 'casino_payout') return GIFT_SHOP_MUSIC;
+        return getGameMusicForDeal(casinoDeal);
     };
 
     const getScaledMusicVolume = (rawVolume: number, isMuted: boolean) => {
@@ -421,8 +422,8 @@ export default function App() {
     }, [phase]);
 
     useEffect(() => {
-        roundRef.current = round;
-    }, [round]);
+        dealRef.current = deal;
+    }, [deal]);
 
     useEffect(() => {
         musicVolumeRef.current = musicVolume;
@@ -450,7 +451,7 @@ export default function App() {
             const currentMusic = musicRef.current;
             if (!currentMusic) return;
 
-            const desiredTrack = getDesiredMusicTrack(phaseRef.current, roundRef.current);
+            const desiredTrack = getDesiredMusicTrack(phaseRef.current, dealRef.current);
             const desiredVolume = getScaledMusicVolume(musicVolumeRef.current, musicMutedRef.current);
             const hasDesiredTrackLoaded = isAudioOnTrack(currentMusic, desiredTrack);
             
@@ -505,7 +506,7 @@ export default function App() {
         const currentMusic = musicRef.current;
         if (!currentMusic) return;
 
-        const desiredTrack = getDesiredMusicTrack(phase, round);
+        const desiredTrack = getDesiredMusicTrack(phase, deal);
         const desiredVolume = getScaledMusicVolume(musicVolume, musicMuted);
         const hasDesiredTrackLoaded = isAudioOnTrack(currentMusic, desiredTrack);
 
@@ -565,7 +566,7 @@ export default function App() {
 
         // Different track - Crossfade
         createAndPlayNextTrack();
-    }, [phase, round, audioUnlocked, musicMuted, musicVolume]);
+    }, [phase, deal, audioUnlocked, musicMuted, musicVolume]);
 
     useEffect(() => {
         sfxEngine.setSfxVolume(sfxVolume);
@@ -797,7 +798,7 @@ export default function App() {
     const shouldShowSkipTutorial = selectedCityId === 'atlantic_city';
 
 
-    const [displayRound, setDisplayRound] = useState(round);
+    const [displayDeal, setDisplayDeal] = useState(deal);
     const [displayTarget, setDisplayTarget] = useState(targetScore);
     const [displayComps, setDisplayComps] = useState(comps);
     const [delayedRemainingTarget, setDelayedRemainingTarget] = useState(targetScore - totalScore); // New state for delayed visual update
@@ -806,7 +807,7 @@ export default function App() {
     const prevHandsRemaining = React.useRef(handsRemaining);
     const prevTotalScore = React.useRef(totalScore);
 
-    const [roundAnimate, setRoundAnimate] = useState(false);
+    const [dealAnimate, setDealAnimate] = useState(false);
     const [targetAnimate, setTargetAnimate] = useState(false);
     const [compsAnimate, setCompsAnimate] = useState(false);
     const runInitializedRef = useRef(false);
@@ -891,7 +892,7 @@ export default function App() {
 
     // Watch for phase change to handle initial overlay transition
     useEffect(() => {
-        if (phase === 'entering_casino' && round === 1) {
+        if (phase === 'entering_casino' && deal === 1) {
             if (debugEnabled) {
                 setHasSettledFirstOverlay(true);
                 return;
@@ -901,7 +902,7 @@ export default function App() {
         } else if (phase === 'init') {
             setHasSettledFirstOverlay(false);
         }
-    }, [phase, round, debugEnabled]);
+    }, [phase, deal, debugEnabled]);
 
     // Watch for drawn card to delay selection UI
     useEffect(() => {
@@ -1045,7 +1046,7 @@ export default function App() {
             confettiFiredRef.current = false;
         }
 
-        if ((phase === 'round_over' || roundSummary || isCollectingChips) && runningSummary && runningSummary.chips > 0 && !confettiFiredRef.current) {
+        if ((phase === 'deal_over' || dealSummary || isCollectingChips) && runningSummary && runningSummary.chips > 0 && !confettiFiredRef.current) {
             if (canvasRef.current) {
                 confettiFiredRef.current = true;
                 const canvas = canvasRef.current;
@@ -1074,7 +1075,7 @@ export default function App() {
                 });
             }
         }
-    }, [isCollectingChips, phase, !!runningSummary, roundSummary]);
+    }, [isCollectingChips, phase, !!runningSummary, dealSummary]);
 
     React.useEffect(() => {
         // Target Reduction Animation
@@ -1082,46 +1083,61 @@ export default function App() {
         const actualRemaining = Math.max(0, targetScore - totalScore);
 
         if (actualRemaining !== delayedRemainingTarget) {
-            // Update value and trigger pulse animation immediately
+            const isIncrease = actualRemaining > delayedRemainingTarget;
+            // Update value 
             setDelayedRemainingTarget(actualRemaining);
-            setTargetAnimate(true);
+            
+            // Skip animation for the initial "increase" (debt refill) that happens when setup values are loaded 
+            // in 'entering_casino' phase. But allow animations for decreases (debt reduction) or any changes 
+            // outside of the interstitial setup.
+            if (!isIncrease || phase !== 'entering_casino') {
+                setTargetAnimate(true);
 
-            const timer = setTimeout(() => {
-                setTargetAnimate(false);
-            }, 500); // Match dealDecrement animation duration (0.5s)
+                const timer = setTimeout(() => {
+                    setTargetAnimate(false);
+                }, 500); // Match dealDecrement animation duration (0.5s)
 
-            return () => {
-                clearTimeout(timer);
-                setTargetAnimate(false);
-            };
+                return () => {
+                    clearTimeout(timer);
+                    setTargetAnimate(false);
+                };
+            }
         }
-    }, [totalScore, targetScore]);
+    }, [totalScore, targetScore, phase]);
 
     React.useEffect(() => {
         if (handsRemaining !== prevHandsRemaining.current) {
-            setHandsAnimate(true);
-            const timer = setTimeout(() => setHandsAnimate(false), 500);
-            prevHandsRemaining.current = handsRemaining;
-            return () => clearTimeout(timer);
+            const isIncrease = handsRemaining > prevHandsRemaining.current;
+            
+            // Skip animation for the initial "increase" (deal refill) during 'entering_casino'.
+            // Allow animations for decreases (spending deals) or any changes in other phases.
+            if (!isIncrease || phase !== 'entering_casino') {
+                setHandsAnimate(true);
+                const timer = setTimeout(() => setHandsAnimate(false), 500);
+                prevHandsRemaining.current = handsRemaining;
+                return () => clearTimeout(timer);
+            } else {
+                prevHandsRemaining.current = handsRemaining;
+            }
         } else {
             prevHandsRemaining.current = handsRemaining;
         }
-    }, [handsRemaining]);
+    }, [handsRemaining, phase]);
 
     // Handle value updates for Casino and Target
     React.useEffect(() => {
         if (phase === 'entering_casino') {
             // Keep HUD in its final position for all runs (no overlay transition).
             setOverlayComplete(true);
-            setDisplayRound(round);
+            setDisplayDeal(deal);
             setDisplayTarget(targetScore);
             setDisplayComps(comps);
             return;
         }
 
         // Sync values if they change while already in HUD mode
-        if (round !== displayRound) {
-            setDisplayRound(round);
+        if (deal !== displayDeal) {
+            setDisplayDeal(deal);
         }
         if (targetScore !== displayTarget) {
             setDisplayTarget(targetScore);
@@ -1133,14 +1149,14 @@ export default function App() {
             const timer = setTimeout(() => setCompsAnimate(false), 500 / animationSpeed);
             return () => clearTimeout(timer);
         }
-    }, [phase, round, targetScore, comps]);
+    }, [phase, deal, targetScore, comps]);
 
-    // Synchronize display values immediately when starting a new run (Round 1) 
+    // Synchronize display values immediately when starting a new run (Deal 1) 
     // to avoid showing old run values or starting from the top of the screen.
-    if (phase === 'entering_casino' && round === 1) {
+    if (phase === 'entering_casino' && deal === 1) {
         if (!runInitializedRef.current) {
             setOverlayComplete(true);
-            setDisplayRound(1);
+            setDisplayDeal(1);
             setDisplayTarget(targetScore);
             setDisplayComps(5);
             runInitializedRef.current = true;
@@ -1353,7 +1369,7 @@ export default function App() {
         selectTableActionCard({ target, handIndex, cardId });
     };
 
-    const areAllHandsUnplayable = playerHands.every(h => h.isBust || h.isHeld || h.blackjackValue === 21);
+    const areAllHandsUnplayable = Array.isArray(playerHands) && playerHands.every(h => h && (h.isBust || h.isHeld || h.blackjackValue === 21));
     const hasDrawnCards = drawnCards.some(c => c !== null);
     const isDrawAreaClear = !hasDrawnCards;
     const canDraw = phase === 'playing' && isDrawAreaClear && !isDealerPlaying && !isInitialDeal && interactionMode === 'default' && !areAllHandsUnplayable && !isRedrawAnimating;
@@ -1397,13 +1413,13 @@ export default function App() {
         }
     };
 
-    const areHandsVisible = phase !== 'gift_shop' && phase !== 'casino_win';
+    const areHandsVisible = phase !== 'gift_shop' && phase !== 'casino_payout';
 
     const showStandWarning = () => {
         if (standWarningTimeoutRef.current !== null) {
             window.clearTimeout(standWarningTimeoutRef.current);
         }
-        setStandWarningMessage('You should keep hitting');
+        setStandWarningMessage('You should keep drawing');
         if (!sfxMuted && sfxVolume > 0) {
             sfxEngine.play('tutorial');
         }
@@ -1414,7 +1430,7 @@ export default function App() {
     };
 
     useEffect(() => {
-        if (phase !== 'init' || hasClearedAtlanticCity) {
+        if (phase !== 'init') {
             setSkipTutorialToggleEnabled(false);
             return;
         }
@@ -1427,7 +1443,7 @@ export default function App() {
         return () => {
             window.clearTimeout(timer);
         };
-    }, [phase, hasClearedAtlanticCity]);
+    }, [phase]);
 
     // Reset debug button state when draw area reappears
     React.useEffect(() => {
@@ -1467,10 +1483,10 @@ export default function App() {
 
     useEffect(() => {
         checkTutorials();
-    }, [phase, round, isInitialDeal, isDealerPlaying, interactionMode, dealer.cards.length, playerHands, drawnCards, checkTutorials]);
+    }, [phase, deal, isInitialDeal, isDealerPlaying, interactionMode, dealer.cards.length, playerHands, drawnCards, checkTutorials]);
 
     useEffect(() => {
-        if (phase === 'round_over') return;
+        if (phase === 'deal_over') return;
         const tutorialManager = TutorialManager.getInstance();
         if (tutorialManager.getActiveStep()?.id === NEXT_CASINO_TUTORIAL_ID) {
             tutorialManager.completeStep(NEXT_CASINO_TUTORIAL_ID);
@@ -1482,8 +1498,8 @@ export default function App() {
         TutorialManager.getInstance().signalEvent('draw_available_after_debt');
     }, [drawTutorialReady, canDraw]);
 
-    const isTotalWinningsVisible = ((phase === 'scoring' && (isCollectingChips || roundSummary || allWinnersEnlarged)) || phase === 'round_over') && runningSummary && runningSummary.chips > 0;
-    const showPotLabels = phase === 'scoring' || phase === 'round_over';
+    const isTotalWinningsVisible = (phase === 'scoring' || phase === 'deal_over') && !!dealSummary && runningSummary && runningSummary.chips > 0;
+    const showPotLabels = phase === 'scoring' || phase === 'deal_over';
     const totalWinningsSoundPlayedRef = useRef(false);
 
     useEffect(() => {
@@ -1524,11 +1540,11 @@ export default function App() {
     };
 
     const currentCity = CITY_DEFINITIONS.find(c => c.id === selectedCityId) || CITY_DEFINITIONS[0];
-    const isLastCasino = round >= currentCity.casinoTargets.length;
+    const isLastCasino = deal >= currentCity.casinoTargets.length;
 
-    const handleRoundAdvanceAction = React.useCallback(() => {
+    const handleDealAdvanceAction = React.useCallback(() => {
         const tutorialManager = TutorialManager.getInstance();
-        if (phase === 'round_over' && round === 1 && totalScore >= targetScore) {
+        if (phase === 'deal_over' && deal === 1 && totalScore >= targetScore) {
             tutorialManager.completeStep(NEXT_CASINO_TUTORIAL_ID);
         }
         if (phase === 'entering_casino') {
@@ -1536,9 +1552,9 @@ export default function App() {
         } else if (totalScore >= targetScore && isLastCasino) {
             winGame();
         } else {
-            nextRound();
+            nextDeal();
         }
-    }, [phase, round, totalScore, targetScore, isLastCasino, dealFirstHand, winGame, nextRound]);
+    }, [phase, deal, totalScore, targetScore, isLastCasino, dealFirstHand, winGame, nextDeal]);
 
     const finalizeGiftShopExit = React.useCallback(() => {
         if (giftShopExitTimeoutRef.current !== null) {
@@ -1738,6 +1754,8 @@ export default function App() {
                         </div>
                     </>
                 )}
+                {showDebugLog && <DebugLogOverlay onClose={() => setShowDebugLog(false)} />}
+                {showDebugLoad && <DebugLoadDialog onClose={() => setShowDebugLoad(false)} />}
             </div>
         );
     }
@@ -1747,12 +1765,14 @@ export default function App() {
             <div className={styles.container} style={{ justifyContent: 'center' }}>
                 <h1 style={{ fontSize: '3rem', color: '#ff4444', marginBottom: 20 }}>GAME OVER</h1>
                 <p style={{ fontSize: '1.5rem', color: '#fff', marginBottom: 10 }}>
-                    Failed to beat Casino {round}
+                    Failed to beat Casino {deal}
                 </p>
                 <p style={{ fontSize: '1.2rem', color: '#aaa', marginBottom: 40 }}>
                     Final Winnings: ${totalScore.toLocaleString()} / ${targetScore.toLocaleString()}
                 </p>
                 <button className={styles.button} onClick={goToTitle}>Back to Title</button>
+                {showDebugLog && <DebugLogOverlay onClose={() => setShowDebugLog(false)} />}
+                {showDebugLoad && <DebugLoadDialog onClose={() => setShowDebugLoad(false)} />}
             </div>
         );
     }
@@ -1769,6 +1789,8 @@ export default function App() {
                     Final Score: ${totalScore.toLocaleString()}
                 </p>
                 <button className={styles.button} onClick={goToTitle} style={{ borderColor: '#ffd700', color: '#ffd700' }}>Victory</button>
+                {showDebugLog && <DebugLogOverlay onClose={() => setShowDebugLog(false)} />}
+                {showDebugLoad && <DebugLoadDialog onClose={() => setShowDebugLoad(false)} />}
             </div>
         );
     }
@@ -1781,7 +1803,7 @@ export default function App() {
         blackjackValue: dealer.blackjackValue
     };
 
-    // Click anywhere to hit (draw) or advance to next round
+    // Click anywhere to draw a card or advance to next deal
     const handleGlobalClick = (e: React.MouseEvent) => {
         if (showDeck || showCasinoListing || showCompsWindow || showRelicStore) return;
         if (isTutorialInputLocked()) return;
@@ -1793,7 +1815,7 @@ export default function App() {
         // Speed up animations if dealer is revealed (Dealer Turn OR Scoring Phase)
         // or during the entering_casino interstitial
         // and the round is not yet over.
-        const canSpeedUp = (dealer.isRevealed && phase !== 'round_over') || (phase === 'entering_casino' && !overlayComplete);
+        const canSpeedUp = (dealer.isRevealed && phase !== 'deal_over') || (phase === 'entering_casino' && !overlayComplete);
 
         if (canSpeedUp && animationSpeed === 1) {
             setAnimationSpeed(4);
@@ -1803,17 +1825,17 @@ export default function App() {
 
         if (canDrawNow) {
             handleDraw();
-        } else if (phase === 'round_over') {
+        } else if (phase === 'deal_over') {
             // Allow click-anywhere for Leave Casino, but keep Victory as button-only.
             if (totalScore >= targetScore) {
                 if (isLastCasino) return;
-                handleRoundAdvanceAction();
+                handleDealAdvanceAction();
                 return;
             }
-            nextRound();
+            nextDeal();
         } else if (phase === 'entering_casino') {
             // Allow global click to start dealing 
-            handleRoundAdvanceAction();
+            handleDealAdvanceAction();
         }
     };
 
@@ -1872,7 +1894,7 @@ export default function App() {
 
                 <header
                     id="hud-bar"
-                    className={`${styles.header} ${isOverlayMode ? styles.headerCentered : ''} ${(isOverlayMode && round === 1 && !hasSettledFirstOverlay) ? styles.noTransition : ''}`}
+                    className={`${styles.header} ${isOverlayMode ? styles.headerCentered : ''} ${(isOverlayMode && deal === 1 && !hasSettledFirstOverlay) ? styles.noTransition : ''}`}
                     style={isOverlayMode ? { top: 460 } : {}}
                 >
                     {debugEnabled && !isOverlayMode && (
@@ -1897,7 +1919,7 @@ export default function App() {
                     )}
                     <div className={styles.stat}>
                         <span className={styles.statLabel}>Casino</span>
-                        <span key={displayRound} className={`${styles.statValue} ${roundAnimate ? styles.statValueAnimate : ''}`}>{displayRound}</span>
+                        <span key={displayDeal} className={`${styles.statValue} ${dealAnimate ? styles.statValueAnimate : ''}`}>{displayDeal}</span>
                     </div>
                     <div id="hud-debt" className={styles.stat}>
                         <span className={styles.statLabel}>Debt</span>
@@ -1906,7 +1928,7 @@ export default function App() {
                         </span>
                     </div>
                     <div id="hud-draws" className={`${styles.stat} ${isOverlayMode ? styles.statHidden : ''}`}>
-                        <span className={styles.statLabel}>Draws</span>
+                        <span className={styles.statLabel}>Deals</span>
                         <span key={handsRemaining} className={`${styles.statValue} ${handsAnimate ? styles.statValueAnimate : ''}`}>{handsRemaining}</span>
                     </div>
                     <div id="hud-comps" className={styles.stat}>
@@ -1937,7 +1959,7 @@ export default function App() {
 
             {showPotLabels && (
                 <PhysicsPot
-                    key={`chips-${round}-${handsRemaining}`}
+                    key={`chips-${deal}`}
                     totalValue={runningSummary?.chips ?? 0}
                     variant="chips"
                     isCollecting={isCollectingChips}
@@ -1953,7 +1975,7 @@ export default function App() {
 
             {showPotLabels && (
                 <PhysicsPot
-                    key={`mult-${round}-${handsRemaining}`}
+                    key={`mult-${deal}`}
                     totalValue={runningSummary?.mult ?? 0}
                     variant="multiplier"
                     isCollecting={isCollectingChips}
@@ -2067,9 +2089,9 @@ export default function App() {
 
                 <div className={styles.board}>
                     <div className={styles.topContent}>
-                        <div id="dealer-hand-zone" className={`${styles.dealerZone} ${!dealerVisible ? styles.dealerZoneHidden : ''}`}>
-                            {debugEnabled ? (
-                                <div style={{ display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'space-between' }}>
+                        <div id="dealer-hand-zone" className={styles.dealerZone}>
+                            <div style={{ display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'center', gap: 20, marginBottom: 10 }}>
+                                {debugEnabled && (
                                     <button 
                                         className={styles.subtleDebugBtn} 
                                         style={{ width: 'auto', padding: '2px 8px', fontSize: '0.6rem' }}
@@ -2077,7 +2099,9 @@ export default function App() {
                                     >
                                         Log
                                     </button>
-                                    <div className={styles.zoneLabel}>Dealer</div>
+                                )}
+                                <div className={styles.zoneLabel} style={{ marginBottom: 0 }}>Dealer</div>
+                                {debugEnabled && (
                                     <button 
                                         className={styles.subtleDebugBtn} 
                                         style={{ width: 'auto', padding: '2px 8px', fontSize: '0.6rem' }}
@@ -2085,13 +2109,11 @@ export default function App() {
                                     >
                                         Load
                                     </button>
-                                </div>
-                            ) : (
-                                <div className={styles.zoneLabel}>Dealer</div>
-                            )}
-                            <div style={{ pointerEvents: dealerSelectableCardIds && dealerSelectableCardIds.length > 0 ? 'auto' : 'none', position: 'relative' }}>
+                                )}
+                            </div>
+                            <div className={`${styles.dealerHandWrapper} ${!dealerVisible ? styles.dealerZoneHidden : ''}`} style={{ pointerEvents: dealerSelectableCardIds && dealerSelectableCardIds.length > 0 ? 'auto' : 'none', position: 'relative' }}>
                                 <Hand
-                                    key={`dealer-${dealerHandProps.id}-${round}-${dealsTaken}`}
+                                    key={`dealer-${dealerHandProps.id}-${deal}-${dealsTaken}`}
                                     hand={dealerHandProps}
                                     baseDelay={dealer.isRevealed ? 0 : 0.4}
                                     stagger={!dealer.isRevealed}
@@ -2180,7 +2202,7 @@ export default function App() {
                                 )}
 
                                 <div id="draw-indicator-zone" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', width: '100%', height: '140px' }}>
-                                    <div className={styles.drawHitSpotAnchor} id="draw-hit-spot-anchor" />
+                                    <div className={styles.drawSpotAnchor} id="draw-spot-anchor" />
                                     {/* Render dynamic draw spots */}
                                     {Array.from({ length: Math.max(drawnCards.length, visualDrawCount) }).map((_, idx) => {
                                         // Calculate Offset
@@ -2191,9 +2213,9 @@ export default function App() {
                                         const card = drawnCards[idx];
                                         const isHiddenForHoldPickup = !!card && hiddenDrawCardIds.includes(card.id);
                                         const isSelected = idx === selectedDrawIndex;
-                                        const showHitText = !card && canDrawNow;
+                                        const showDrawText = !card && canDrawNow;
                                         const isMultiple = drawnCards.length > 1;
-                                        const isPrimaryHitSpot = showHitText && idx === Math.floor(count / 2);
+                                        const isPrimaryDrawSpot = showDrawText && idx === Math.floor(count / 2);
 
                                         return (
                                             <div
@@ -2201,13 +2223,13 @@ export default function App() {
                                                 id={
                                                     isSelected && card
                                                         ? 'selected-drawn-card'
-                                                        : isPrimaryHitSpot
-                                                            ? 'draw-hit-spot'
+                                                        : isPrimaryDrawSpot
+                                                            ? 'draw-spot'
                                                             : `draw-card-spot-${idx}`
                                                 }
                                                 className={`
                                                 ${styles.drawnCardSpot} 
-                                                ${showHitText ? styles.hitSpot : ''} 
+                                                ${showDrawText ? styles.drawSpot : ''} 
                                                 ${!isDrawAreaVisible ? styles.hiddenSpot : ''}
                                                 ${interactionMode === 'select_draw' && card ? styles.actionSpot : ''}
                                                 ${isSelected && isMultiple ? styles.selectedSpot : ''}
@@ -2251,7 +2273,7 @@ export default function App() {
                                                         onFlipSound={handleCardFlipSound}
                                                     />
                                                 ) : (
-                                                    showHitText && <span className={styles.hitText} style={{ opacity: 1, position: 'relative', transform: 'none', left: 'auto', top: 'auto' }}>HIT</span>
+                                                    showDrawText && <span className={styles.hitText} style={{ opacity: 1, position: 'relative', transform: 'none', left: 'auto', top: 'auto' }}>DRAW</span>
                                                 )}
 
                                                 {isSelected && drawnCards.length > 1 && (
@@ -2426,7 +2448,7 @@ export default function App() {
                                         : undefined;
                                     return (
                                         <Hand
-                                            key={`${hand.id}-${round}`}
+                                            key={`${hand.id}-${deal}`}
                                             hand={hand}
                                             canSelect={canSelectHand}
                                             isSelected={false}
@@ -2456,7 +2478,7 @@ export default function App() {
                         </div>
 
                         <div className={styles.actionButtonContainer}>
-                            {((phase === 'playing' && !isInitialDeal) || phase === 'scoring') ? (
+                            {((phase === 'playing' && !isInitialDeal) || phase === 'scoring' || phase === 'dealer_turn' || phase === 'resolving_outcomes') ? (
                                 <button
                                     className={styles.standButton}
                                     id="stand-button"
@@ -2490,16 +2512,16 @@ export default function App() {
                                 >
                                     Stand
                                 </button>
-                            ) : (phase === 'round_over' || phase === 'entering_casino' || (phase === 'playing' && isInitialDeal)) ? (
+                            ) : (phase === 'deal_over' || phase === 'entering_casino' || (phase === 'playing' && isInitialDeal)) ? (
                                 <button
-                                    id={phase === 'round_over' && totalScore >= targetScore ? 'next-casino-button' : undefined}
-                                    className={styles.nextRoundButton}
+                                    id={phase === 'deal_over' && totalScore >= targetScore ? 'next-casino-button' : undefined}
+                                    className={styles.nextDealButton}
                                     onClick={(e) => {
                                         e.stopPropagation();
-                                        handleRoundAdvanceAction();
+                                        handleDealAdvanceAction();
                                     }}
-                                    disabled={phase === 'playing' && isInitialDeal}
-                                    style={phase === 'round_over' && totalScore < targetScore && handsRemaining <= 0 ? { color: '#ff4444', borderColor: '#ff4444' } : {}}
+                                    disabled={isInitialDeal}
+                                    style={phase === 'deal_over' && totalScore < targetScore && handsRemaining <= 0 ? { color: '#ff4444', borderColor: '#ff4444' } : {}}
                                 >
                                     {phase === 'entering_casino' || (phase === 'playing' && isInitialDeal) ? 'Deal' : (
                                         totalScore >= targetScore ? (isLastCasino ? 'Victory' : 'Leave Casino') :
@@ -2510,7 +2532,7 @@ export default function App() {
                                 giftShopEnterComplete && !isGiftShopExiting ? (
                                     isSellingMode ? (
                                         <button
-                                            className={styles.nextRoundButton}
+                                            className={styles.nextDealButton}
                                             onClick={(e) => {
                                                 e.stopPropagation();
                                                 toggleSellingMode(false);
@@ -2520,7 +2542,7 @@ export default function App() {
                                         </button>
                                     ) : (
                                         <button
-                                            className={styles.nextRoundButton}
+                                            className={styles.nextDealButton}
                                             onClick={(e) => {
                                                 e.stopPropagation();
                                                 startGiftShopExit();
@@ -2571,7 +2593,7 @@ export default function App() {
 
             {showCasinoListing && (
                 <CasinoListingView
-                    currentRound={round}
+                    currentDeal={deal}
                     onClose={() => {
                         playClickDown();
                         setShowCasinoListing(false);
@@ -2579,7 +2601,7 @@ export default function App() {
                 />
             )}
 
-            {phase === 'casino_win' && (
+            {phase === 'casino_payout' && (
                 <CasinoWinScreen />
             )}
             {phase === 'gift_shop' && (

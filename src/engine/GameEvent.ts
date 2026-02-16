@@ -11,12 +11,13 @@
 import type { Card, HandScore, ScoringDetail } from '../types';
 import type { RelicInstance } from '../logic/relics/types';
 import type { GamePhase, ShopItem, RewardSummary } from './GameState';
+import type { TutorialDisplayConfig, TutorialScope } from './tutorial/types';
 
 // ─── Event Type Union ───────────────────────────────────
 
 export type GameEvent =
     // === Dealing ===
-    | { type: 'round_started'; round: number; handsRemaining: number }
+    | { type: 'deal_started'; deal: number; handsRemaining: number }
     | { type: 'cards_dealt'; playerCard: Card; playerHandIndex: number; dealerCards: [Card, Card] }
     | { type: 'initial_deal_complete' }
 
@@ -49,10 +50,14 @@ export type GameEvent =
     // === Scoring ===
     | { type: 'hand_outcome'; handIndex: number; outcome: 'win' | 'loss' | 'bust'; blackjackValue: number }
     | { type: 'scoring_hand_focus'; handIndex: number }
-    | { type: 'scoring_row'; handIndex: number; criterion: ScoringDetail }
+    | { type: 'scoring_row_intro'; handIndex: number; criterion: ScoringDetail }
+    | { type: 'scoring_row_chips'; handIndex: number; criterionId: string; chips: number }
+    | { type: 'scoring_row_mult'; handIndex: number; criterionId: string; multiplier: number }
     | { type: 'scoring_hand_complete'; handIndex: number }
     | { type: 'summary_update'; chips: number; mult: number }
-    | { type: 'round_scoring_complete'; totalChips: number; totalMult: number; finalScore: number }
+    | { type: 'deal_scoring_complete'; totalChips: number; totalMult: number; finalScore: number }
+    | { type: 'dealer_fade_out' }
+
     | { type: 'chip_collection'; amount: number; newTotalScore: number }
 
     // === Charge Changes ===
@@ -81,6 +86,17 @@ export type GameEvent =
     | { type: 'charge_spent'; relicId: string; newCharges: number }
 
     // === Casino Progression ===
-    | { type: 'casino_cleared'; round: number; score: number }
+    | { type: 'casino_cleared'; deal: number; score: number }
+    | { type: 'payout_started'; total: number; rewardSummary: RewardSummary }
+    | { type: 'payout_step'; label: string; amount: number; description?: string }
+    | { type: 'payout_complete'; total: number }
     | { type: 'comps_earned'; amount: number; newTotal: number; reason: string }
-    | { type: 'next_casino_setup'; round: number; targetScore: number };
+    | { type: 'next_casino_setup'; deal: number; targetScore: number }
+
+    // === Tutorial ===
+    | { type: 'tutorial_triggered'; stepId: string; config: TutorialDisplayConfig }
+    | { type: 'tutorial_completed'; stepId: string; scope: TutorialScope }
+    | { type: 'tutorial_skipped'; stepId: string }
+    
+    // === System ===
+    | { type: 'animation_complete'; animationId: string };

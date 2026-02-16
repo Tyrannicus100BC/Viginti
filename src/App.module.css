@@ -186,6 +186,14 @@
     position: relative;
 }
 
+.dealerHandWrapper {
+    transition: opacity 0.5s ease;
+    opacity: 1;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+}
+
 .dealerZoneHidden {
     opacity: 0;
     pointer-events: none;
@@ -214,7 +222,7 @@
     position: relative;
 }
 
-.drawHitSpotAnchor {
+.drawSpotAnchor {
     position: absolute;
     left: 50%;
     top: 50%;
@@ -277,14 +285,14 @@
     /* If the card internal state was FaceUp, it should be fine. If it was re-mounting, it might trigger entry animation? */
 }
 
-.hitSpot {
+.drawSpot {
     border-color: #ffd700;
     /* Yellow when active */
     cursor: pointer;
     box-shadow: 0 0 15px rgba(255, 215, 0, 0.1);
 }
 
-.hitSpot:hover {
+.drawSpot:hover {
     box-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
     background: rgba(255, 215, 0, 0.05);
     transform: scale(1.05);
@@ -636,7 +644,7 @@
     box-shadow: none;
 }
 
-.nextRoundButton {
+.nextDealButton {
     width: 100%;
     height: 100%;
     /* Fill container */
@@ -656,7 +664,7 @@
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
 }
 
-.nextRoundButton:hover:not(:disabled) {
+.nextDealButton:hover:not(:disabled) {
     background: #1a1805;
     border-color: #f39c12;
     color: #f39c12;
@@ -664,7 +672,7 @@
     box-shadow: 0 8px 20px rgba(243, 156, 18, 0.15);
 }
 
-.nextRoundButton:disabled {
+.nextDealButton:disabled {
     opacity: 0.5;
     cursor: not-allowed;
     filter: grayscale(1);

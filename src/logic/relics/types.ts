@@ -147,7 +147,7 @@ export type RelicHooks = {
     onScoreRow?: ValueHook<(context: ScoreRowContext, relicState: any, config: RelicConfig) => Promise<void>>;
     onHandCompletion?: ValueHook<(context: HandCompletionContext, relicState: any, config: RelicConfig) => Promise<void>>;
     onHandBust?: ValueHook<(context: HandBustContext, relicState: any, config: RelicConfig) => Promise<void>>;
-    onRoundCompletion?: ValueHook<(context: RoundCompletionContext, relicState: any, config: RelicConfig) => Promise<void>>;
+    onDealCompletion?: ValueHook<(context: DealCompletionContext, relicState: any, config: RelicConfig) => Promise<void>>;
 }
 
 export type ValueHook<T> = T | PrioritizedHook<T>;
@@ -188,7 +188,7 @@ export type HandCompletionContext = InterruptContext & {
     modifyRunningSummary: (chipsToAdd: number, multToAdd: number) => void;
 }
 
-export type RoundCompletionContext = InterruptContext & {
+export type DealCompletionContext = InterruptContext & {
     wins: number;
     losses: number;
     vigintis: number;
@@ -198,13 +198,13 @@ export type RoundCompletionContext = InterruptContext & {
     playerHands: any[]; // Avoid circular dependency with PlayerHand from main types
 }
 
-export type RoundSummary = {
+export type DealSummary = {
     totalChips: number;
     totalMult: number;
     finalScore: number;
 }
 
-export type RoundContext = GameContext & {
+export type DealContext = GameContext & {
     wins: number;
     losses: number;
     vigintis: number; // blackjack wins

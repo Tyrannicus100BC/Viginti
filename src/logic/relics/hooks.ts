@@ -1,4 +1,4 @@
-import { withPriority, type ScoreRowContext, type HandContext, type GameContext, type HandCompletionContext, type RoundCompletionContext, type HandBustContext } from './types';
+import { withPriority, type ScoreRowContext, type HandContext, type GameContext, type HandCompletionContext, type DealCompletionContext, type HandBustContext } from './types';
 import type { Card, HandScore } from '../../types';
 import { POKER_ORDER, RANK_VALUES } from '../rules';
 
@@ -308,7 +308,7 @@ export const Hooks = {
     straight_mult: createCategoryBonusHook('straight', 'mult'),
     straight_chips: createCategoryBonusHook('straight', 'chips'),
     one_armed_win_bonus: {
-        onRoundCompletion: async (context: RoundCompletionContext, relicState: any, _config: any) => {
+        onDealCompletion: async (context: DealCompletionContext, relicState: any, _config: any) => {
             if (context.wins === 1) {
                 const currentMult = context.runningSummary.mult;
                 const valToAdd = currentMult > 0 ? currentMult * (relicState.factor - 1) : 1;
@@ -320,7 +320,7 @@ export const Hooks = {
         }
     },
     high_roller_win_all: {
-        onRoundCompletion: async (context: RoundCompletionContext, relicState: any, _config: any) => {
+        onDealCompletion: async (context: DealCompletionContext, relicState: any, _config: any) => {
              if (context.wins === 3) {
                  await context.highlightRelic('high_roller', {
                      trigger: () => context.modifyRunningSummary(relicState.amount, 0)
@@ -591,7 +591,7 @@ export const Hooks = {
 
     // Hands
     feather_same_hand_size: {
-        onRoundCompletion: async (context: RoundCompletionContext, relicState: any, _config: any) => {
+        onDealCompletion: async (context: DealCompletionContext, relicState: any, _config: any) => {
             const hands = context.playerHands || [];
             if (hands.length === 0) return;
             const len = hands[0].cards.length;
@@ -605,7 +605,7 @@ export const Hooks = {
         }
     },
     odd_sock_two_cards: {
-        onRoundCompletion: async (context: RoundCompletionContext, relicState: any, _config: any) => {
+        onDealCompletion: async (context: DealCompletionContext, relicState: any, _config: any) => {
             const hands = context.playerHands || [];
             const allTwo = hands.length > 0 && hands.every((h: any) => h.cards.length === 2);
             
@@ -705,7 +705,7 @@ export const Hooks = {
 
     // Global
     faded_tag_bonus: {
-        onRoundCompletion: async (context: RoundCompletionContext, relicState: any, config: any) => {
+        onDealCompletion: async (context: DealCompletionContext, relicState: any, config: any) => {
             const relicId = config?.id || 'faded_tag';
             const decayAmount = Math.max(0, Number(relicState.decay_amount ?? config?.properties?.decay_amount ?? 2));
 
@@ -726,14 +726,14 @@ export const Hooks = {
         }
     },
     mini_shoe_bonus_chips: {
-        onRoundCompletion: async (context: RoundCompletionContext, relicState: any, _config: any) => {
+        onDealCompletion: async (context: DealCompletionContext, relicState: any, _config: any) => {
             await context.highlightRelic('mini_shoe', {
                  trigger: () => context.modifyRunningSummary(relicState.bonus_chips, 0)
             });
         }
     },
     robe_slippers_bonus_mult: {
-        onRoundCompletion: async (context: RoundCompletionContext, relicState: any, _config: any) => {
+        onDealCompletion: async (context: DealCompletionContext, relicState: any, _config: any) => {
             await context.highlightRelic('robe_slippers', {
                  trigger: () => context.modifyRunningSummary(0, relicState.bonus_mult)
             });
@@ -799,8 +799,8 @@ export const Hooks = {
     
     // New Charms
     safety_net_20: {
-        onRoundCompletion: async (_context: RoundCompletionContext, relicState: any, _config: any) => {
-             relicState.armed = false; // Reset per round
+        onDealCompletion: async (_context: DealCompletionContext, relicState: any, _config: any) => {
+             relicState.armed = false; // Reset per deal
         },
         onCheckCardPlace: (context: any, relicState: any, _config: any) => {
             // Wait if we are about to hit 20 and not yet armed
@@ -851,15 +851,15 @@ export const Hooks = {
         }
     },
     mulligan_bust: {
-         onRoundCompletion: async (_context: RoundCompletionContext, relicState: any, _config: any) => {
-             relicState.used_this_round = false;
+         onDealCompletion: async (_context: DealCompletionContext, relicState: any, _config: any) => {
+             relicState.used_this_deal = false;
         },
         onCheckCardPlace: (context: any, relicState: any, _config: any) => {
              // Wait if we are busting and haven't used mulligan yet
              return !relicState.used_this_round && context.blackjackValue > 21;
         },
         onHandBust: async (context: HandBustContext, relicState: any, _config: any) => {
-            if (!relicState.used_this_round) {
+            if (!relicState.used_this_deal) {
                 // Wait for BUST animation is handled by caller (usually) or we can wait here?
                 // The prompt says: "wait for the BUST animation to finish playing... but then show standard activation..."
                 // Since we are in an interrupt hook, we can wait.
@@ -877,26 +877,26 @@ export const Hooks = {
                              newCards.pop();
                              context.modifyHand(newCards);
                         }
-                        relicState.used_this_round = true;
+                        relicState.used_this_deal = true;
                     }
                 });
             }
         }
     },
     spyglass_13: {
-        onRoundCompletion: async (_context: RoundCompletionContext, relicState: any, _config: any) => {
-             relicState.used_this_round = false;
+        onDealCompletion: async (_context: DealCompletionContext, relicState: any, _config: any) => {
+             relicState.used_this_deal = false;
         },
         onCheckCardPlace: (context: any, relicState: any, _config: any) => {
              // Wait if we are at 13 and haven't used spyglass yet
-             return !relicState.used_this_round && context.blackjackValue === 13;
+             return !relicState.used_this_deal && context.blackjackValue === 13;
         },
         onCardPlaced: async (context: any, relicState: any, _config: any) => {
-            if (!relicState.used_this_round && context.blackjackValue === 13) {
+            if (!relicState.used_this_deal && context.blackjackValue === 13) {
                  await context.highlightRelic('spyglass', {
                      trigger: () => {
                          context.revealDealerHiddenCard();
-                         relicState.used_this_round = true;
+                         relicState.used_this_deal = true;
                      }
                  });
             }

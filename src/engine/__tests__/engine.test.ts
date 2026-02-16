@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { processAction, createInitialState, getValidActions } from '../engine';
 import type { GameState } from '../GameState';
 import type { PlayerAction } from '../PlayerAction';
+import { TUTORIAL_STEPS } from '../tutorial/definitions';
 
 describe('Game Engine', () => {
     // ─── Helpers ────────────────────────────────────────
@@ -16,6 +17,7 @@ describe('Game Engine', () => {
             cityId: 'atlantic_city',
             gamblerId: 'standard',
             seed,
+            globalTutorialsCompleted: TUTORIAL_STEPS.map(s => s.id)
         });
         return nextState;
     }
@@ -249,16 +251,44 @@ describe('Game Engine', () => {
             return nextState;
         }
 
+        // Helper to run the full stand sequence
+        function completeRound(state: GameState) {
+            let current = state;
+            let allEvents: any[] = [];
+            
+            // 1. Stand -> dealer_turn
+            const r1 = processAction(current, { type: 'stand' });
+            current = r1.nextState;
+            allEvents.push(...r1.events);
+
+            // 2. resolve_dealer_turn -> resolving_outcomes
+            const r2 = processAction(current, { type: 'resolve_dealer_turn' });
+            current = r2.nextState;
+            allEvents.push(...r2.events);
+
+            // 3. resolve_hand_outcome -> scoring
+            const r3 = processAction(current, { type: 'resolve_hand_outcome' });
+            current = r3.nextState;
+            allEvents.push(...r3.events);
+
+            // 4. score_round -> deal_over
+            const r4 = processAction(current, { type: 'score_round' });
+            current = r4.nextState;
+            allEvents.push(...r4.events);
+
+            return { finalState: current, events: allEvents };
+        }
+
         it('reveals dealer cards', () => {
             const state = getPlayingState();
-            const { events } = processAction(state, { type: 'stand' });
+            const { events } = completeRound(state);
 
             expect(events.some(e => e.type === 'dealer_reveal' || e.type === 'dealer_stand' || e.type === 'dealer_bust')).toBe(true);
         });
 
         it('evaluates hand outcomes', () => {
             const state = getPlayingState();
-            const { events } = processAction(state, { type: 'stand' });
+            const { events } = completeRound(state);
 
             const outcomes = events.filter(e => e.type === 'hand_outcome');
             expect(outcomes).toHaveLength(3); // 3 hands
@@ -268,30 +298,30 @@ describe('Game Engine', () => {
             // Run many seeds to find one with a win
             for (let seed = 1; seed <= 20; seed++) {
                 const state = getPlayingState(seed);
-                const { events } = processAction(state, { type: 'stand' });
+                const { events } = completeRound(state);
                 const wins = events.filter(e => e.type === 'hand_outcome' && e.outcome === 'win');
                 if (wins.length > 0) {
-                    expect(events.some(e => e.type === 'scoring_row')).toBe(true);
-                    expect(events.some(e => e.type === 'round_scoring_complete')).toBe(true);
+                    expect(events.some(e => e.type === 'scoring_row_intro')).toBe(true);
+                    expect(events.some(e => e.type === 'deal_scoring_complete')).toBe(true);
                     return; // Found a winning scenario
                 }
             }
             // If no win found in 20 seeds, that's fine — scoring is tested elsewhere
         });
 
-        it('transitions to round_over phase', () => {
+        it('transitions to deal_over phase', () => {
             const state = getPlayingState();
-            const { nextState } = processAction(state, { type: 'stand' });
+            const { finalState } = completeRound(state);
 
-            expect(nextState.phase).toBe('round_over');
+            expect(finalState.phase).toBe('deal_over');
         });
 
         it('updates total score', () => {
             const state = getPlayingState();
-            const { nextState } = processAction(state, { type: 'stand' });
+            const { finalState } = completeRound(state);
 
             // Score should be >= 0 (could be 0 if all losses)
-            expect(nextState.totalScore).toBeGreaterThanOrEqual(0);
+            expect(finalState.totalScore).toBeGreaterThanOrEqual(0);
         });
     });
 
@@ -305,6 +335,9 @@ describe('Game Engine', () => {
                 { type: 'draw' },
                 { type: 'place_card', handIndex: 1 },
                 { type: 'stand' },
+                { type: 'resolve_dealer_turn' },
+                { type: 'resolve_hand_outcome' },
+                { type: 'score_round' },
             ];
 
             let state1 = createInitialState();
@@ -351,12 +384,18 @@ describe('Game Engine', () => {
             expect(actions.some(a => a.type === 'place_card')).toBe(true);
         });
 
-        it('returns next_round in round_over phase', () => {
+        it('returns deal in deal_over phase', () => {
             const played = drawCards(dealHand(startGame()));
-            const { nextState: placed } = processAction(played, { type: 'place_card', handIndex: 1 });
-            const { nextState: stood } = processAction(placed, { type: 'stand' });
-            const actions = getValidActions(stood);
-            expect(actions.some(a => a.type === 'next_round')).toBe(true);
+            let current = processAction(played, { type: 'place_card', handIndex: 1 }).nextState;
+            
+            // Advance through phases
+            current = processAction(current, { type: 'stand' }).nextState;
+            current = processAction(current, { type: 'resolve_dealer_turn' }).nextState;
+            current = processAction(current, { type: 'resolve_hand_outcome' }).nextState;
+            current = processAction(current, { type: 'score_round' }).nextState;
+
+            const actions = getValidActions(current);
+            expect(actions.some(a => a.type === 'deal')).toBe(true);
         });
     });
 });

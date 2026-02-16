@@ -1,13 +1,48 @@
 import React, { useEffect, useRef } from 'react';
-import { useGameStore, type DebugLedgerEntry } from '../store/gameStore';
+import { useGameBridge, type DebugLedgerEntry } from '../store/gameBridge';
 import styles from './DebugOverlays.module.css';
 
 interface DebugLogOverlayProps {
     onClose: () => void;
 }
 
+const CollapsibleSection = ({ 
+    title, 
+    children, 
+    copyContent,
+    defaultOpen = false 
+}: { 
+    title: React.ReactNode; 
+    children: React.ReactNode; 
+    copyContent?: string;
+    defaultOpen?: boolean;
+}) => {
+    const handleCopy = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (copyContent) {
+            navigator.clipboard.writeText(copyContent);
+        }
+    };
+
+    return (
+        <details className={styles.details} open={defaultOpen}>
+            <summary className={styles.summary}>
+                {title}
+                {copyContent && (
+                    <button className={styles.copyBtn} onClick={handleCopy}>
+                        Copy
+                    </button>
+                )}
+            </summary>
+            {children}
+        </details>
+    );
+};
+
 export function DebugLogOverlay({ onClose }: DebugLogOverlayProps) {
-    const debugLedger = useGameStore(s => s.debugLedger);
+    // We use useGameBridge directly for consistency with DebugLedgerEntry source
+    const debugLedger = useGameBridge(s => s.debugLedger);
     const contentRef = useRef<HTMLDivElement>(null);
 
     // Auto-scroll to bottom on open and when entries change
@@ -18,18 +53,50 @@ export function DebugLogOverlay({ onClose }: DebugLogOverlayProps) {
     }, [debugLedger.length]);
 
     const formatEntry = (entry: DebugLedgerEntry, index: number) => {
-        const stateJson = JSON.stringify(entry.state, null, 2);
+        const stateJson = JSON.stringify(entry.stateAfter, null, 2);
+        const actionJson = JSON.stringify(entry.action);
+        const actionSummary = typeof entry.action === 'string' ? entry.action : entry.action.type;
+        
+        const actionsJson = JSON.stringify(entry.availableActions, null, 2);
+        const availableActionsDisplay = (
+            <CollapsibleSection title={`Available Actions (${entry.availableActions.length})`} defaultOpen={false}>
+                <div className={styles.logStateBlock} style={{ color: '#aaa' }}>
+                    {actionsJson}
+                </div>
+            </CollapsibleSection>
+        );
+
         return (
             <div key={index} className={styles.logEntry}>
                 <div className={styles.logEntryHeader}>
-                    ═══ State #{index + 1} ═══
+                    <span>State #{index + 1}</span>
+                    <span style={{ fontSize: '0.7em', color: '#666' }}>
+                        {new Date(entry.timestamp).toLocaleTimeString()}
+                    </span>
                 </div>
-                <div className={styles.logStateBlock}>
-                    {stateJson}
-                </div>
+
                 <div className={styles.logActionLabel}>
-                    ▸ Action: {entry.action}
+                    ▸ Action: <span style={{ color: '#fff' }}>{actionSummary}</span>
+                    <span style={{ fontSize: '0.8em', color: '#888', marginLeft: 8 }}>{actionJson}</span>
                 </div>
+
+                <CollapsibleSection title={`Action Results (${entry.events.length} events)`} defaultOpen={false}>
+                    <div className={styles.logStateBlock} style={{ color: '#aaa' }}>
+                        {JSON.stringify(entry.events, null, 2)}
+                    </div>
+                </CollapsibleSection>
+
+                <CollapsibleSection 
+                    title="Resulting State JSON" 
+                    copyContent={stateJson}
+                    defaultOpen={false}
+                >
+                    <div className={styles.logStateBlock}>
+                        {stateJson}
+                    </div>
+                </CollapsibleSection>
+
+                {availableActionsDisplay}
             </div>
         );
     };

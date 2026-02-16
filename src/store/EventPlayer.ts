@@ -70,29 +70,59 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
 
     // === Dealing ===
 
-    async round_started(event, config) {
-        if (event.type !== 'round_started') return;
+    async deal_started(event, config) {
+        if (event.type !== 'deal_started') return;
         config.updateUI({
             dealerMessage: null,
+            handsRemaining: event.handsRemaining,
+            deal: event.deal,
             isInitialDeal: true,
             isDealerPlaying: false,
             scoringHandIndex: -1,
             isCollectingChips: false,
             allWinnersEnlarged: false,
             runningSummary: null,
-            roundSummary: null,
+            dealSummary: null,
+            dealerVisible: true,
+            // Reset state for new deal
+            playerHands: Array.from({ length: 3 }, (_, i) => ({
+                id: i,
+                cards: [],
+                isHeld: false,
+                isBust: false,
+                blackjackValue: 0,
+            })),
+            dealer: { cards: [], isRevealed: false, blackjackValue: 0 }
         });
     },
 
     async cards_dealt(event, config) {
         if (event.type !== 'cards_dealt') return;
+        
+        // Initialize hands with dealt cards
+        config.updateUI({
+            playerHands: (prev: any) => {
+                const next = [...prev];
+                next[event.playerHandIndex] = {
+                    ...next[event.playerHandIndex],
+                    cards: [event.playerCard]
+                };
+                return next;
+            },
+            dealer: {
+                cards: event.dealerCards,
+                isRevealed: false,
+                blackjackValue: 0 // Will be updated during reveal
+            }
+        });
+
         config.sfx?.play('cardDeal');
         await wait(200, config);
     },
 
-    async initial_deal_complete(event, config) {
-        config.updateUI({ isInitialDeal: false });
-        await wait(300, config);
+    async initial_deal_complete(_event, config) {
+        // config.updateUI({ isInitialDeal: false }); // Now handled by animation_complete signal
+        await wait(200, config);
     },
 
     // === Drawing ===
@@ -107,10 +137,22 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
     async card_drawn(event, config) {
         if (event.type !== 'card_drawn') return;
         config.sfx?.play('cardDeal');
+        
+        // Update drawnCards array in the store
+        config.updateUI({ 
+            drawnCards: (prev: any) => {
+                const next = [...prev];
+                next[event.drawIndex] = event.card;
+                return next;
+            }
+        });
+
         await wait(150, config);
     },
 
-    async draw_complete(_event, config) {
+    async draw_complete(event, config) {
+        if (event.type !== 'draw_complete') return;
+        config.updateUI({ selectedDrawIndex: event.selectedIndex });
         await wait(100, config);
     },
 
@@ -118,6 +160,28 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
 
     async card_placed(event, config) {
         if (event.type !== 'card_placed') return;
+        
+        config.updateUI({
+            // Remove from drawn cards
+            drawnCards: (prev: any) => {
+                const next = [...prev];
+                const idx = next.findIndex((c: any) => c && c.id === event.card.id);
+                if (idx !== -1) next[idx] = null;
+                return next;
+            },
+            // Add to player hand
+            playerHands: (prev: any) => {
+                const next = [...prev];
+                const hand = next[event.handIndex];
+                next[event.handIndex] = {
+                    ...hand,
+                    cards: [...hand.cards, event.card],
+                    blackjackValue: event.newBlackjackValue
+                };
+                return next;
+            }
+        });
+
         config.sfx?.play('cardPlace');
         await wait(200, config);
     },
@@ -125,13 +189,36 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
     async hand_bust(event, config) {
         if (event.type !== 'hand_bust') return;
         config.sfx?.play('bust');
-        config.updateUI({ isShaking: true });
+        config.updateUI({ 
+            isShaking: true,
+            playerHands: (prev: any) => {
+                const next = [...prev];
+                next[event.handIndex] = {
+                    ...next[event.handIndex],
+                    isBust: true,
+                    blackjackValue: event.blackjackValue
+                };
+                return next;
+            }
+        });
         await wait(400, config);
         config.updateUI({ isShaking: false });
     },
 
     async hand_modified(event, config) {
         if (event.type !== 'hand_modified') return;
+        config.updateUI({
+            playerHands: (prev: any) => {
+                const next = [...prev];
+                next[event.handIndex] = {
+                    ...next[event.handIndex],
+                    cards: event.newCards,
+                    blackjackValue: event.newBlackjackValue,
+                    isBust: event.newBlackjackValue > 21
+                };
+                return next;
+            }
+        });
         await wait(300, config);
     },
 
@@ -179,7 +266,16 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
 
     async dealer_reveal(event, config) {
         if (event.type !== 'dealer_reveal') return;
-        config.updateUI({ isDealerPlaying: true, dealerVisible: true });
+        config.updateUI({ 
+            isDealerPlaying: true, 
+            dealerVisible: true,
+            dealer: (prev: any) => ({
+                ...prev,
+                cards: prev.cards.map((c: any, i: number) => i === 0 ? event.card : c),
+                isRevealed: true,
+                blackjackValue: event.newValue
+            })
+        });
         config.sfx?.play('cardFlip');
         await wait(600, config);
     },
@@ -189,6 +285,11 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
         config.updateUI({
             dealerMessage: 'Hit!',
             dealerMessageExiting: false,
+            dealer: (prev: any) => ({
+                ...prev,
+                cards: [...prev.cards, event.card],
+                blackjackValue: event.newValue
+            })
         });
         config.sfx?.play('cardDeal');
         await wait(400, config);
@@ -224,6 +325,20 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
 
     async hand_outcome(event, config) {
         if (event.type !== 'hand_outcome') return;
+        
+        config.updateUI({
+            playerHands: (prev: any) => {
+                const next = [...prev];
+                next[event.handIndex] = {
+                    ...next[event.handIndex],
+                    outcome: event.outcome,
+                    resultRevealed: true,
+                    blackjackValue: event.blackjackValue
+                };
+                return next;
+            }
+        });
+
         if (event.outcome === 'win') {
             config.sfx?.play('win');
         } else {
@@ -232,35 +347,141 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
         await wait(300, config);
     },
 
-    async scoring_hand_focus(event, config) {
-        if (event.type !== 'scoring_hand_focus') return;
-        config.updateUI({ scoringHandIndex: event.handIndex });
+    async dealer_fade_out(_event, config) {
+        config.updateUI({ dealerVisible: false });
         await wait(400, config);
     },
 
-    async scoring_row(event, config) {
-        if (event.type !== 'scoring_row') return;
+
+
+    async scoring_hand_focus(event, config) {
+        if (event.type !== 'scoring_hand_focus') return;
+        config.updateUI({ 
+            scoringHandIndex: event.handIndex,
+            activeHighlightIds: null,
+        });
+        await wait(400, config);
+    },
+
+    async scoring_row_intro(event, config) {
+        if (event.type !== 'scoring_row_intro') return;
+        const { handIndex, criterion } = event;
+        
+        // 1. Reveal the row (frame + label)
+        config.updateUI({
+            scoringCriteria: (prev: any) => {
+                const current = prev[handIndex] || [];
+                return { ...prev, [handIndex]: [...current, criterion] };
+            },
+            visibleScoringRowIndices: (prev: any) => {
+                const current = prev[handIndex] || [];
+                const nextIdx = current.length;
+                return { ...prev, [handIndex]: [...current, nextIdx] };
+            },
+            scoringRowValues: (prev: any) => {
+                const handRows = prev[handIndex] || {};
+                const nextIdx = Object.keys(handRows).length;
+                return {
+                    ...prev,
+                    [handIndex]: {
+                        ...handRows,
+                        [nextIdx]: { count: 0 }
+                    }
+                };
+            },
+            activeHighlightIds: criterion.cardIds || [],
+        });
+
+        // Track row index for next step
+        const cfg = config as any;
+        if (!cfg._scoringRowMap) cfg._scoringRowMap = {};
+        const currentRowIdx = (cfg._scoringRowMap[handIndex] ?? -1) + 1;
+        cfg._scoringRowMap[handIndex] = currentRowIdx;
+
         const pitch = nextScoreRowPitch();
         config.sfx?.play('score', { playbackRate: pitch });
-        await wait(200, config);
+        await wait(300, config);
+    },
+
+    async scoring_row_chips(event, config) {
+        if (event.type !== 'scoring_row_chips') return;
+        const { handIndex } = event;
+        const cfg = config as any;
+        const rowIdx = cfg._scoringRowMap[handIndex];
+        
+        if (rowIdx !== undefined) {
+             config.updateUI({
+                scoringRowValues: (prev: any) => {
+                    const hRows = prev[handIndex];
+                    return {
+                        ...prev,
+                        [handIndex]: {
+                            ...hRows,
+                            [rowIdx]: { 
+                                ...hRows[rowIdx],
+                                chips: event.chips,
+                            }
+                        }
+                    };
+                }
+            });
+            if (event.chips > 0) {
+                 config.sfx?.play('chipPlace');
+            }
+            await wait(200, config);
+        }
+    },
+
+    async scoring_row_mult(event, config) {
+        if (event.type !== 'scoring_row_mult') return;
+        const { handIndex } = event;
+        const cfg = config as any;
+        const rowIdx = cfg._scoringRowMap[handIndex];
+        
+        if (rowIdx !== undefined) {
+             config.updateUI({
+                scoringRowValues: (prev: any) => {
+                    const hRows = prev[handIndex];
+                    return {
+                        ...prev,
+                        [handIndex]: {
+                            ...hRows,
+                            [rowIdx]: { 
+                                ...hRows[rowIdx],
+                                multiplier: event.multiplier,
+                            }
+                        }
+                    };
+                }
+            });
+             if (event.multiplier > 0) {
+                 config.sfx?.play('chipPlace'); // distinct sound?
+            }
+            await wait(200, config);
+        }
     },
 
     async scoring_hand_complete(event, config) {
         if (event.type !== 'scoring_hand_complete') return;
+        config.updateUI({ 
+            activeHighlightIds: null,
+            scoringHandIndex: -1
+        });
         await wait(300, config);
     },
 
     async summary_update(event, config) {
         if (event.type !== 'summary_update') return;
+        // Final sync for this hand's summary
         config.updateUI({
             runningSummary: { chips: event.chips, mult: event.mult },
         });
     },
 
-    async round_scoring_complete(event, config) {
-        if (event.type !== 'round_scoring_complete') return;
+    async deal_scoring_complete(event, config) {
+        if (event.type !== 'deal_scoring_complete') return;
         config.updateUI({
-            roundSummary: {
+            dealSummary: {
                 totalChips: event.totalChips,
                 totalMult: event.totalMult,
                 finalScore: event.finalScore,
@@ -273,7 +494,10 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
     async chip_collection(event, config) {
         if (event.type !== 'chip_collection') return;
         config.sfx?.play('totalWinnings');
-        config.updateUI({ isCollectingChips: true });
+        config.updateUI({ 
+            isCollectingChips: true,
+            totalScore: event.newTotalScore 
+        });
         await wait(1000, config);
         config.updateUI({ isCollectingChips: false });
     },
@@ -288,8 +512,14 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
 
     async phase_changed(event, config) {
         if (event.type !== 'phase_changed') return;
+        
+        config.updateUI({ phase: event.to });
+
         // Reset some UI state on phase transitions
-        if (event.to === 'playing') {
+        if (event.to === 'entering_casino') {
+            config.updateUI({ dealerVisible: true });
+        }
+        if (event.to === 'playing' || event.to === 'scoring') {
             config.updateUI({
                 isDealerPlaying: false,
                 dealerMessage: null,
@@ -297,6 +527,12 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
                 isCollectingChips: false,
             });
         }
+        
+        if (event.to === 'scoring') {
+            config.updateUI({ runningSummary: { chips: 0, mult: 0 } });
+            await wait(200, config);
+        }
+
         if (event.to === 'game_over') {
             config.sfx?.play('loss');
         }
@@ -392,6 +628,24 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
         await wait(500, config);
     },
 
+    async payout_started(event, config) {
+        if (event.type !== 'payout_started') return;
+        config.updateUI({ 
+            shopRewardSummary: event.rewardSummary,
+        });
+        await wait(200, config);
+    },
+
+    async payout_step(_event, config) {
+        // CasinoWinScreen handles the internal animation of rows, 
+        // but we can provide a small delay for the event stream pacing.
+        await wait(100, config);
+    },
+
+    async payout_complete(_event, config) {
+        await wait(200, config);
+    },
+
     async comps_earned(event, config) {
         if (event.type !== 'comps_earned') return;
         config.sfx?.play('click');
@@ -401,6 +655,34 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
     async next_casino_setup(event, config) {
         if (event.type !== 'next_casino_setup') return;
         await wait(300, config);
+    },
+
+    // === Tutorial ===
+
+    async tutorial_triggered(event, config) {
+        if (event.type !== 'tutorial_triggered') return;
+        // Check if we need a sound?
+        // config.sfx?.play('notification'); 
+        config.updateUI({ activeTutorialId: event.stepId });
+        await wait(300, config);
+    },
+
+    async tutorial_completed(event, config) {
+        if (event.type !== 'tutorial_completed') return;
+        config.updateUI({ activeTutorialId: null });
+        await wait(200, config);
+    },
+
+    async tutorial_skipped(event, config) {
+         if (event.type !== 'tutorial_skipped') return;
+         config.updateUI({ activeTutorialId: null });
+    },
+
+    async animation_complete(event, config) {
+        if (event.type !== 'animation_complete') return;
+        if (event.animationId === 'dealer_initial_deal_complete') {
+            config.updateUI({ isInitialDeal: false });
+        }
     },
 };
 
@@ -416,6 +698,7 @@ export async function playEvents(
     config: EventPlayerConfig,
 ): Promise<void> {
     resetScoreRowPitch();
+    (config as any)._scoringRowMap = {};
     for (const event of events) {
         const handler = handlers[event.type];
         if (handler) {

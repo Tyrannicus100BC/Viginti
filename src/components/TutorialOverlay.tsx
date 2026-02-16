@@ -1,13 +1,26 @@
 
 import React, { useEffect, useRef, useState } from 'react';
-import { TutorialManager, type TutorialStep } from '../logic/tutorials/tutorials';
-import { NEXT_CASINO_TUTORIAL_ID } from '../logic/tutorials/definitions';
+import { useGameBridge } from '../store/gameBridge';
+import { TUTORIAL_STEPS } from '../engine/tutorial/definitions';
+// import type { TutorialStep } from '../engine/tutorial/types'; // Types are inferred or we define interface locally for legacy support
+import { NEXT_CASINO_TUTORIAL_ID } from '../engine/tutorial/definitions'; // Ensure this is exported
 import { useLayout } from './ResponsiveLayout';
 import { sfxEngine } from '../utils/sfxEngine';
 import styles from './TutorialOverlay.module.css';
 
+// Compatibility interface for component internal logic
+interface LegacyTutorialStep {
+    id: string;
+    text: string;
+    highlight?: { elementId: string; type: 'rect' | 'circle'; padding?: number };
+    scrim?: 'auto' | 'dim' | 'none';
+    messagePosition?: 'left' | 'right' | 'top' | 'bottom' | 'center';
+    completionType: 'click' | 'custom';
+    blockInput: boolean;
+}
+
 export const TutorialOverlay: React.FC = () => {
-    const [activeStep, setActiveStep] = useState<TutorialStep | null>(null);
+    const [activeStep, setActiveStep] = useState<LegacyTutorialStep | null>(null);
     const [isExiting, setIsExiting] = useState(false);
     const [isOverlayFading, setIsOverlayFading] = useState(false);
     const [highlightRect, setHighlightRect] = useState<DOMRect | null>(null);
@@ -26,9 +39,14 @@ export const TutorialOverlay: React.FC = () => {
     const [hudCompsRect, setHudCompsRect] = useState<DOMRect | null>(null);
     const [charmsRect, setCharmsRect] = useState<DOMRect | null>(null);
     const [messageBoxSize, setMessageBoxSize] = useState({ width: 0, height: 0 });
-    const manager = TutorialManager.getInstance();
+    
+    // New Store Access
+    const activeTutorialId = useGameBridge(s => s.activeTutorialId);
+    const gameState = useGameBridge(s => s.gameState);
+    const dispatch = useGameBridge(s => s.dispatch);
+
     const { scale, viewportWidth, viewportHeight, idealWidth } = useLayout();
-    const stepRef = useRef<TutorialStep | null>(null);
+    const stepRef = useRef<LegacyTutorialStep | null>(null);
     const messageBoxRef = useRef<HTMLDivElement>(null);
     const allowClickRef = useRef(false);
     const exitingRef = useRef(false);
@@ -37,48 +55,70 @@ export const TutorialOverlay: React.FC = () => {
     const lastSoundStepIdRef = useRef<string | null>(null);
     const liftedTargetRef = useRef<HTMLElement | null>(null);
 
+    // Sync activeTutorialId to local state with exit animation
+    useEffect(() => {
+        // If we have an active ID, show it (map to legacy structure)
+        if (activeTutorialId) {
+            const def = TUTORIAL_STEPS.find(s => s.id === activeTutorialId);
+            if (def) {
+                const mapped: LegacyTutorialStep = {
+                    id: def.id,
+                    text: def.display.text,
+                    highlight: def.display.highlight,
+                    scrim: def.display.scrim,
+                    messagePosition: def.display.messagePosition,
+                    completionType: def.display.completionType,
+                    blockInput: def.display.blockInput || def.blockInput || false
+                };
+                
+                stepRef.current = mapped;
+                setActiveStep(mapped);
+                setIsExiting(false);
+                setIsOverlayFading(false);
+                exitingRef.current = false;
+                allowClickRef.current = false;
+                
+                if (exitTimeoutRef.current !== null) {
+                    window.clearTimeout(exitTimeoutRef.current);
+                    exitTimeoutRef.current = null;
+                }
+            }
+        } else {
+            // No active ID -> Exit if we have a current step
+            if (stepRef.current && !exitingRef.current) {
+                exitingRef.current = true;
+                setIsExiting(true);
+                setIsOverlayFading(true);
+                allowClickRef.current = false;
+                
+                if (exitTimeoutRef.current !== null) {
+                    window.clearTimeout(exitTimeoutRef.current);
+                }
+                
+                exitTimeoutRef.current = window.setTimeout(() => {
+                    setActiveStep(null);
+                    stepRef.current = null;
+                    setIsExiting(false);
+                    setIsOverlayFading(false);
+                    exitingRef.current = false;
+                    allowClickRef.current = false;
+                    exitTimeoutRef.current = null;
+                }, 220);
+            }
+        }
+    }, [activeTutorialId]);
+    /*
     useEffect(() => {
         return manager.subscribe(step => {
             if (step === null && exitingRef.current && stepRef.current) {
                 return;
             }
+    */
 
-            if (step === null && !exitingRef.current) {
-                if (stepRef.current) {
-                    exitingRef.current = true;
-                    setIsExiting(true);
-                    setIsOverlayFading(true);
-                    allowClickRef.current = false;
-                    if (exitTimeoutRef.current !== null) {
-                        window.clearTimeout(exitTimeoutRef.current);
-                    }
-                    exitTimeoutRef.current = window.setTimeout(() => {
-                        setActiveStep(null);
-                        setIsExiting(false);
-                        setIsOverlayFading(false);
-                        exitingRef.current = false;
-                        allowClickRef.current = false;
-                        exitTimeoutRef.current = null;
-                    }, 220);
-                    return;
-                }
-
-                manager.releaseInputLock();
-            }
-
-            if (exitTimeoutRef.current !== null) {
-                window.clearTimeout(exitTimeoutRef.current);
-                exitTimeoutRef.current = null;
-            }
-
-            stepRef.current = step;
-            setActiveStep(step);
-            setIsExiting(false);
-            setIsOverlayFading(false);
-            exitingRef.current = false;
-            allowClickRef.current = false;
-        });
-    }, []);
+    /* 
+       Manager subscription replaced by activeTutorialId effect above.
+       Keeping clean-up structure implicitly handled by effect dependencies.
+    */
 
     useEffect(() => {
         if (!activeStep || activeStep.completionType !== 'click') return;
@@ -146,7 +186,7 @@ export const TutorialOverlay: React.FC = () => {
         }
 
         const updateRect = () => {
-            const context = manager.getContext();
+            const context = gameState; // Use synced game state
             const index = getOutcomeHandIndex(context, activeStep.id);
             const wrapper = document.getElementById('game-scale-wrapper');
             if (index < 0 || !wrapper) {
@@ -280,7 +320,7 @@ export const TutorialOverlay: React.FC = () => {
 
             let target: HTMLElement | null = null;
             if (isOutcomeStep) {
-                const context = manager.getContext();
+                const context = gameState;
                 const index = getOutcomeHandIndex(context, activeStep.id);
                 if (index >= 0) {
                     target = document.getElementById(`player-hand-${index}`) as HTMLElement | null;
@@ -308,7 +348,7 @@ export const TutorialOverlay: React.FC = () => {
             window.removeEventListener('resize', updateTarget);
             clearLiftedTarget();
         };
-    }, [activeStep, isOutcomeStep, manager]);
+    }, [activeStep, isOutcomeStep, gameState]);
 
     // Track draw indicator zone for draw + placement messaging
     useEffect(() => {
@@ -913,11 +953,11 @@ export const TutorialOverlay: React.FC = () => {
                     onClick={(event) => {
                         event.stopPropagation();
                         if (!allowClickRef.current) return;
-                        if (!manager.canDismissActiveStep()) return;
+                        if (!activeStep.completionType || activeStep.completionType !== 'click') return;
                         exitingRef.current = true;
                         setIsExiting(true);
                         setIsOverlayFading(true);
-                        void manager.handleOverlayClick();
+                        void dispatch({ type: 'acknowledge_tutorial', stepId: activeStep.id });
                     }}
                 />
             )}

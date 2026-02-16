@@ -1,10 +1,9 @@
 import React from 'react';
-import { useGameStore } from '../store/gameStore';
+import { useGameBridge } from '../store/gameBridge';
 import { BonusPhysics } from './BonusPhysics';
 import styles from './CasinoWinScreen.module.css';
 import appStyles from '../App.module.css';
 import { sfxEngine } from '../utils/sfxEngine';
-import { TutorialManager } from '../logic/tutorials/tutorials';
 
 const INTRO_DELAY_MS = 1500;
 const ROW_REVEAL_MS = 500;
@@ -18,17 +17,22 @@ const EXIT_FADE_MS = 200;
 
 export const CasinoWinScreen: React.FC = () => {
     const {
-        shopRewardSummary,
-        inventory,
+        gameState,
+        dispatch,
         animationSpeed,
         setAnimationSpeed,
-        addComps,
         resetScoreRowPitch,
         playScoreRowSfx,
-        enterGiftShop
-    } = useGameStore();
-    const hasDoubleDownRelic = inventory.some(r => r.id === 'double_down');
-    const hasSurrenderRelic = inventory.some(r => r.id === 'surrender');
+        shopRewardSummary,
+        inventory
+    } = useGameBridge();
+
+    const hasDoubleDownRelic = inventory.some((r: any) => r.id === 'double_down');
+    const hasSurrenderRelic = inventory.some((r: any) => r.id === 'surrender');
+    
+    // Tutorial state from engine
+    const isCompTicketsCompleted = gameState.tutorial.completedStepIds.includes('comp_tickets');
+
     const [showIntro, setShowIntro] = React.useState(false);
     const [showDeals, setShowDeals] = React.useState(false);
     const [showSurrender, setShowSurrender] = React.useState(false);
@@ -49,8 +53,8 @@ export const CasinoWinScreen: React.FC = () => {
         if (transitionedRef.current) return;
         transitionedRef.current = true;
         setAnimationSpeed(1);
-        enterGiftShop();
-    }, [enterGiftShop, setAnimationSpeed]);
+        dispatch({ type: 'enter_gift_shop' });
+    }, [dispatch, setAnimationSpeed]);
 
     const transitionToShop = React.useCallback(() => {
         if (transitionedRef.current || exitTimeoutRef.current !== null) return;
@@ -68,9 +72,9 @@ export const CasinoWinScreen: React.FC = () => {
     React.useEffect(() => {
         if (!sequenceComplete || !usedFastForward) return;
         
-        // Suppress auto-transition if the comp_tickets tutorial is about to show or is showing
-        const manager = TutorialManager.getInstance();
-        if (!manager.isCompleted('comp_tickets')) return;
+        // Suppress auto-transition if the comp_tickets tutorial is about to show
+        // Note: engine checks triggers independently, so checking completed status is a heuristic
+        if (!isCompTicketsCompleted) return;
 
         if (autoTransitionTimeoutRef.current !== null) {
             window.clearTimeout(autoTransitionTimeoutRef.current);
@@ -86,7 +90,7 @@ export const CasinoWinScreen: React.FC = () => {
                 autoTransitionTimeoutRef.current = null;
             }
         };
-    }, [sequenceComplete, transitionToShop, usedFastForward]);
+    }, [sequenceComplete, transitionToShop, usedFastForward, isCompTicketsCompleted]);
 
     React.useEffect(() => {
         let cancelled = false;
@@ -105,12 +109,8 @@ export const CasinoWinScreen: React.FC = () => {
         creditedTotalRef.current = false;
         resetScoreRowPitch();
 
-        const manager = TutorialManager.getInstance();
-        manager.registerActions({
-            proceed_to_gift_shop: async () => {
-                transitionToShop();
-            }
-        });
+        // No need to register 'proceed_to_gift_shop' action manually; 
+        // tutorial UI flow should handle standard interactions.
 
         const rewardSummary = shopRewardSummary;
 
@@ -136,7 +136,8 @@ export const CasinoWinScreen: React.FC = () => {
             if (cancelled || creditedTotalRef.current) return;
             creditedTotalRef.current = true;
             if (rewardSummary && rewardSummary.total > 0) {
-                addComps(rewardSummary.total);
+                // Engine handles actual crediting on shop entry.
+                // We just play the sound for effect.
                 sfxEngine.play('totalWinnings');
             }
         };
@@ -206,7 +207,10 @@ export const CasinoWinScreen: React.FC = () => {
             await wait(TOTAL_HUD_CREDIT_DELAY_MS);
             if (cancelled) return;
             creditTotal();
-            TutorialManager.getInstance().signalEvent('total_comps_calculated');
+            
+            // Signal engine for tutorial trigger
+            dispatch({ type: 'signal_animation_complete', animationId: 'total_comps_calculated' });
+
             await waitScaled(END_HOLD_MS);
             if (cancelled) return;
 
@@ -214,10 +218,9 @@ export const CasinoWinScreen: React.FC = () => {
         };
 
         if (!shopRewardSummary) {
-            finalizeTransitionToShop();
-        } else {
-            void seq();
+            return;
         }
+        void seq();
 
         return () => {
             cancelled = true;
@@ -230,7 +233,7 @@ export const CasinoWinScreen: React.FC = () => {
                 exitTimeoutRef.current = null;
             }
         };
-    }, [addComps, finalizeTransitionToShop, hasDoubleDownRelic, hasSurrenderRelic, playScoreRowSfx, resetScoreRowPitch, setAnimationSpeed, shopRewardSummary]);
+    }, [dispatch, finalizeTransitionToShop, hasDoubleDownRelic, hasSurrenderRelic, playScoreRowSfx, resetScoreRowPitch, setAnimationSpeed, shopRewardSummary, inventory]);
 
     if (!shopRewardSummary) {
         return null;

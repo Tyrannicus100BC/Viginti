@@ -11,6 +11,7 @@ import type { GameEvent } from '../GameEvent';
 import { processAction, getValidActions } from '../engine';
 import { playEventsSync } from '../../store/EventPlayer';
 import type { GameState } from '../GameState';
+import { TUTORIAL_STEPS } from '../tutorial/definitions';
 
 // ─── Helpers ────────────────────────────────────────────
 
@@ -23,7 +24,13 @@ function dispatch(action: PlayerAction) {
 }
 
 function startGame(seed = 42) {
-    dispatch({ type: 'start_game', cityId: 'atlantic_city', gamblerId: 'default', seed });
+    dispatch({ 
+        type: 'start_game', 
+        cityId: 'atlantic_city', 
+        gamblerId: 'default', 
+        seed,
+        globalTutorialsCompleted: TUTORIAL_STEPS.map(s => s.id)
+    });
 }
 
 // ─── Tests ──────────────────────────────────────────────
@@ -54,7 +61,7 @@ describe('GameBridge', () => {
         it('transitions to entering_casino', () => {
             startGame();
             expect(getBridge().phase).toBe('entering_casino');
-            expect(getBridge().round).toBe(1);
+            expect(getBridge().deal).toBe(1);
             expect(getBridge().deck.length).toBeGreaterThan(0);
         });
 
@@ -64,7 +71,7 @@ describe('GameBridge', () => {
             const bridge = getBridge();
 
             expect(bridge.phase).toBe(gs.phase);
-            expect(bridge.round).toBe(gs.round);
+            expect(bridge.deal).toBe(gs.deal);
             expect(bridge.deck.length).toBe(gs.deck.length);
             expect(bridge.targetScore).toBe(gs.targetScore);
             expect(bridge.inventory).toEqual(gs.inventory);
@@ -156,15 +163,15 @@ describe('GameBridge', () => {
             expect(patches.some(p => p.runningSummary?.chips === 10 && p.runningSummary?.mult === 3)).toBe(true);
         });
 
-        it('round scoring complete resets tracking', () => {
+        it('deal scoring complete resets tracking', () => {
             const patches: Record<string, any>[] = [];
             const events: GameEvent[] = [
-                { type: 'round_scoring_complete', totalChips: 20, totalMult: 5, finalScore: 100 },
+                { type: 'deal_scoring_complete', totalChips: 20, totalMult: 5, finalScore: 100 },
             ];
 
             playEventsSync(events, (patch) => patches.push(patch));
 
-            expect(patches.some(p => p.roundSummary?.finalScore === 100)).toBe(true);
+            expect(patches.some(p => p.dealSummary?.finalScore === 100)).toBe(true);
         });
     });
 
@@ -211,9 +218,9 @@ describe('GameBridge', () => {
                 dispatch({ type: 'stand' });
             }
 
-            // Should be in round_over, casino_win, or game_over
+            // Should be in deal_over, casino_payout, or game_over
             const finalPhase = getBridge().phase;
-            expect(['round_over', 'casino_win', 'game_over']).toContain(finalPhase);
+            expect(['deal_over', 'casino_payout', 'game_over']).toContain(finalPhase);
 
             // Event log should have scoring events
             expect(getBridge().eventLog.some(e => e.type === 'dealer_reveal')).toBe(true);
@@ -229,7 +236,7 @@ describe('GameBridge', () => {
 
             // Core fields must match
             expect(bridge.phase).toBe(gs.phase);
-            expect(bridge.round).toBe(gs.round);
+            expect(bridge.deal).toBe(gs.deal);
             expect(bridge.totalScore).toBe(gs.totalScore);
             expect(bridge.comps).toBe(gs.comps);
             expect(bridge.deck.length).toBe(gs.deck.length);
@@ -238,14 +245,14 @@ describe('GameBridge', () => {
     });
 
     describe('gift shop flow', () => {
-        it('can enter shop from casino_win', () => {
+        it('can enter shop from casino_payout', () => {
             startGame(42);
 
-            // Manually set to casino_win
+            // Manually set to casino_payout
             const gs = getBridge().gameState;
             const winState = {
                 ...gs,
-                phase: 'casino_win' as const,
+                phase: 'casino_payout' as const,
                 totalScore: 100,
                 targetScore: 20,
                 comps: 10,

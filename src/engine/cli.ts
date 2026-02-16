@@ -13,6 +13,7 @@
 
 import { processAction, getValidActions } from './engine';
 import type { GameState } from './GameState';
+import { TUTORIAL_STEPS } from './tutorial/definitions';
 import type { PlayerAction } from './PlayerAction';
 import type { GameEvent } from './GameEvent';
 import type { Card, PlayerHand } from '../types';
@@ -68,7 +69,7 @@ export function renderState(state: GameState): string {
 
     lines.push('');
     lines.push(`═══════════════════════════════════════════════`);
-    lines.push(`  ${cityName}  |  Round ${state.round}  |  Phase: ${state.phase}`);
+    lines.push(`  ${cityName}  |  Deal ${state.deal}  |  Phase: ${state.phase}`);
     lines.push(`  Score: ${state.totalScore ?? 0} / ${state.targetScore ?? 0}  |  Comps: ${state.comps ?? 0}  |  Deals: ${state.dealsTaken ?? 0}/${(state.handsRemaining ?? 0) + (state.dealsTaken ?? 0)}`);
     lines.push(`  Deck: ${state.deck?.length ?? 0}  |  Discard: ${state.discardPile?.length ?? 0}`);
     lines.push(`═══════════════════════════════════════════════`);
@@ -149,10 +150,8 @@ export function describeAction(action: PlayerAction, state?: GameState): string 
             return `Place card into Hand ${action.handIndex + 1}`;
         case 'stand':
             return 'Stand (end placement, dealer plays)';
-        case 'next_round':
-            return 'Next round';
-        case 'complete_round_early':
-            return 'Complete round early';
+        case 'complete_deal_early':
+            return 'Complete deal early';
         case 'enter_gift_shop':
             return 'Enter gift shop';
         case 'buy_shop_item': {
@@ -196,8 +195,30 @@ export function describeAction(action: PlayerAction, state?: GameState): string 
 
 export type Strategy = (state: GameState, actions: PlayerAction[]) => PlayerAction;
 
-/** Pick a random valid action */
-export const randomStrategy: Strategy = (_state, actions) => {
+export const randomStrategy: Strategy = (state, actions) => {
+    // Modify 'random' to use simple blackjack dealer logic for the draw/stand decision
+    if (state.phase === 'playing') {
+        const activeHands = state.playerHands.filter(h => !h.isBust && !h.isHeld);
+        
+        // Dealer logic: Hit if any hand is < 16
+        const shouldHit = activeHands.length > 0 && activeHands.some(h => h.blackjackValue < 16);
+
+        if (shouldHit) {
+            // Filter out 'stand' to force drawing/placing if valid
+            const hitActions = actions.filter(a => a.type !== 'stand');
+            if (hitActions.length > 0) {
+                return hitActions[Math.floor(Math.random() * hitActions.length)];
+            }
+        } else {
+            // If all hands >= 16 (or none active), prefer standing
+            const standAction = actions.find(a => a.type === 'stand');
+            // Only force stand if we actually CAN stand (sometimes we must place a drawn card first)
+            if (standAction) {
+                return standAction;
+            }
+        }
+    }
+
     return actions[Math.floor(Math.random() * actions.length)];
 };
 
@@ -229,7 +250,7 @@ export const greedyStrategy: Strategy = (state, actions) => {
     const priority = [
         'select_drawn_card', 'draw',
         'deal', 'buy_shop_item', 'leave_shop', 'enter_gift_shop',
-        'stand', 'next_round', 'complete_round_early',
+        'stand', 'deal', 'complete_deal_early',
     ];
 
     for (const pType of priority) {
@@ -255,9 +276,57 @@ export const greedyStrategy: Strategy = (state, actions) => {
 export interface GameResult {
     won: boolean;
     finalScore: number;
-    round: number;
+    deal: number;
     phase: string;
     actionCount: number;
+}
+
+/** Pretty-print a game event for the CLI logs */
+export function formatEvent(event: GameEvent): string {
+    switch (event.type) {
+        case 'deal_started':
+            return `Deal ${event.deal} started (${event.handsRemaining} hands remaining)`;
+        case 'cards_dealt':
+            return `Dealing initial cards...`;
+        case 'card_drawn':
+            return `Drawn: ${renderCard(event.card)}`;
+        case 'card_placed':
+            return `Placed ${renderCard(event.card)} in Hand ${event.handIndex + 1} (New Total: ${event.newBlackjackValue})`;
+        case 'hand_outcome':
+            return `Hand ${event.handIndex + 1} ${event.outcome.toUpperCase()}! (${event.blackjackValue})`;
+        case 'hand_bust':
+            return `Hand ${event.handIndex + 1} BUST! (${event.blackjackValue})`;
+        case 'relic_activated':
+            return `Relic: ${RELIC_REGISTRY[event.relicId]?.name ?? event.relicId}${event.description ? ` - ${event.description}` : ''}`;
+        case 'dealer_reveal':
+            return `Dealer reveals ${renderCard(event.card)} (Total: ${event.newValue})`;
+        case 'dealer_draw':
+            return `Dealer draws ${renderCard(event.card)} (Total: ${event.newValue})`;
+        case 'dealer_bust':
+            return `Dealer BUST! (${event.value})`;
+        case 'dealer_stand':
+            return `Dealer stands at ${event.value}`;
+        case 'target_reached':
+            return `🎯 TARGET REACHED: ${event.totalScore}/${event.targetScore}`;
+        case 'game_over':
+            return `🏁 GAME OVER: ${event.won ? 'VICTORY' : 'LOSS'} (Final Score: ${event.finalScore})`;
+        case 'phase_changed':
+            return `Phase transitioned to: ${event.to}`;
+        case 'item_purchased':
+            return `Purchased ${RELIC_REGISTRY[event.itemId]?.name ?? event.itemId}`;
+        case 'chip_collection':
+            return `Collected ${event.amount} chips (Total Score: ${event.newTotalScore})`;
+        case 'deal_scoring_complete':
+            return `Deal Scoring: $${event.totalChips} x ${event.totalMult} = ${event.finalScore}`;
+        case 'charge_gained':
+            return `Relic ${RELIC_REGISTRY[event.relicId]?.name ?? event.relicId} gained charge (Total: ${event.newCharges})`;
+        case 'casino_cleared':
+            return `🏛️  CLEARED CASINO ${event.deal} (Score: ${event.score})`;
+        case 'next_casino_setup':
+            return `🏛️  ENTERING CASINO ${event.deal} (Target: ${event.targetScore})`;
+        default:
+            return event.type;
+    }
 }
 
 export function runGame(
@@ -268,13 +337,25 @@ export function runGame(
         seed?: number;
         maxActions?: number;
         verbose?: boolean;
+        logActions?: boolean;
+        globalTutorialsCompleted?: string[];
     } = {}
-): GameResult {
-    const { cityId = 'atlantic_city', gamblerId = 'default', maxActions = 10000, verbose = false } = options;
+) {
+    const { 
+        cityId = 'atlantic_city', 
+        gamblerId = 'default', 
+        maxActions = 10000, 
+        verbose = false,
+        logActions = false,
+        globalTutorialsCompleted = TUTORIAL_STEPS.map(s => s.id)
+    } = options;
     const seed = options.seed ?? Math.floor(Math.random() * 2147483647);
 
     let state: GameState = { phase: 'init' } as GameState;
-    const startResult = processAction(state, { type: 'start_game', cityId, gamblerId, seed });
+    const startResult = processAction(
+        state, 
+        { type: 'start_game', cityId, gamblerId, seed, globalTutorialsCompleted }
+    );
     state = startResult.nextState;
 
     if (verbose) {
@@ -296,13 +377,23 @@ export function runGame(
             const desc = describeAction(action, state);
             process.stdout.write(`\n  → ${desc}\n`);
             process.stdout.write(renderState(state));
+        } else if (logActions) {
+            const desc = describeAction(action, state);
+            process.stdout.write(`  → ${desc}\n`);
+            for (const event of result.events) {
+                // Filter out non-representative events for logs
+                if (event.type === 'animation_complete' || event.type === 'initial_deal_complete' || 
+                    event.type === 'draw_complete' || event.type === 'placement_complete' ||
+                    event.type === 'summary_update') continue;
+                process.stdout.write(`    ⚡ ${formatEvent(event)}\n`);
+            }
         }
     }
 
     return {
         won: state.phase === 'victory',
         finalScore: state.totalScore,
-        round: state.round,
+        deal: state.deal,
         phase: state.phase,
         actionCount,
     };
@@ -316,10 +407,10 @@ export interface BatchStats {
     losses: number;
     winRate: number;
     avgScore: number;
-    avgRound: number;
+    avgDeal: number;
     avgActions: number;
     maxScore: number;
-    maxRound: number;
+    maxDeal: number;
 }
 
 export function runBatch(
@@ -329,19 +420,19 @@ export function runBatch(
 ): BatchStats {
     let wins = 0;
     let totalScore = 0;
-    let totalRound = 0;
+    let totalDeal = 0;
     let totalActions = 0;
     let maxScore = 0;
-    let maxRound = 0;
+    let maxDeal = 0;
 
     for (let i = 0; i < count; i++) {
         const result = runGame(strategy, { cityId, seed: i + 1 });
         if (result.won) wins++;
         totalScore += result.finalScore;
-        totalRound += result.round;
+        totalDeal += result.deal;
         totalActions += result.actionCount;
         maxScore = Math.max(maxScore, result.finalScore);
-        maxRound = Math.max(maxRound, result.round);
+        maxDeal = Math.max(maxDeal, result.deal);
     }
 
     return {
@@ -350,10 +441,10 @@ export function runBatch(
         losses: count - wins,
         winRate: wins / count,
         avgScore: Math.round(totalScore / count),
-        avgRound: +(totalRound / count).toFixed(1),
+        avgDeal: +(totalDeal / count).toFixed(1),
         avgActions: Math.round(totalActions / count),
         maxScore,
-        maxRound,
+        maxDeal,
     };
 }
 
@@ -426,7 +517,7 @@ async function runJsonMode(cityId: string) {
         const output = {
             state: {
                 phase: state.phase,
-                round: state.round,
+                deal: state.deal,
                 totalScore: state.totalScore,
                 targetScore: state.targetScore,
                 comps: state.comps,
@@ -477,7 +568,7 @@ async function runJsonMode(cityId: string) {
     console.log(JSON.stringify({
         result: state.phase === 'victory' ? 'win' : 'loss',
         finalScore: state.totalScore,
-        round: state.round,
+        deal: state.deal,
     }));
 
     rl.close();
@@ -513,24 +604,24 @@ async function main() {
         console.log(`  Losses:     ${stats.losses}`);
         console.log(`  Win Rate:   ${(stats.winRate * 100).toFixed(1)}%`);
         console.log(`  Avg Score:  ${stats.avgScore}`);
-        console.log(`  Avg Round:  ${stats.avgRound}`);
+        console.log(`  Avg Deal:   ${stats.avgDeal}`);
         console.log(`  Avg Actions: ${stats.avgActions}`);
         console.log(`  Max Score:  ${stats.maxScore}`);
-        console.log(`  Max Round:  ${stats.maxRound}`);
+        console.log(`  Max Deal:   ${stats.maxDeal}`);
         console.log('');
         return;
     }
 
-    // Default: single random game with verbose output
+    // Default: single random game with detailed log output
     if (args.includes('--greedy')) {
         console.log('\nPlaying a single game with greedy strategy...\n');
         const result = runGame(greedyStrategy, { cityId, verbose: true });
         console.log(result.won ? '\n  🎉 VICTORY!' : '\n  💀 GAME OVER');
-        console.log(`  Score: ${result.finalScore}  Round: ${result.round}  Actions: ${result.actionCount}\n`);
+        console.log(`  Score: ${result.finalScore}  Deal: ${result.deal}  Actions: ${result.actionCount}\n`);
     } else {
         console.log('\nPlaying a single game with random strategy...\n');
-        const result = runGame(randomStrategy, { cityId, verbose: false });
-        console.log(`  Result: ${result.won ? 'WIN' : 'LOSS'}  Score: ${result.finalScore}  Round: ${result.round}  Actions: ${result.actionCount}\n`);
+        const result = runGame(randomStrategy, { cityId, logActions: true });
+        console.log(`\n  Result: ${result.won ? 'WIN' : 'LOSS'}  Score: ${result.finalScore}  Casino: ${result.deal}  Actions: ${result.actionCount}\n`);
     }
 }
 

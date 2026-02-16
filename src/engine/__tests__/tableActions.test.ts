@@ -4,6 +4,7 @@ import type { GameState } from '../GameState';
 import type { PlayerAction } from '../PlayerAction';
 import type { RelicInstance } from '../../logic/relics/types';
 import { RelicManager } from '../../logic/relics/manager';
+import { TUTORIAL_STEPS } from '../tutorial/definitions';
 
 describe('Table Actions', () => {
     // ─── Helpers ────────────────────────────────────────
@@ -12,7 +13,11 @@ describe('Table Actions', () => {
 
     function startGame(seed = 42): GameState {
         const { nextState } = processAction(createInitialState(), {
-            type: 'start_game', cityId: 'atlantic_city', gamblerId: 'standard', seed,
+            type: 'start_game', 
+            cityId: 'atlantic_city', 
+            gamblerId: 'standard', 
+            seed,
+            globalTutorialsCompleted: TUTORIAL_STEPS.map(s => s.id)
         });
         return nextState;
     }

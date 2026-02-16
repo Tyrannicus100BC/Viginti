@@ -16,6 +16,7 @@ import {
     runBatch,
 } from '../cli';
 import { processAction, getValidActions } from '../engine';
+import { TUTORIAL_STEPS } from '../tutorial/definitions';
 import type { GameState } from '../GameState';
 import type { Card, PlayerHand } from '../../types';
 
@@ -24,7 +25,13 @@ import type { Card, PlayerHand } from '../../types';
 function startGame(seed = 42): GameState {
     const { nextState } = processAction(
         { phase: 'init' } as GameState,
-        { type: 'start_game', cityId: 'atlantic_city', gamblerId: 'default', seed }
+        { 
+            type: 'start_game', 
+            cityId: 'atlantic_city', 
+            gamblerId: 'default', 
+            seed,
+            globalTutorialsCompleted: TUTORIAL_STEPS.map(s => s.id)
+        }
     );
     return nextState;
 }
@@ -137,7 +144,7 @@ describe('CLI Simulator', () => {
             const state = startGame();
             const casinoWin = {
                 ...state,
-                phase: 'casino_win' as const,
+                phase: 'casino_payout' as const,
                 totalScore: 100,
                 targetScore: 20,
                 comps: 10,
@@ -165,7 +172,7 @@ describe('CLI Simulator', () => {
             const state = startGame();
             const casinoWin = {
                 ...state,
-                phase: 'casino_win' as const,
+                phase: 'casino_payout' as const,
                 totalScore: 100,
                 targetScore: 20,
                 comps: 10,
@@ -191,8 +198,7 @@ describe('CLI Simulator', () => {
                 { type: 'select_drawn_card', drawIndex: 0 },
                 { type: 'place_card', handIndex: 0 },
                 { type: 'stand' },
-                { type: 'next_round' },
-                { type: 'complete_round_early' },
+                { type: 'complete_deal_early' },
                 { type: 'enter_gift_shop' },
                 { type: 'buy_shop_item', itemId: 'test' },
                 { type: 'restock_shop' },
@@ -261,7 +267,7 @@ describe('CLI Simulator', () => {
             const result = runGame(randomStrategy, { seed: 42 });
             expect(['game_over', 'victory']).toContain(result.phase);
             expect(result.actionCount).toBeGreaterThan(0);
-            expect(result.round).toBeGreaterThanOrEqual(1);
+            expect(result.deal).toBeGreaterThanOrEqual(1);
         });
 
         it('completes a game with greedy strategy', () => {
@@ -279,7 +285,7 @@ describe('CLI Simulator', () => {
             const r1 = runGame(greedyStrategy, { seed: 123 });
             const r2 = runGame(greedyStrategy, { seed: 123 });
             expect(r1.finalScore).toBe(r2.finalScore);
-            expect(r1.round).toBe(r2.round);
+            expect(r1.deal).toBe(r2.deal);
             expect(r1.actionCount).toBe(r2.actionCount);
         });
     });
@@ -292,7 +298,7 @@ describe('CLI Simulator', () => {
             expect(stats.winRate).toBeGreaterThanOrEqual(0);
             expect(stats.winRate).toBeLessThanOrEqual(1);
             expect(stats.avgScore).toBeGreaterThan(0);
-            expect(stats.avgRound).toBeGreaterThanOrEqual(1);
+            expect(stats.avgDeal).toBeGreaterThanOrEqual(1);
             expect(stats.avgActions).toBeGreaterThan(0);
         });
 
@@ -301,7 +307,7 @@ describe('CLI Simulator', () => {
             const greedyStats = runBatch(20, greedyStrategy);
 
             // Greedy should at least get further on average
-            expect(greedyStats.avgRound).toBeGreaterThanOrEqual(randomStats.avgRound * 0.5);
+            expect(greedyStats.avgDeal).toBeGreaterThanOrEqual(randomStats.avgDeal * 0.5);
         });
     });
 });

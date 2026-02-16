@@ -15,7 +15,7 @@ import {
     executeOnHandBust,
     executeOnScoreRow,
     executeOnHandCompletion,
-    executeOnRoundCompletion,
+    executeOnDealCompletion,
 } from '../relicEngine';
 
 // ─── Helpers ────────────────────────────────────────────
@@ -101,7 +101,7 @@ describe('RelicEngine', () => {
         });
 
         it('does not mutate original inventory', () => {
-            const inv: RelicInstance[] = [{ id: 'spyglass', state: { used_this_round: false } }];
+            const inv: RelicInstance[] = [{ id: 'spyglass', state: { used_this_deal: false } }];
             const originalState = JSON.parse(JSON.stringify(inv[0].state));
 
             // 13 triggers spyglass
@@ -114,7 +114,7 @@ describe('RelicEngine', () => {
         });
 
         it('spyglass emits reveal event at blackjack value 13', () => {
-            const inv: RelicInstance[] = [{ id: 'spyglass', state: { used_this_round: false } }];
+            const inv: RelicInstance[] = [{ id: 'spyglass', state: { used_this_deal: false } }];
             const dealerHidden = makeCard('K', 'spades', { isFaceUp: false });
             const result = executeOnCardPlaced(
                 inv, 0, [makeCard('3'), makeCard('10')], makeCard('10'), 13, [dealerHidden]
@@ -133,7 +133,7 @@ describe('RelicEngine', () => {
         });
 
         it('mulligan emits hand_modified event on bust', () => {
-            const inv: RelicInstance[] = [{ id: 'mulligan', state: { used_this_round: false } }];
+            const inv: RelicInstance[] = [{ id: 'mulligan', state: { used_this_deal: false } }];
             const handCards = [makeCard('K'), makeCard('Q'), makeCard('5')];
             const result = executeOnHandBust(inv, 0, handCards);
 
@@ -146,7 +146,7 @@ describe('RelicEngine', () => {
         });
 
         it('mulligan does not mutate original inventory', () => {
-            const inv: RelicInstance[] = [{ id: 'mulligan', state: { used_this_round: false } }];
+            const inv: RelicInstance[] = [{ id: 'mulligan', state: { used_this_deal: false } }];
             const originalState = JSON.parse(JSON.stringify(inv[0].state));
             executeOnHandBust(inv, 0, [makeCard('K'), makeCard('Q'), makeCard('5')]);
             expect(inv[0].state).toEqual(originalState);
@@ -192,13 +192,13 @@ describe('RelicEngine', () => {
         });
     });
 
-    describe('executeOnRoundCompletion', () => {
+    describe('executeOnDealCompletion', () => {
         it('high_roller adds chips when all 3 hands win', () => {
             const inv: RelicInstance[] = [{ id: 'high_roller', state: { amount: 100 } }];
             const summary = { chips: 50, mult: 2 };
             const hands = [{}, {}, {}] as any[];
 
-            const result = executeOnRoundCompletion(inv, 3, 0, 0, summary, hands);
+            const result = executeOnDealCompletion(inv, 3, 0, 0, summary, hands);
 
             const activations = result.events.filter(e => e.type === 'relic_activated');
             expect(activations.length).toBeGreaterThanOrEqual(1);
@@ -210,7 +210,7 @@ describe('RelicEngine', () => {
             const summary = { chips: 50, mult: 2 };
             const hands = [{}, {}, {}] as any[];
 
-            const result = executeOnRoundCompletion(inv, 2, 1, 0, summary, hands);
+            const result = executeOnDealCompletion(inv, 2, 1, 0, summary, hands);
 
             const activations = result.events.filter(e => e.type === 'relic_activated');
             expect(activations).toHaveLength(0);
@@ -224,7 +224,7 @@ describe('RelicEngine', () => {
             const summary = { chips: 10, mult: 1 };
             const hands = [{}, {}, {}] as any[];
 
-            const result = executeOnRoundCompletion(inv, 1, 2, 0, summary, hands);
+            const result = executeOnDealCompletion(inv, 1, 2, 0, summary, hands);
 
             // Should have activated and added mult
             const activations = result.events.filter(e => e.type === 'relic_activated');
@@ -245,7 +245,7 @@ describe('RelicEngine', () => {
             const summary = { chips: 10, mult: 1 };
             const hands = [{}, {}, {}] as any[];
 
-            const result = executeOnRoundCompletion(inv, 1, 2, 0, summary, hands);
+            const result = executeOnDealCompletion(inv, 1, 2, 0, summary, hands);
 
             // Should request removal since amount → 0
             expect(result.relicsToRemove).toContain('faded_tag');
@@ -258,7 +258,7 @@ describe('RelicEngine', () => {
             const originalState = JSON.parse(JSON.stringify(inv[0].state));
             const summary = { chips: 10, mult: 1 };
 
-            executeOnRoundCompletion(inv, 1, 2, 0, summary, [{}, {}, {}] as any[]);
+            executeOnDealCompletion(inv, 1, 2, 0, summary, [{}, {}, {}] as any[]);
 
             // Original should be unchanged
             expect(inv[0].state).toEqual(originalState);
@@ -269,7 +269,7 @@ describe('RelicEngine', () => {
             const summary = { chips: 50, mult: 3 };
             const hands = [{}, {}, {}] as any[];
 
-            const result = executeOnRoundCompletion(inv, 1, 2, 0, summary, hands);
+            const result = executeOnDealCompletion(inv, 1, 2, 0, summary, hands);
 
             const activations = result.events.filter(e => e.type === 'relic_activated');
             expect(activations.length).toBeGreaterThanOrEqual(1);
@@ -282,7 +282,7 @@ describe('RelicEngine', () => {
             const summary = { chips: 50, mult: 2 };
             const hands = [{}, {}, {}] as any[];
 
-            const result = executeOnRoundCompletion(inv, 1, 2, 0, summary, hands);
+            const result = executeOnDealCompletion(inv, 1, 2, 0, summary, hands);
 
             expect(result.runningSummary!.chips).toBe(70); // 50 + 20
         });
@@ -292,7 +292,7 @@ describe('RelicEngine', () => {
             const summary = { chips: 50, mult: 2 };
             const hands = [{}, {}, {}] as any[];
 
-            const result = executeOnRoundCompletion(inv, 1, 2, 0, summary, hands);
+            const result = executeOnDealCompletion(inv, 1, 2, 0, summary, hands);
 
             expect(result.runningSummary!.mult).toBe(2.5); // 2 + 0.5
         });
@@ -319,24 +319,39 @@ describe('RelicEngine', () => {
                 state = placeResult.nextState;
             }
 
-            // Stand
+            // Stand sequence
+            let allEvents: GameEvent[] = [];
+            
             const standResult = processAction(state, { type: 'stand' });
+            state = standResult.nextState;
+            allEvents.push(...standResult.events);
+
+            const dealerResult = processAction(state, { type: 'resolve_dealer_turn' });
+            state = dealerResult.nextState;
+            allEvents.push(...dealerResult.events);
+
+            const outcomesResult = processAction(state, { type: 'resolve_hand_outcome' });
+            state = outcomesResult.nextState;
+            allEvents.push(...outcomesResult.events);
+
+            const scoreResult = processAction(state, { type: 'score_round' });
+            state = scoreResult.nextState;
+            allEvents.push(...scoreResult.events);
 
             // Should have scoring events
-            const scoringEvents = standResult.events.filter(e =>
+            const scoringEvents = allEvents.filter(e =>
                 e.type === 'scoring_hand_focus' ||
-                e.type === 'scoring_row' ||
+                e.type.startsWith('scoring_row') ||
                 e.type === 'scoring_hand_complete' ||
-                e.type === 'round_scoring_complete'
+                e.type === 'deal_scoring_complete'
             );
             expect(scoringEvents.length).toBeGreaterThan(0);
 
-            // Should have relic state changed events (from round completion hooks)
-            const relicStateEvents = standResult.events.filter(e => e.type === 'relic_state_changed');
+            // Should have relic state changed events (from deal completion hooks)
             // Even Viginti has onEvaluateHandScore (value hook, so no events here),
-            // but round completion will fire for any relics with that hook
+            // but deal completion will fire for any relics with that hook
             // The state should be properly updated
-            expect(standResult.nextState.phase).toBe('round_over');
+            expect(state.phase).toBe('deal_over');
         });
     });
 });

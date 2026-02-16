@@ -7,6 +7,13 @@
     background: rgba(0, 0, 0, 0.95);
     display: flex;
     flex-direction: column;
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    -moz-user-select: text !important;
+    touch-action: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    overscroll-behavior: auto !important;
+    -webkit-user-drag: auto !important;
 }
 
 .logHeader {
@@ -53,12 +60,18 @@
     color: #ccc;
     white-space: pre-wrap;
     word-break: break-all;
+    cursor: text;
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    touch-action: auto !important;
 }
 
 .logEntry {
     margin-bottom: 24px;
     border-bottom: 1px solid #222;
     padding-bottom: 16px;
+    user-select: text;
+    -webkit-user-select: text;
 }
 
 .logEntryHeader {
@@ -66,6 +79,9 @@
     font-weight: 700;
     font-size: 0.85rem;
     margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
 }
 
 .logStateBlock {
@@ -75,18 +91,77 @@
     padding: 10px 12px;
     margin-bottom: 8px;
     overflow-x: auto;
+    max-height: 400px;
+    user-select: text;
+    -webkit-user-select: text;
 }
 
-.logActionLabel {
+.logAction {
     color: #44ff44;
     font-weight: 700;
-    margin-top: 6px;
 }
 
-.logActionsLabel {
-    color: #64b5f6;
-    font-weight: 700;
-    margin-top: 6px;
+.availableAction {
+    color: #aaa;
+    padding-left: 12px;
+    border-left: 2px solid #444;
+    margin-top: 4px;
+}
+
+/* Collapsible */
+
+.details {
+    margin: 8px 0;
+}
+
+.summary {
+    cursor: pointer;
+    user-select: none;
+    outline: none;
+    color: #888;
+    font-weight: 600;
+    transition: color 0.2s;
+    list-style: none; /* Hide default triangle */
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.summary::-webkit-details-marker {
+    display: none;
+}
+
+.summary:hover {
+    color: #fff;
+}
+
+.summary::before {
+    content: '▶';
+    font-size: 0.6rem;
+    transform: rotate(0deg);
+    transition: transform 0.2s;
+}
+
+.details[open] .summary::before {
+    transform: rotate(90deg);
+}
+
+.copyBtn {
+    background: transparent;
+    border: 1px solid #444;
+    color: #888;
+    font-size: 0.6rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    text-transform: uppercase;
+    margin-left: 12px;
+    transition: all 0.2s;
+}
+
+.copyBtn:hover {
+    border-color: #ffd700;
+    color: #ffd700;
 }
 
 /* ─── Debug Load Dialog ─────────────────────────────────── */

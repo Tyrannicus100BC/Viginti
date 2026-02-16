@@ -8,19 +8,26 @@ import type { GameEvent } from '../GameEvent';
 import type { PlayerAction } from '../PlayerAction';
 import type { Card, PlayerHand } from '../../types';
 import type { RelicInstance } from '../../logic/relics/types';
+import { TUTORIAL_STEPS } from '../tutorial/definitions';
 
 // ─── Helpers ────────────────────────────────────────────
 
 function startGame(seed?: number): GameState {
     const { nextState } = processAction(
         { phase: 'init' } as GameState,
-        { type: 'start_game', cityId: 'atlantic_city', gamblerId: 'default', seed: seed ?? 42 }
+        { 
+            type: 'start_game', 
+            cityId: 'atlantic_city', 
+            gamblerId: 'default', 
+            seed: seed ?? 42,
+            globalTutorialsCompleted: TUTORIAL_STEPS.map(s => s.id)
+        }
     );
     return nextState;
 }
 
-/** Play through a full round to reach casino_win / round_over */
-function playToRoundEnd(seed?: number): { state: GameState; events: GameEvent[] } {
+/** Play through a full deal to reach casino_payout / deal_over */
+function playToDealEnd(seed?: number): { state: GameState; events: GameEvent[] } {
     let state = startGame(seed ?? 99);
     let allEvents: GameEvent[] = [];
 
@@ -84,20 +91,20 @@ function playToRoundEnd(seed?: number): { state: GameState; events: GameEvent[] 
     return { state, events: allEvents };
 }
 
-/** Get to casino_win phase by manipulating state */
+/** Get to casino_payout phase by manipulating state */
 function createCasinoWinState(seed?: number): GameState {
     const state = startGame(seed ?? 42);
-    // Manually set to casino_win with a known state
+    // Manually set to casino_payout with a known state
     return {
         ...state,
-        phase: 'casino_win' as const,
+        phase: 'casino_payout' as const,
         totalScore: 100,
         targetScore: 20,
         comps: 10,
     };
 }
 
-/** Get a gift_shop state by entering from casino_win */
+/** Get a gift_shop state by entering from casino_payout */
 function createGiftShopState(seed?: number): GameState {
     const casinoWin = createCasinoWinState(seed);
     const { nextState } = processAction(casinoWin, { type: 'enter_gift_shop' });
@@ -109,7 +116,7 @@ function createGiftShopState(seed?: number): GameState {
 describe('Shop Actions', () => {
 
     describe('enter_gift_shop', () => {
-        it('transitions from casino_win to gift_shop', () => {
+        it('transitions from casino_payout to gift_shop', () => {
             const casinoWin = createCasinoWinState();
             const { nextState, events } = processAction(casinoWin, { type: 'enter_gift_shop' });
 
@@ -144,7 +151,7 @@ describe('Shop Actions', () => {
             expect(nextState.removalCount).toBe(0);
         });
 
-        it('does nothing if phase is not casino_win', () => {
+        it('does nothing if phase is not casino_payout', () => {
             const state = startGame();
             const { nextState } = processAction(state, { type: 'enter_gift_shop' });
 
@@ -268,7 +275,7 @@ describe('Shop Actions', () => {
             const { nextState, events } = processAction(shopState, { type: 'leave_shop' });
 
             expect(nextState.phase).toBe('entering_casino');
-            expect(nextState.round).toBe(shopState.round + 1);
+            expect(nextState.deal).toBe(shopState.deal + 1);
             expect(nextState.dealsTaken).toBe(0);
             expect(nextState.discardPile).toEqual([]);
             expect(nextState.shopItems).toEqual([]);
@@ -293,8 +300,8 @@ describe('Shop Actions', () => {
         });
 
         it('triggers victory when all casinos cleared', () => {
-            // Atlantic City has 4 casinos, so round 4 = last
-            const shopState = { ...createGiftShopState(), round: 4 };
+            // Atlantic City has 4 casinos, so deal 4 = last
+            const shopState = { ...createGiftShopState(), deal: 4 };
             const { nextState, events } = processAction(shopState, { type: 'leave_shop' });
 
             expect(nextState.phase).toBe('victory');
@@ -412,7 +419,7 @@ describe('Shop Actions', () => {
 
         it('includes restock when enabled and affordable', () => {
             // Use las_vegas which doesn't define getGiftShopDisabledButtons (defaults to [])
-            const shopState = { ...createGiftShopState(), selectedCityId: 'las_vegas', round: 1, comps: 100 };
+            const shopState = { ...createGiftShopState(), selectedCityId: 'las_vegas', deal: 1, comps: 100 };
             const actions = getValidActions(shopState);
 
             expect(actions.some(a => a.type === 'restock_shop')).toBe(true);

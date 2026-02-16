@@ -80,9 +80,9 @@ function getRelicSellPrice(relicId: string): number {
 // ─── Enter Gift Shop ───────────────────────────────────
 
 export function processEnterGiftShop(state: GameState): ActionResult {
-    if (state.phase !== 'casino_win') return { nextState: state, events: [] };
+    if (state.phase !== 'casino_payout') return { nextState: state, events: [] };
 
-    const { inventory, tableActionCharges, handsRemaining, comps, selectedCityId, round, rngState } = state;
+    const { inventory, tableActionCharges, handsRemaining, comps, selectedCityId, deal, rngState } = state;
 
     // Calculate Rewards
     const dealsBonus = handsRemaining * 2;
@@ -96,7 +96,7 @@ export function processEnterGiftShop(state: GameState): ActionResult {
 
     // Generate shop items via seeded RNG
     const city = CITY_DEFINITIONS.find(c => c.id === selectedCityId) || CITY_DEFINITIONS[0];
-    const casinoIndex = round - 1;
+    const casinoIndex = deal - 1;
     const rewardConfig = city.getRewards(casinoIndex);
     const shopPriceOverrides = city.getShopPriceOverrides?.(casinoIndex);
 
@@ -106,6 +106,7 @@ export function processEnterGiftShop(state: GameState): ActionResult {
     const rewardSummary = { dealsBonus, doubleDownBonus, surrenderBonus, interestedBonus, winBonus, total: totalBonus };
 
     const events: GameEvent[] = [];
+    events.push({ type: 'phase_changed', from: state.phase, to: 'gift_shop' });
     events.push({ type: 'shop_entered', items: shopItems, rewardSummary });
     events.push({ type: 'comps_earned', amount: totalBonus, newTotal: comps + totalBonus, reason: 'casino_rewards' });
 
@@ -197,11 +198,11 @@ export function processBuyShopItem(state: GameState, itemId: string): ActionResu
 export function processRestockShop(state: GameState): ActionResult {
     if (state.phase !== 'gift_shop') return { nextState: state, events: [] };
 
-    const { comps, giftShopRestockCost, inventory, selectedCityId, round, rngState } = state;
+    const { comps, giftShopRestockCost, inventory, selectedCityId, deal, rngState } = state;
     if (comps < giftShopRestockCost) return { nextState: state, events: [] };
 
     const city = CITY_DEFINITIONS.find(c => c.id === selectedCityId) || CITY_DEFINITIONS[0];
-    const casinoIndex = round - 1;
+    const casinoIndex = deal - 1;
     const rewardConfig = city.getRewards(casinoIndex);
     const shopPriceOverrides = city.getShopPriceOverrides?.(casinoIndex);
 
@@ -256,16 +257,17 @@ export function processSellRelic(state: GameState, relicId: string, index: numbe
 export function processLeaveShop(state: GameState): ActionResult {
     if (state.phase !== 'gift_shop') return { nextState: state, events: [] };
 
-    const { inventory, round, totalScore, selectedCityId, rngState, tableActionCharges, tableActionHeldCards } = state;
+    const { inventory, deal, totalScore, selectedCityId, rngState, tableActionCharges, tableActionHeldCards } = state;
 
     // Get city definition
     const city = CITY_DEFINITIONS.find(c => c.id === selectedCityId) || CITY_DEFINITIONS[0];
-    const newRound = round + 1;
+    const nextDealValue = deal + 1;
 
     // Check victory — if we've cleared all casinos
-    if (round >= city.casinoTargets.length) {
+    if (deal >= city.casinoTargets.length) {
         const events: GameEvent[] = [];
         events.push({ type: 'game_over', won: true, finalScore: totalScore });
+        events.push({ type: 'phase_changed', from: state.phase, to: 'victory' });
         return {
             nextState: { ...state, phase: 'victory' },
             events,
@@ -273,7 +275,7 @@ export function processLeaveShop(state: GameState): ActionResult {
     }
 
     // Calculate next target score
-    const targetIdx = newRound - 1;
+    const targetIdx = nextDealValue - 1;
     const cityTarget = city.casinoTargets[targetIdx] !== undefined
         ? city.casinoTargets[targetIdx]
         : (city.casinoTargets[city.casinoTargets.length - 1] + (targetIdx - city.casinoTargets.length + 1) * 1000);
@@ -316,8 +318,9 @@ export function processLeaveShop(state: GameState): ActionResult {
     const dealsPerCasino = executeValueHook('getDealsPerCasino', 3, { inventory });
 
     const events: GameEvent[] = [];
+    events.push({ type: 'phase_changed', from: state.phase, to: 'entering_casino' });
     events.push({ type: 'shop_left' });
-    events.push({ type: 'next_casino_setup', round: newRound, targetScore: newTargetScore });
+    events.push({ type: 'next_casino_setup', deal: nextDealValue, targetScore: newTargetScore });
 
     const nextState: GameState = {
         ...state,
@@ -325,7 +328,7 @@ export function processLeaveShop(state: GameState): ActionResult {
         playerHands: emptyHands,
         dealer: { cards: [], isRevealed: false, blackjackValue: 0 },
         phase: 'entering_casino',
-        round: newRound,
+        deal: nextDealValue,
         targetScore: newTargetScore,
         totalScore,
         dealsTaken: 0,

@@ -22,7 +22,7 @@ import type {
     GameContext,
     PrioritizedHook,
     HandCompletionContext,
-    RoundCompletionContext,
+    DealCompletionContext,
     HandBustContext,
     CardPlacedContext,
     ScoreRowContext,
@@ -325,10 +325,10 @@ export function executeOnHandCompletion(
 }
 
 /**
- * Execute onRoundCompletion interrupt hooks purely.
+ * Execute onDealCompletion interrupt hooks purely.
  * These trigger after all hands are scored (e.g., high roller, faded tag).
  */
-export function executeOnRoundCompletion(
+export function executeOnDealCompletion(
     inventory: RelicInstance[],
     wins: number,
     losses: number,
@@ -341,7 +341,7 @@ export function executeOnRoundCompletion(
     let summary = { ...runningSummary };
     const relicsToRemove: string[] = [];
 
-    const hooks = collectHooks('onRoundCompletion', inv);
+    const hooks = collectHooks('onDealCompletion', inv);
 
     for (const hook of hooks) {
         const instance = inv[hook.instanceIndex];
@@ -354,7 +354,7 @@ export function executeOnRoundCompletion(
             runningSummary: { ...summary },
             playerHands,
             highlightRelic: async (relicId: string, options?: any) => {
-                events.push({ type: 'relic_activated', relicId, description: `${hook.config.name} round completion` });
+                events.push({ type: 'relic_activated', relicId, description: `${hook.config.name} deal completion` });
                 if (options?.trigger) {
                     await options.trigger();
                 }
@@ -372,7 +372,7 @@ export function executeOnRoundCompletion(
         try {
             hook.handler(ctx, instance.state, hook.config);
         } catch (e) {
-            console.error(`Error in pure onRoundCompletion for relic ${hook.relicId}:`, e);
+            console.error(`Error in pure onDealCompletion for relic ${hook.relicId}:`, e);
         }
 
         events.push({ type: 'relic_state_changed', relicId: hook.relicId, newState: { ...instance.state } });

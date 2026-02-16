@@ -69,7 +69,11 @@ const normalizeState = (state: Partial<PersistedState>): PersistedState => {
     return merged;
 };
 
+const isLocalStorageAvailable = typeof localStorage !== 'undefined' && typeof localStorage.getItem === 'function';
+
 const migrateLegacyState = (): Partial<PersistedState> | null => {
+    if (!isLocalStorageAvailable) return null;
+
     try {
         const hasLegacy =
             localStorage.getItem('viginti_debug') !== null ||
@@ -93,6 +97,11 @@ const migrateLegacyState = (): Partial<PersistedState> | null => {
 const loadState = (): PersistedState => {
     if (cachedState) return cachedState;
 
+    if (!isLocalStorageAvailable) {
+        cachedState = { ...DEFAULT_STATE };
+        return cachedState;
+    }
+
     try {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (raw) {
@@ -112,6 +121,8 @@ const loadState = (): PersistedState => {
 };
 
 const persistState = (state: PersistedState) => {
+    if (!isLocalStorageAvailable) return;
+
     try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch (error) {
