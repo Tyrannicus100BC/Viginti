@@ -6,6 +6,7 @@ import { describe, it, expect } from 'vitest';
 import { processAction } from '../engine';
 import type { GameState } from '../GameState';
 import type { GameEvent } from '../GameEvent';
+import { INITIAL_HAND_COUNT, BASE_DEALS_PER_CASINO } from '../GameState';
 import type { Card, PlayerHand } from '../../types';
 import type { RelicInstance } from '../../logic/relics/types';
 import {
@@ -60,8 +61,8 @@ describe('RelicEngine', () => {
 
         it('applies deft relic to deals per casino', () => {
             const inv: RelicInstance[] = [{ id: 'deft', state: { extra_draws: 1 } }];
-            const result = executeValueHook('getDealsPerCasino', 3, { inventory: inv });
-            expect(result).toBe(4);
+            const result = executeValueHook('getDealsPerCasino', BASE_DEALS_PER_CASINO, { inventory: inv });
+            expect(result).toBe(BASE_DEALS_PER_CASINO + 1);
         });
 
         it('applies photocopier relic to draw count', () => {

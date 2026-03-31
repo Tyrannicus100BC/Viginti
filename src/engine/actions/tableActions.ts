@@ -15,6 +15,8 @@ import type { GameEvent } from '../GameEvent';
 import type { ActionResult } from '../engine';
 import { RelicManager } from '../../logic/relics/manager';
 import { getBlackjackScore } from '../../logic/scoring';
+import { drawCardFromProbabilities } from '../../logic/deck';
+import { SeededRNG } from '../rng';
 
 // ─── Helpers ────────────────────────────────────────────
 
@@ -200,9 +202,8 @@ function processDoubleDown(state: GameState, handIndex: number): ActionResult {
         return { nextState: state, events: [] };
     }
 
-    const deckRef = [...state.deck];
-    const card = deckRef.pop();
-    if (!card) return { nextState: state, events: [] };
+    const rng = new SeededRNG(state.rngState);
+    const card = drawCardFromProbabilities(state.deckProbabilities, rng);
 
     card.isFaceUp = true;
     card.origin = 'double_down';
@@ -246,11 +247,11 @@ function processDoubleDown(state: GameState, handIndex: number): ActionResult {
 
     const nextState: GameState = {
         ...state,
-        deck: deckRef,
         playerHands: updatedHands,
         tableActionCharges: finalCharges,
         interactionMode: 'default',
         activeTableActionId: null,
+        rngState: rng.getState(),
     };
 
     // Auto-stand check
@@ -301,7 +302,6 @@ function processSurrender(state: GameState, handIndex: number): ActionResult {
     const nextState: GameState = {
         ...state,
         playerHands: updatedHands,
-        discardPile: [...state.discardPile, ...cardsToDiscard],
         tableActionCharges: {
             ...state.tableActionCharges,
             [relicId]: Math.max(0, charges - action.chargeCost),
@@ -371,7 +371,6 @@ function processDiscard(
             nextState: {
                 ...state,
                 playerHands: updatedHands,
-                discardPile: [...state.discardPile, removedCard],
                 tableActionCharges: finalCharges,
                 interactionMode: 'default',
                 activeTableActionId: null,
@@ -404,7 +403,6 @@ function processDiscard(
         nextState: {
             ...state,
             dealer: nextDealer,
-            discardPile: [...state.discardPile, targetCard],
             tableActionCharges: {
                 ...state.tableActionCharges,
                 [relicId]: Math.max(0, charges - action.chargeCost),
@@ -427,12 +425,10 @@ function processRedraw(state: GameState, drawIndex: number): ActionResult {
     const targetCard = state.drawnCards[drawIndex];
     if (!targetCard) return { nextState: state, events: [] };
 
-    const deckRef = [...state.deck];
-    const newCard = deckRef.pop() || null;
-    if (newCard) {
-        newCard.isFaceUp = true;
-        newCard.origin = 'deck';
-    }
+    const rng = new SeededRNG(state.rngState);
+    const newCard = drawCardFromProbabilities(state.deckProbabilities, rng);
+    newCard.isFaceUp = true;
+    newCard.origin = 'deck';
 
     const nextDrawn = [...state.drawnCards];
     nextDrawn[drawIndex] = newCard;
@@ -441,16 +437,12 @@ function processRedraw(state: GameState, drawIndex: number): ActionResult {
     events.push({ type: 'charge_spent', relicId, newCharges: Math.max(0, charges - action.chargeCost) });
     events.push({ type: 'table_action_resolved', relicId, description: `Redrew ${targetCard.rank} of ${targetCard.suit}` });
     events.push({ type: 'card_discarded_to_pile', card: targetCard });
-    if (newCard) {
-        events.push({ type: 'card_drawn', card: newCard, drawIndex });
-    }
+    events.push({ type: 'card_drawn', card: newCard, drawIndex });
 
     return {
         nextState: {
             ...state,
-            deck: deckRef,
             drawnCards: nextDrawn,
-            discardPile: [...state.discardPile, targetCard],
             redrawDiscard: { card: targetCard, index: drawIndex },
             tableActionCharges: {
                 ...state.tableActionCharges,
@@ -458,6 +450,7 @@ function processRedraw(state: GameState, drawIndex: number): ActionResult {
             },
             interactionMode: 'default',
             activeTableActionId: null,
+            rngState: rng.getState(),
         },
         events,
     };
@@ -474,12 +467,10 @@ function processHoldPick(state: GameState, drawIndex: number): ActionResult {
     const targetCard = state.drawnCards[drawIndex];
     if (!targetCard) return { nextState: state, events: [] };
 
-    const deckRef = [...state.deck];
-    const newCard = deckRef.pop() || null;
-    if (newCard) {
-        newCard.isFaceUp = true;
-        newCard.origin = 'deck';
-    }
+    const rng = new SeededRNG(state.rngState);
+    const newCard = drawCardFromProbabilities(state.deckProbabilities, rng);
+    newCard.isFaceUp = true;
+    newCard.origin = 'deck';
 
     const nextDrawn = [...state.drawnCards];
     nextDrawn[drawIndex] = newCard;
@@ -495,7 +486,6 @@ function processHoldPick(state: GameState, drawIndex: number): ActionResult {
     return {
         nextState: {
             ...state,
-            deck: deckRef,
             drawnCards: nextDrawn,
             tableActionHeldCards: { ...state.tableActionHeldCards, [relicId]: targetCard },
             tableActionCharges: {
@@ -504,6 +494,7 @@ function processHoldPick(state: GameState, drawIndex: number): ActionResult {
             },
             interactionMode: 'default',
             activeTableActionId: null,
+            rngState: rng.getState(),
         },
         events,
     };

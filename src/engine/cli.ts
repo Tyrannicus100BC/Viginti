@@ -20,6 +20,7 @@ import type { Card, PlayerHand } from '../types';
 import { RELIC_REGISTRY } from '../logic/relics/manager';
 import { CITY_DEFINITIONS } from '../logic/cities/definitions';
 import * as readline from 'readline';
+import { queryOllama } from './llmClient';
 
 // ─── Card & Hand Rendering ─────────────────────────────
 
@@ -71,7 +72,7 @@ export function renderState(state: GameState): string {
     lines.push(`═══════════════════════════════════════════════`);
     lines.push(`  ${cityName}  |  Deal ${state.deal}  |  Phase: ${state.phase}`);
     lines.push(`  Score: ${state.totalScore ?? 0} / ${state.targetScore ?? 0}  |  Comps: ${state.comps ?? 0}  |  Deals: ${state.dealsTaken ?? 0}/${(state.handsRemaining ?? 0) + (state.dealsTaken ?? 0)}`);
-    lines.push(`  Deck: ${state.deck?.length ?? 0}  |  Discard: ${state.discardPile?.length ?? 0}`);
+    // Note: Deck/Discard are calculated from probabilities or currently not tracked as distinct piles in this engine version.
     lines.push(`═══════════════════════════════════════════════`);
 
     // Dealer
@@ -193,7 +194,7 @@ export function describeAction(action: PlayerAction, state?: GameState): string 
 
 // ─── Strategies ─────────────────────────────────────────
 
-export type Strategy = (state: GameState, actions: PlayerAction[]) => PlayerAction;
+export type Strategy = (state: GameState, actions: PlayerAction[]) => PlayerAction | Promise<PlayerAction>;
 
 export const randomStrategy: Strategy = (state, actions) => {
     // Modify 'random' to use simple blackjack dealer logic for the draw/stand decision
@@ -271,6 +272,90 @@ export const greedyStrategy: Strategy = (state, actions) => {
     return actions[0];
 };
 
+export function createLLMStrategy(model: string, profile: string): Strategy {
+    return async (state, actions) => {
+        const systemPrompt = `You are an expert card game player playing "Viginti", a blackjack-inspired rogue-like.
+Your goal is to win by reaching the target score.
+Current Play Profile: ${profile}
+
+You MUST follow the play profile strictly.
+Explain your reasoning briefly, then choose the index of the best action from the list provided.
+Respond ONLY in JSON format: {"reasoning": "...", "actionIndex": 0}`;
+
+        const stateSummary = {
+            phase: state.phase,
+            deal: state.deal,
+            totalScore: state.totalScore,
+            targetScore: state.targetScore,
+            comps: state.comps,
+            dealsTaken: state.dealsTaken,
+            handsRemaining: state.handsRemaining,
+            inventory: state.inventory.map(r => {
+                const config = RELIC_REGISTRY[r.id];
+                return {
+                    name: config?.name ?? r.id,
+                    description: config?.description ?? '',
+                    charges: state.tableActionCharges[r.id]
+                };
+            }),
+            hands: state.playerHands.map(h => ({
+                id: h.id + 1,
+                cards: h.cards.map(renderCard),
+                value: h.blackjackValue,
+                isBust: h.isBust,
+                isHeld: h.isHeld,
+                canPlace: !h.isBust && !h.isHeld && h.blackjackValue < 21
+            })),
+            dealer: {
+                cards: state.dealer.cards.map(renderCard),
+                value: state.dealer.isRevealed ? state.dealer.blackjackValue : (state.dealer.cards[1] ? `Visible: ${renderCard(state.dealer.cards[1])}` : 'Unknown')
+            },
+            drawnCards: state.drawnCards.map(c => c ? renderCard(c) : null),
+            selectedIndex: state.selectedDrawIndex,
+            selectedCard: state.selectedDrawIndex !== null ? renderCard(state.drawnCards[state.selectedDrawIndex]!) : null
+        };
+
+        const actionList = actions.map((a, i) => `${i}: ${describeAction(a, state)}`);
+        
+        const prompt = `### VIGINTI GAME RULES ###
+1. Blackjack rules apply: Aim for 21. Over 21 is a BUST (loss).
+2. You play 3 hands simultaneously.
+3. DRAW takes cards from the deck.
+4. PLACE_CARD puts a drawn card into a hand.
+5. STAND ends your turn; the dealer then plays.
+6. To WIN, your total score from ALL winning hands across ALL deals must reach the target.
+7. Winning hands are scored by (Chips * Multiplier).
+
+### CURRENT GAME STATE ###
+${JSON.stringify(stateSummary, null, 2)}
+
+### AVAILABLE ACTIONS ###
+${actionList.join('\n')}
+
+### TASK ###
+Choose the best action index. 
+- If you have cards drawn, you MUST place them before standing.
+- Do NOT stand on low hand values (e.g., < 16) unless you are forced to or have a specific relic strategy.
+- Your priority is to build hands close to 21 without busting.
+
+Briefly explain your reasoning, then provide the actionIndex.
+Respond ONLY in JSON format: {"reasoning": "...", "actionIndex": 0}`;
+
+        try {
+            const response = await queryOllama(model, prompt, systemPrompt);
+            const idx = response.actionIndex;
+            if (idx >= 0 && idx < actions.length) {
+                return actions[idx];
+            }
+            console.error(`LLM chose invalid index ${idx}, falling back to greedy.`);
+            return greedyStrategy(state, actions);
+        } catch (e) {
+            console.error('LLM Strategy failed, falling back to greedy:', e);
+            return greedyStrategy(state, actions);
+        }
+    };
+}
+
 // ─── Game Runner ────────────────────────────────────────
 
 export interface GameResult {
@@ -329,7 +414,7 @@ export function formatEvent(event: GameEvent): string {
     }
 }
 
-export function runGame(
+export async function runGame(
     strategy: Strategy,
     options: {
         cityId?: string;
@@ -368,7 +453,7 @@ export function runGame(
         const actions = getValidActions(state);
         if (actions.length === 0) break;
 
-        const action = strategy(state, actions);
+        const action = await strategy(state, actions);
         const result = processAction(state, action);
         state = result.nextState;
         actionCount++;
@@ -413,11 +498,11 @@ export interface BatchStats {
     maxDeal: number;
 }
 
-export function runBatch(
+export async function runBatch(
     count: number,
     strategy: Strategy,
     cityId = 'atlantic_city',
-): BatchStats {
+): Promise<BatchStats> {
     let wins = 0;
     let totalScore = 0;
     let totalDeal = 0;
@@ -426,14 +511,21 @@ export function runBatch(
     let maxDeal = 0;
 
     for (let i = 0; i < count; i++) {
-        const result = runGame(strategy, { cityId, seed: i + 1 });
+        const result = await runGame(strategy, { cityId, seed: i + 1 });
         if (result.won) wins++;
         totalScore += result.finalScore;
         totalDeal += result.deal;
         totalActions += result.actionCount;
         maxScore = Math.max(maxScore, result.finalScore);
         maxDeal = Math.max(maxDeal, result.deal);
+
+        // Progress indicator
+        if ((i + 1) % 5 === 0 || i === 0 || i === count - 1) {
+            const winRate = ((wins / (i + 1)) * 100).toFixed(1);
+            process.stdout.write(`  [Batch] Game ${i + 1}/${count} completed. Current Win Rate: ${winRate}%\r`);
+        }
     }
+    process.stdout.write('\n');
 
     return {
         games: count,
@@ -542,7 +634,8 @@ async function runJsonMode(cityId: string) {
                     name: RELIC_REGISTRY[r.id]?.name ?? r.id,
                 })),
                 shopItems: state.phase === 'gift_shop' ? state.shopItems : undefined,
-                deckSize: state.deck.length,
+                deckSize: (state as any).deck?.length ?? 0,
+                discardSize: (state as any).discardPile?.length ?? 0,
             },
             actions: actions.map((a, i) => ({
                 index: i,
@@ -593,11 +686,26 @@ async function main() {
     if (args.includes('--batch') || args.includes('-b')) {
         const batchIdx = args.indexOf('--batch') >= 0 ? args.indexOf('--batch') : args.indexOf('-b');
         const count = parseInt(args[batchIdx + 1], 10) || 100;
-        const stratName = args.includes('--greedy') ? 'greedy' : 'random';
-        const strategy = stratName === 'greedy' ? greedyStrategy : randomStrategy;
+        
+        let strategy: Strategy;
+        let stratName = 'random';
+
+        if (args.includes('--llm')) {
+            const llmIdx = args.indexOf('--llm');
+            const model = args[llmIdx + 1] || 'qwen2.5:14b';
+            const profileIdx = args.indexOf('--profile');
+            const profile = profileIdx >= 0 ? args[profileIdx + 1] : 'Standard optimal play';
+            strategy = createLLMStrategy(model, profile);
+            stratName = `LLM (${model}${profileIdx >= 0 ? `: ${profile}` : ''})`;
+        } else if (args.includes('--greedy')) {
+            strategy = greedyStrategy;
+            stratName = 'greedy';
+        } else {
+            strategy = randomStrategy;
+        }
 
         console.log(`\nRunning ${count} games with ${stratName} strategy on ${cityId}...\n`);
-        const stats = runBatch(count, strategy, cityId);
+        const stats = await runBatch(count, strategy, cityId);
 
         console.log(`  Games:      ${stats.games}`);
         console.log(`  Wins:       ${stats.wins}`);
@@ -612,15 +720,24 @@ async function main() {
         return;
     }
 
-    // Default: single random game with detailed log output
-    if (args.includes('--greedy')) {
+    // Default: single game
+    if (args.includes('--llm')) {
+        const llmIdx = args.indexOf('--llm');
+        const model = args[llmIdx + 1] || 'qwen2.5:14b';
+        const profileIdx = args.indexOf('--profile');
+        const profile = profileIdx >= 0 ? args[profileIdx + 1] : 'Standard optimal play';
+        console.log(`\nPlaying a single game with LLM (${model})...\n`);
+        const result = await runGame(createLLMStrategy(model, profile), { cityId, verbose: true });
+        console.log(result.won ? '\n  🎉 VICTORY!' : '\n  💀 GAME OVER');
+        console.log(`  Score: ${result.finalScore}  Deal: ${result.deal}  Actions: ${result.actionCount}\n`);
+    } else if (args.includes('--greedy')) {
         console.log('\nPlaying a single game with greedy strategy...\n');
-        const result = runGame(greedyStrategy, { cityId, verbose: true });
+        const result = await runGame(greedyStrategy, { cityId, verbose: true });
         console.log(result.won ? '\n  🎉 VICTORY!' : '\n  💀 GAME OVER');
         console.log(`  Score: ${result.finalScore}  Deal: ${result.deal}  Actions: ${result.actionCount}\n`);
     } else {
         console.log('\nPlaying a single game with random strategy...\n');
-        const result = runGame(randomStrategy, { cityId, logActions: true });
+        const result = await runGame(randomStrategy, { cityId, logActions: true });
         console.log(`\n  Result: ${result.won ? 'WIN' : 'LOSS'}  Score: ${result.finalScore}  Casino: ${result.deal}  Actions: ${result.actionCount}\n`);
     }
 }

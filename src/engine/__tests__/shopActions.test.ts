@@ -277,7 +277,6 @@ describe('Shop Actions', () => {
             expect(nextState.phase).toBe('entering_casino');
             expect(nextState.deal).toBe(shopState.deal + 1);
             expect(nextState.dealsTaken).toBe(0);
-            expect(nextState.discardPile).toEqual([]);
             expect(nextState.shopItems).toEqual([]);
             expect(events.some(e => e.type === 'shop_left')).toBe(true);
             expect(events.some(e => e.type === 'next_casino_setup')).toBe(true);
@@ -310,81 +309,68 @@ describe('Shop Actions', () => {
     });
 
     describe('enhance_card', () => {
-        it('applies enhancement to deck card', () => {
+        it('increases special chance', () => {
             const shopState = { ...createGiftShopState(), comps: 100 };
-            const card = shopState.deck[0];
-            if (!card) return;
+            const initialSpecial = shopState.deckProbabilities.specialChance;
 
             const enhancement = { type: 'chip' as const, value: 5 };
             const { nextState, events } = processAction(
                 shopState,
-                { type: 'enhance_card', cardId: card.id, enhancement }
+                { type: 'enhance_card', cardId: 'any', enhancement }
             );
 
-            const enhanced = nextState.deck.find(c => c.id === card.id);
-            expect(enhanced?.specialEffect).toEqual(enhancement);
-            expect(nextState.comps).toBe(99); // Cost of level 0 chip = 1
-            expect(events.some(e => e.type === 'card_enhanced')).toBe(true);
+            expect(nextState.deckProbabilities.specialChance).toBeGreaterThan(initialSpecial);
+            expect(nextState.comps).toBeLessThan(100);
+            expect(events.some(e => e.type === 'relic_activated')).toBe(true);
         });
 
         it('does not enhance if insufficient comps', () => {
             const shopState = { ...createGiftShopState(), comps: 0 };
-            const card = shopState.deck[0];
-            if (!card) return;
-
             const { nextState } = processAction(
                 shopState,
-                { type: 'enhance_card', cardId: card.id, enhancement: { type: 'chip', value: 5 } }
+                { type: 'enhance_card', cardId: 'any', enhancement: { type: 'chip', value: 5 } }
             );
 
-            const unchanged = nextState.deck.find(c => c.id === card.id);
-            expect(unchanged?.specialEffect).toBeUndefined();
+            expect(nextState.deckProbabilities.specialChance).toBe(shopState.deckProbabilities.specialChance);
         });
     });
 
     describe('destroy_card', () => {
-        it('removes card from deck', () => {
+        it('consumes comps and increases removal count', () => {
             const shopState = { ...createGiftShopState(), comps: 100 };
-            const card = shopState.deck[0];
-            if (!card) return;
 
             const { nextState, events } = processAction(
                 shopState,
-                { type: 'destroy_card', cardId: card.id }
+                { type: 'destroy_card', cardId: 'any' }
             );
 
-            expect(nextState.deck.length).toBe(shopState.deck.length - 1);
-            expect(nextState.deck.find(c => c.id === card.id)).toBeUndefined();
             expect(nextState.comps).toBe(98); // Cost = 2 + 0*2 = 2
             expect(nextState.removalCount).toBe(shopState.removalCount + 1);
             expect(events.some(e => e.type === 'card_destroyed')).toBe(true);
         });
-
+ 
         it('escalates removal cost', () => {
             const shopState = { ...createGiftShopState(), comps: 100, removalCount: 2 };
-            const card = shopState.deck[0];
-            if (!card) return;
-
+ 
             const { nextState } = processAction(
                 shopState,
-                { type: 'destroy_card', cardId: card.id }
+                { type: 'destroy_card', cardId: 'any' }
             );
-
+ 
             // Cost = 2 + 2*2 = 6
             expect(nextState.comps).toBe(94);
         });
-
+ 
         it('does not destroy if insufficient comps', () => {
             const shopState = { ...createGiftShopState(), comps: 0 };
-            const card = shopState.deck[0];
-            if (!card) return;
-
+ 
             const { nextState } = processAction(
                 shopState,
-                { type: 'destroy_card', cardId: card.id }
+                { type: 'destroy_card', cardId: 'any' }
             );
-
-            expect(nextState.deck.length).toBe(shopState.deck.length);
+ 
+            expect(nextState.comps).toBe(0);
+            expect(nextState.removalCount).toBe(0);
         });
     });
 

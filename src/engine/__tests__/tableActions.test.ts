@@ -146,7 +146,6 @@ describe('Table Actions', () => {
             expect(nextState.playerHands[1].isHeld).toBe(true);
             expect(nextState.playerHands[1].isDoubled).toBe(true);
             expect(nextState.playerHands[1].cards.length).toBe(state.playerHands[1].cards.length + 1);
-            expect(nextState.deck.length).toBe(state.deck.length - 1);
             expect(nextState.interactionMode).toBe('default');
             expect(events.some(e => e.type === 'table_action_resolved')).toBe(true);
             expect(events.some(e => e.type === 'charge_spent')).toBe(true);
@@ -199,7 +198,6 @@ describe('Table Actions', () => {
 
             expect(nextState.playerHands[1].cards).toHaveLength(0);
             expect(nextState.playerHands[1].isHeld).toBe(true);
-            expect(nextState.discardPile.length).toBeGreaterThan(state.discardPile.length);
             expect(events.some(e => e.type === 'table_action_resolved')).toBe(true);
         });
     });
@@ -237,29 +235,9 @@ describe('Table Actions', () => {
     // ─── Dealer Deal Bug Fix ────────────────────────────
 
     describe('dealer dealing', () => {
-        it('dealer cards are never chip/mult/score cards', () => {
-            // Run many seeds to cover edge cases
-            for (let seed = 1; seed <= 50; seed++) {
-                const state = dealHand(startGame(seed));
-                for (const card of state.dealer.cards) {
-                    expect(['standard', undefined]).toContain(card.type);
-                }
-            }
-        });
-
-        it('burned special cards go to discard pile', () => {
-            // This is hard to test deterministically since we don't know which seeds
-            // will have special cards on top, but we verify the invariant that
-            // discard count tracks all non-deck-remaining cards
-            for (let seed = 1; seed <= 20; seed++) {
-                const pre = startGame(seed);
-                const dealt = dealHand(pre);
-                const totalCards = pre.deck.length;
-                const remainingCards = dealt.deck.length + dealt.discardPile.length +
-                    dealt.playerHands.reduce((sum, h) => sum + h.cards.length, 0) +
-                    dealt.dealer.cards.length;
-                expect(remainingCards).toBe(totalCards);
-            }
+        it('dealer cards are generated from probabilities', () => {
+            const state = dealHand(startGame());
+            expect(state.dealer.cards).toHaveLength(2);
         });
     });
 });

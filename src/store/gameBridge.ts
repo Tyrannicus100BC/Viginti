@@ -173,7 +173,6 @@ interface GameBridgeState extends UIState {
     // These mirror the old gameStore fields for backward compat
 
     readonly phase: GamePhase;
-    readonly deck: readonly Card[];
     readonly dealer: Readonly<DealerHand>;
     readonly playerHands: readonly PlayerHand[];
     readonly drawnCards: readonly (Card | null)[];
@@ -195,8 +194,8 @@ interface GameBridgeState extends UIState {
     readonly runningSummary: { readonly chips: number; readonly mult: number } | null;
     readonly selectedCityId: string | null;
     readonly activeTableActionId: string | null;
+    readonly deckProbabilities: DeckProbabilities;
     readonly removalCount: number;
-    readonly discardPile: readonly Card[];
     readonly redrawDiscard: { readonly card: Card; readonly index: number } | null;
 }
 
@@ -239,7 +238,6 @@ export const useGameBridge = create<GameBridgeState>((set, get) => {
     /** Extract game state fields to flat store shape */
     const flattenGameState = (gs: GameState) => ({
         phase: gs.phase,
-        deck: gs.deck,
         dealer: gs.dealer,
         playerHands: gs.playerHands,
         drawnCards: gs.drawnCards,
@@ -261,8 +259,8 @@ export const useGameBridge = create<GameBridgeState>((set, get) => {
         runningSummary: gs.runningSummary,
         selectedCityId: gs.selectedCityId,
         activeTableActionId: gs.activeTableActionId,
+        deckProbabilities: gs.deckProbabilities,
         removalCount: gs.removalCount,
-        discardPile: gs.discardPile,
         redrawDiscard: gs.redrawDiscard,
     });
 

@@ -84,6 +84,10 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
             runningSummary: null,
             dealSummary: null,
             dealerVisible: true,
+            visibleScoringRowIndices: {},
+            scoringRowValues: {},
+            scoringCriteria: {},
+            activeHighlightIds: null,
             // Reset state for new deal
             playerHands: Array.from({ length: 3 }, (_, i) => ({
                 id: i,
@@ -385,7 +389,7 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
                     ...prev,
                     [handIndex]: {
                         ...handRows,
-                        [nextIdx]: { count: 0 }
+                        [nextIdx]: { count: criterion.count ?? 0 }
                     }
                 };
             },
@@ -448,7 +452,7 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
                             ...hRows,
                             [rowIdx]: { 
                                 ...hRows[rowIdx],
-                                multiplier: event.multiplier,
+                                mult: event.multiplier,
                             }
                         }
                     };
@@ -463,11 +467,17 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
 
     async scoring_hand_complete(event, config) {
         if (event.type !== 'scoring_hand_complete') return;
+        
+        // Wait while hand is still focused so user can see the final state
+        await wait(500, config);
+
         config.updateUI({ 
             activeHighlightIds: null,
             scoringHandIndex: -1
         });
-        await wait(300, config);
+
+        // Wait after shrinking before moving to the next hand
+        await wait(500, config);
     },
 
     async summary_update(event, config) {
@@ -525,6 +535,10 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
                 dealerMessage: null,
                 scoringHandIndex: -1,
                 isCollectingChips: false,
+                visibleScoringRowIndices: {},
+                scoringRowValues: {},
+                scoringCriteria: {},
+                activeHighlightIds: null,
             });
         }
         

@@ -1,7 +1,8 @@
 
 import type { Card } from '../../types';
 import type { GamblerDefinition } from './types';
-import { createStandardDeck, createCard } from '../deck';
+import { createCard } from '../deck';
+import type { DeckProbabilities } from '../engine/GameState';
 import { RelicManager } from '../relics/manager'; // We need this to get default properties
 import type { RelicInstance } from '../relics/types';
 
@@ -17,13 +18,20 @@ const getRelicInstance = (id: string, properties: Record<string, any> = {}): Rel
 
 const getRandomItem = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
 
+const BASE_PROBS: DeckProbabilities = {
+    suits: { hearts: 25, diamonds: 25, clubs: 25, spades: 25 },
+    ranks: { ace: 10, face: 30, upper: 30, lower: 30 },
+    specialChance: 0,
+    specialWeights: []
+};
+
 export const GAMBLER_DEFINITIONS: GamblerDefinition[] = [
     {
         id: 'newbie',
         name: 'The Newbie',
-        description: 'Fresh off the bus. Starts with a standard 52-card deck and only the Viginti angle.',
+        description: 'Fresh off the bus. Starts with standard distribution and only the Viginti angle.',
         unlockCondition: { type: 'always' },
-        getInitialDeck: () => createStandardDeck(),
+        getInitialProbabilities: () => ({ ...BASE_PROBS }),
         getInitialRelics: () => [
             getRelicInstance('viginti')
         ]
@@ -31,9 +39,9 @@ export const GAMBLER_DEFINITIONS: GamblerDefinition[] = [
     {
         id: 'default',
         name: 'The Tourist',
-        description: 'Just here for a good time. Starts with a standard 52-card deck and run-focused scoring angles.',
+        description: 'Just here for a good time. Starts with standard distribution and run-focused scoring angles.',
         unlockCondition: { type: 'beat_city', cityId: 'atlantic_city' },
-        getInitialDeck: () => createStandardDeck(),
+        getInitialProbabilities: () => ({ ...BASE_PROBS }),
         getInitialRelics: () => [
             getRelicInstance('viginti'),
             getRelicInstance('rank_run_chips'),
@@ -46,11 +54,10 @@ export const GAMBLER_DEFINITIONS: GamblerDefinition[] = [
         name: 'The Mathematician',
         description: 'Calculated and precise. Removes all face cards for a number-heavy deck, starting with powerful Straight synergies.',
         unlockCondition: { type: 'beat_city', cityId: 'las_vegas' },
-        getInitialDeck: () => {
-            const deck = createStandardDeck();
-            // Remove Face Cards (J, Q, K)
-            return deck.filter(c => !['J', 'Q', 'K'].includes(c.rank));
-        },
+        getInitialProbabilities: () => ({
+            ...BASE_PROBS,
+            ranks: { ace: 15, face: 5, upper: 40, lower: 40 } // Reduced face, boosted others
+        }),
         getInitialRelics: () => [
             getRelicInstance('straight_pair_chips'),
             getRelicInstance('straight_pair_mult'),
@@ -61,54 +68,18 @@ export const GAMBLER_DEFINITIONS: GamblerDefinition[] = [
     {
         id: 'wild',
         name: 'The Wildcard',
-        description: 'Chaos incarnate. A distorted deck heavy on high cards in black suits and low red cards. Starts with 8 random Special Cards.',
+        description: 'Chaos incarnate. A distorted deck heavy on high cards. Starts with a small chance for Special Cards.',
         unlockCondition: { type: 'beat_city', cityId: 'las_vegas' },
-        getInitialDeck: () => {
-            const deck: Card[] = [];
-
-            // Spades & Clubs: 3x A, K, Q, J. No numbered (2-10).
-            (['spades', 'clubs'] as const).forEach(suit => {
-                const targets = ['A', 'K', 'Q', 'J'] as const;
-                targets.forEach(rank => {
-                    for (let i = 0; i < 3; i++) {
-                        deck.push(createCard(suit, rank));
-                    }
-                });
-            });
-
-            // Hearts & Diamonds: No face cards (keep A, 2-10).
-            (['hearts', 'diamonds'] as const).forEach(suit => {
-                const ranks = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10'] as const;
-                ranks.forEach(rank => {
-                    deck.push(createCard(suit, rank));
-                });
-            });
-
-            // Apply 8 random Special Effects directly to cards in the deck
-            const specialTypes = ['chip', 'mult', 'score'] as const;
-
-            // Randomly select 8 unique indices
-            const indices = Array.from({ length: deck.length }, (_, i) => i);
-            for (let i = indices.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [indices[i], indices[j]] = [indices[j], indices[i]];
-            }
-
-            for (let i = 0; i < 8; i++) {
-                if (i >= deck.length) break;
-                const targetIndex = indices[i];
-
-                const type = getRandomItem([...specialTypes]);
-                const value = Math.floor(Math.random() * 5) + 1;
-
-                deck[targetIndex].specialEffect = {
-                    type,
-                    value
-                };
-            }
-
-            return deck;
-        },
+        getInitialProbabilities: () => ({
+            suits: { hearts: 20, diamonds: 20, clubs: 30, spades: 30 },
+            ranks: { ace: 20, face: 40, upper: 20, lower: 20 },
+            specialChance: 0,
+            specialWeights: [
+                { type: 'chip', value: 5, chance: 0.04 },
+                { type: 'mult', value: 1, chance: 0.03 },
+                { type: 'score', value: 5, chance: 0.03 }
+            ]
+        }),
         getInitialRelics: () => {
             const allRelics = RelicManager.getAllRelics();
             const flushFilter = allRelics
@@ -125,9 +96,12 @@ export const GAMBLER_DEFINITIONS: GamblerDefinition[] = [
     {
         id: 'maniac',
         name: 'The Maniac',
-        description: 'Driven by high stakes and royalty. Starts with action-oriented charms and a broad range of scoring potential.',
+        description: 'Driven by high stakes and royalty. Starts with action-oriented charms and high Face Card probability.',
         unlockCondition: { type: 'beat_city', cityId: 'atlantic_city' },
-        getInitialDeck: () => createStandardDeck(),
+        getInitialProbabilities: () => ({
+            ...BASE_PROBS,
+            ranks: { ace: 10, face: 50, upper: 20, lower: 20 }
+        }),
         getInitialRelics: () => {
             const fixed = [
                 getRelicInstance('double_down'),

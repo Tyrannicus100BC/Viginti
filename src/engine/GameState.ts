@@ -21,6 +21,35 @@ export type GamePhase =
     | 'game_over'
     | 'victory';
 
+// ─── Deck Probabilities ──────────────────────────────────
+
+export interface SuitWeights {
+    readonly hearts: number;
+    readonly diamonds: number;
+    readonly clubs: number;
+    readonly spades: number;
+}
+
+export interface RankWeights {
+    readonly ace: number;
+    readonly face: number;
+    readonly upper: number;
+    readonly lower: number;
+}
+
+export interface SpecialWeight {
+    readonly type: 'chip' | 'mult' | 'score';
+    readonly value: number;
+    readonly chance: number; // 0-1 probability
+}
+
+export interface DeckProbabilities {
+    readonly suits: SuitWeights;
+    readonly ranks: RankWeights;
+    readonly specialChance: number; // legacy/base total chance
+    readonly specialWeights: readonly SpecialWeight[];
+}
+
 // ─── Modifiers ──────────────────────────────────────────
 
 export interface GameModifiers {
@@ -87,8 +116,7 @@ export interface GameState {
 
     // === Table State ===
     readonly phase: GamePhase;
-    readonly deck: readonly Card[];
-    readonly discardPile: readonly Card[];
+    readonly deckProbabilities: DeckProbabilities;
     readonly dealer: Readonly<DealerHand>;
     readonly playerHands: readonly PlayerHand[];
     readonly drawnCards: readonly (Card | null)[];
@@ -126,4 +154,4 @@ export interface GameState {
 // ─── Constants ──────────────────────────────────────────
 
 export const INITIAL_HAND_COUNT = 3;
-export const BASE_DEALS_PER_CASINO = 3;
+export const BASE_DEALS_PER_CASINO = 4;

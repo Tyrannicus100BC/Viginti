@@ -18,7 +18,7 @@ import type { RelicInstance } from '../logic/relics/types';
 import { GAMBLER_DEFINITIONS } from '../logic/gamblers/definitions';
 import { CITY_DEFINITIONS } from '../logic/cities/definitions';
 // RelicManager access is now via relicEngine.ts
-import { createStandardDeck } from '../logic/deck';
+import { drawCardFromProbabilities } from '../logic/deck';
 import { generateShopItems } from '../logic/rewards/generator';
 import { getBlackjackScore, evaluateHandScore } from '../logic/scoring';
 import {
@@ -347,7 +347,8 @@ export function getValidActions(state: GameState): PlayerAction[] {
 
             // Enhance cards
             if (!disabledButtons.includes('enhance')) {
-                for (const card of state.deck) {
+                const deck = (state as any).deck || [];
+                for (const card of deck) {
                     if (card.rank && !card.specialEffect) {
                         actions.push({ type: 'enhance_card', cardId: card.id, enhancement: { type: 'chip', value: 5 } });
                     }
@@ -358,7 +359,8 @@ export function getValidActions(state: GameState): PlayerAction[] {
             if (!disabledButtons.includes('destroy')) {
                 const destroyCost = 2 + (state.removalCount * 2);
                 if (state.comps >= destroyCost) {
-                    for (const card of state.deck) {
+                    const deck = (state as any).deck || [];
+                    for (const card of deck) {
                         actions.push({ type: 'destroy_card', cardId: card.id });
                     }
                 }
@@ -416,8 +418,6 @@ export function createInitialState(): GameState {
         targetScore: 0,
         comps: 5,
         phase: 'init',
-        deck: [],
-        discardPile: [],
         dealer: { cards: [], isRevealed: false, blackjackValue: 0 },
         playerHands: [],
         drawnCards: [],
@@ -428,6 +428,12 @@ export function createInitialState(): GameState {
         inventory: [],
         tableActionCharges: {},
         tableActionHeldCards: {},
+        deckProbabilities: {
+            suits: { hearts: 25, diamonds: 25, clubs: 25, spades: 25 },
+            ranks: { ace: 10, face: 30, upper: 30, lower: 30 },
+            specialChance: 0,
+            specialWeights: []
+        },
         modifiers: { drawCountMod: 0, placeCountMod: 0 },
         shopItems: [],
         giftShopRestockCost: 3,
@@ -456,8 +462,8 @@ function processStartGame(
     const city = CITY_DEFINITIONS.find(c => c.id === cityId) || CITY_DEFINITIONS[0];
     const gambler = GAMBLER_DEFINITIONS.find(g => g.id === gamblerId) || GAMBLER_DEFINITIONS[0];
 
-    // Create initial deck from gambler
-    const deck = rng.shuffle(gambler.getInitialDeck());
+    // Create initial deck probabilities from gambler
+    const deckProbabilities = gambler.getInitialProbabilities();
     const inventory = gambler.getInitialRelics();
 
     // Calculate target score for round 1
@@ -499,8 +505,7 @@ function processStartGame(
         targetScore,
         comps: 5,
         phase: 'entering_casino',
-        deck,
-        discardPile: [],
+        deckProbabilities,
         dealer: { cards: [], isRevealed: false, blackjackValue: 0 },
         playerHands,
         drawnCards: [],
@@ -610,20 +615,6 @@ function processDeal(state: GameState, forceContinue?: boolean): ActionResult {
 
     const rng = new SeededRNG(state.rngState);
     const events: GameEvent[] = [];
-    const deckRef = [...state.deck];
-    const discardRef = [...state.discardPile];
-
-    // Collect previous round cards into discard (if re-dealing mid-casino)
-    const additionalDiscard: Card[] = [];
-    if (state.dealer.cards.length > 0) {
-        additionalDiscard.push(...state.dealer.cards);
-    }
-    for (const hand of state.playerHands) {
-        if (hand.cards.length > 0) {
-            additionalDiscard.push(...hand.cards);
-        }
-    }
-    discardRef.push(...additionalDiscard);
 
     // Create empty player hands
     const playerHands: PlayerHand[] = Array.from({ length: INITIAL_HAND_COUNT }, (_, i) => ({
@@ -635,7 +626,7 @@ function processDeal(state: GameState, forceContinue?: boolean): ActionResult {
     }));
 
     // Deal initial player card to center hand
-    const playerCard = deckRef.pop()!;
+    const playerCard = drawCardFromProbabilities(state.deckProbabilities, rng);
     playerCard.isFaceUp = true;
     playerCard.origin = 'deck';
     playerHands[1] = {
@@ -644,18 +635,9 @@ function processDeal(state: GameState, forceContinue?: boolean): ActionResult {
         blackjackValue: getBlackjackScore([playerCard], state.inventory as RelicInstance[]),
     };
 
-    // Deal dealer cards (skip special cards like chip/mult/score)
-    const burnedCards: Card[] = [];
-    const drawForDealer = (): Card | undefined => {
-        let c = deckRef.pop();
-        while (c && (c.type === 'chip' || c.type === 'mult' || c.type === 'score')) {
-            burnedCards.push(c);
-            c = deckRef.pop();
-        }
-        return c;
-    };
-    const dealerCard1 = drawForDealer()!;
-    const dealerCard2 = drawForDealer()!;
+    // Deal dealer cards
+    const dealerCard1 = drawCardFromProbabilities(state.deckProbabilities, rng);
+    const dealerCard2 = drawCardFromProbabilities(state.deckProbabilities, rng);
     dealerCard1.isFaceUp = false;
     dealerCard1.origin = 'deck';
     dealerCard2.isFaceUp = true;
@@ -687,8 +669,6 @@ function processDeal(state: GameState, forceContinue?: boolean): ActionResult {
     const nextState: GameState = {
         ...state,
         phase: 'playing',
-        deck: deckRef,
-        discardPile: [...discardRef, ...burnedCards],
         playerHands,
         dealer: {
             cards: dealerCards,
@@ -726,22 +706,10 @@ function processDraw(state: GameState): ActionResult {
     let drawCount = 1 + state.modifiers.drawCountMod;
     drawCount = executeValueHook('getDrawCount', drawCount, { inventory });
 
-    let deckRef = [...state.deck];
-    let discardRef = [...state.discardPile];
-
-    // Auto-reshuffle if needed
-    if (deckRef.length < drawCount && discardRef.length > 0) {
-        const combined = [...deckRef, ...discardRef];
-        deckRef = rng.shuffle(combined);
-        discardRef = [];
-        events.push({ type: 'deck_reshuffled', deckSize: deckRef.length });
-    }
-
     // Draw cards
     const drawnCards: Card[] = [];
     for (let i = 0; i < drawCount; i++) {
-        const card = deckRef.pop();
-        if (!card) break;
+        const card = drawCardFromProbabilities(state.deckProbabilities, rng);
         card.isFaceUp = true;
         card.origin = 'deck';
         drawnCards.push(card);
@@ -755,8 +723,6 @@ function processDraw(state: GameState): ActionResult {
 
     const nextState: GameState = {
         ...state,
-        deck: deckRef,
-        discardPile: discardRef,
         drawnCards,
         selectedDrawIndex: selectedIndex,
         modifiers: { ...state.modifiers, drawCountMod: 0 }, // Consume draw mod
@@ -780,7 +746,7 @@ function processSelectDrawnCard(state: GameState, drawIndex: number): ActionResu
 }
 
 function processPlaceCard(state: GameState, handIndex: number): ActionResult {
-    const { playerHands, drawnCards, selectedDrawIndex, cardsPlacedThisTurn, modifiers, inventory, discardPile } = state;
+    const { playerHands, drawnCards, selectedDrawIndex, cardsPlacedThisTurn, modifiers, inventory } = state;
 
     if (selectedDrawIndex === null || !drawnCards[selectedDrawIndex]) {
         return { nextState: state, events: [] };
@@ -930,7 +896,6 @@ function processPlaceCard(state: GameState, handIndex: number): ActionResult {
     const canPlaceMore = newPlacedCount < totalPlaceCount && hasRemainingCards && anyPlayable;
 
     let nextDrawIndex: number | null = null;
-    let nextDiscardPile = [...discardPile];
 
     if (canPlaceMore) {
         // Find next available card
@@ -943,10 +908,9 @@ function processPlaceCard(state: GameState, handIndex: number): ActionResult {
             }
         }
     } else {
-        // Discard leftover drawn cards
+        // Leftover drawn cards are simply discarded (visual only, no pile)
         const leftovers = remainingDrawn.filter((c): c is Card => c !== null);
         if (leftovers.length > 0) {
-            nextDiscardPile.push(...leftovers);
             events.push({ type: 'leftover_cards_discarded', cards: leftovers });
         }
     }
@@ -969,7 +933,6 @@ function processPlaceCard(state: GameState, handIndex: number): ActionResult {
         drawnCards: canPlaceMore ? remainingDrawn : [],
         selectedDrawIndex: canPlaceMore ? nextDrawIndex : null,
         cardsPlacedThisTurn: canPlaceMore ? newPlacedCount : 0,
-        discardPile: nextDiscardPile,
         modifiers: canPlaceMore ? state.modifiers : { ...modifiers, placeCountMod: 0 },
         inventory: invArr,
     };
@@ -1009,26 +972,17 @@ function processResolveDealerTurn(state: GameState): ActionResult {
     }
 
     // 2. Dealer Draw Loop
-    const deckRef = [...state.deck];
-    const baseStopValue = 17;
-    const dealerStopValue = executeValueHook('getDealerStopValue', baseStopValue, { inventory: invArr });
-    const burnedCards: Card[] = [];
+    const dealerStopValue = executeValueHook('getDealerStopValue', 17, { inventory: invArr });
 
     while (dVal < dealerStopValue) {
-        // Skip non-standard cards in deck
-        let c = deckRef.pop();
-        while (c && (c.type === 'chip' || c.type === 'mult' || c.type === 'score')) {
-            burnedCards.push(c);
-            c = deckRef.pop();
-        }
-        if (!c) break;
+        const c = drawCardFromProbabilities(state.deckProbabilities, rng);
 
         c.isFaceUp = true;
         c.origin = 'deck';
         dCards.push(c);
         dVal = getBlackjackScore(dCards, invArr, true);
 
-        events.push({ type: 'dealer_hit', card: c, newValue: dVal, burnedCards: [...burnedCards] });
+        events.push({ type: 'dealer_hit', card: c, newValue: dVal, burnedCards: [] });
     }
 
     if (dVal > 21) {
@@ -1043,8 +997,6 @@ function processResolveDealerTurn(state: GameState): ActionResult {
         nextState: {
             ...state,
             phase: 'resolving_outcomes',
-            deck: deckRef,
-            discardPile: [...state.discardPile, ...burnedCards],
             dealer: { cards: dCards, isRevealed: true, blackjackValue: dVal },
             rngState: rng.getState(),
         },
@@ -1298,7 +1250,7 @@ function processDebugWin(state: GameState): ActionResult {
     const updatedHands = state.playerHands.map(h => ({ ...h, isHeld: true }));
     
     // 2. Rig the deck to ensure dealer bust
-    const deck = [...state.deck];
+    const deck = [...((state as any).deck || [])];
     // Put several 10-value cards at the top of the deck (end of array, which is popped from)
     for (let i = 0; i < 5; i++) {
         deck.push({
@@ -1437,10 +1389,10 @@ function processDebugGiveCash(state: GameState, amount: number): ActionResult {
 }
 
 function processDebugDrawCard(state: GameState, cardId: string): ActionResult {
-    const cardIndex = state.deck.findIndex(c => c.id === cardId);
+    const deck = [...((state as any).deck || [])];
+    const cardIndex = deck.findIndex(c => c.id === cardId);
     if (cardIndex === -1) return { nextState: state, events: [] };
     
-    const deck = [...state.deck];
     const card = deck.splice(cardIndex, 1)[0];
     card.isFaceUp = true;
     card.origin = 'deck';

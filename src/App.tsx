@@ -128,7 +128,6 @@ export default function App() {
     const {
         dealer,
         playerHands,
-        deck,
         phase,
         deal,
         nextDeal,
@@ -151,7 +150,6 @@ export default function App() {
         redrawDiscard,
         isRedrawAnimating,
         selectDrawnCard,
-        discardPile,
         dealsTaken,
 
         startGame,
@@ -215,7 +213,8 @@ export default function App() {
         getMaxAngles,
         isSellingMode,
         toggleSellingMode,
-        removalCount
+        removalCount,
+        deckProbabilities
     } = useGameStore();
 
     const { scale, viewportWidth, viewportHeight } = useLayout();
@@ -1471,8 +1470,7 @@ export default function App() {
         ...dealer.cards.filter((_, idx) => idx !== 0 || dealer.isRevealed),
         ...playerHands.flatMap(h => h.cards),
         ...drawnCards.filter((c): c is Card => c !== null),
-        ...Object.values(tableActionHeldCards).filter((card): card is Card => !!card),
-        ...discardPile
+        ...Object.values(tableActionHeldCards).filter((card): card is Card => !!card)
     ];
 
     useEffect(() => {
@@ -2567,7 +2565,7 @@ export default function App() {
 
             {showDeck && (
                 <DeckView
-                    remainingDeck={[...deck, ...((!dealer.isRevealed && dealer.cards.length > 0) ? [dealer.cards[0]] : [])]}
+                    probabilities={deckProbabilities}
                     activeCards={activeCards}
                     removalCount={removalCount}
                     comps={comps}

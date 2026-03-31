@@ -38,7 +38,7 @@ describe('Game Engine', () => {
         it('returns a valid init-phase state', () => {
             const state = createInitialState();
             expect(state.phase).toBe('init');
-            expect(state.deck).toHaveLength(0);
+            expect(state.deckProbabilities).toBeDefined();
             expect(state.inventory).toHaveLength(0);
             expect(state.totalScore).toBe(0);
         });
@@ -58,9 +58,9 @@ describe('Game Engine', () => {
             expect(state.selectedGamblerId).toBe('standard');
         });
 
-        it('creates a deck', () => {
+        it('initializes deck probabilities', () => {
             const state = startGame();
-            expect(state.deck.length).toBeGreaterThan(0);
+            expect(state.deckProbabilities.suits.hearts).toBe(25);
         });
 
         it('sets target score', () => {
@@ -84,9 +84,8 @@ describe('Game Engine', () => {
         it('is deterministic with same seed', () => {
             const state1 = startGame(42);
             const state2 = startGame(42);
-
-            // Card IDs have an auto-incrementing counter, so compare by rank+suit
-            expect(state1.deck.map(cardKey)).toEqual(state2.deck.map(cardKey));
+ 
+            expect(state1.rngState).toBe(state2.rngState);
             expect(state1.inventory.map(r => r.id)).toEqual(state2.inventory.map(r => r.id));
         });
 
@@ -94,8 +93,7 @@ describe('Game Engine', () => {
             const state1 = startGame(42);
             const state2 = startGame(99);
 
-            // Decks should be different orderings
-            expect(state1.deck.map(cardKey)).not.toEqual(state2.deck.map(cardKey));
+            expect(state1.rngState).not.toBe(state2.rngState);
         });
     });
 
@@ -122,12 +120,10 @@ describe('Game Engine', () => {
             expect(state.dealer.cards[1].isFaceUp).toBe(true);
         });
 
-        it('decrements deck by 3 cards', () => {
+        it('updates rngState after dealing', () => {
             const preState = startGame();
-            const deckBefore = preState.deck.length;
             const state = dealHand(preState);
-            // 1 player card + 2 dealer cards = 3
-            expect(state.deck.length).toBe(deckBefore - 3);
+            expect(state.rngState).not.toBe(preState.rngState);
         });
 
         it('emits cards_dealt and initial_deal_complete events', () => {
@@ -159,12 +155,11 @@ describe('Game Engine', () => {
             expect(state.selectedDrawIndex).not.toBeNull();
         });
 
-        it('decrements deck size', () => {
+        it('updates rngState after drawing', () => {
             const playing = dealHand(startGame());
-            const deckBefore = playing.deck.length;
+            const preRng = playing.rngState;
             const state = drawCards(playing);
-            const drawn = state.drawnCards.filter(c => c !== null).length;
-            expect(state.deck.length).toBe(deckBefore - drawn);
+            expect(state.rngState).not.toBe(preRng);
         });
 
         it('only allows drawing when no cards are already drawn', () => {
@@ -349,7 +344,7 @@ describe('Game Engine', () => {
             }
 
             expect(state1.totalScore).toBe(state2.totalScore);
-            expect(state1.deck.map(cardKey)).toEqual(state2.deck.map(cardKey));
+            expect(state1.rngState).toBe(state2.rngState);
             expect(state1.playerHands.map(h => h.blackjackValue)).toEqual(
                 state2.playerHands.map(h => h.blackjackValue)
             );

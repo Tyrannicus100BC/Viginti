@@ -125,11 +125,9 @@ export const RouletteBoard: React.FC<RouletteBoardProps> = ({ onClose }) => {
         totalScore,
         handsRemaining,
         comps,
-        deck,
         dealer,
         playerHands,
-        drawnCard,
-        discardPile,
+        drawnCards,
         triggerDebugChips,
         movesRemaining,
         maxMoves,
@@ -137,7 +135,8 @@ export const RouletteBoard: React.FC<RouletteBoardProps> = ({ onClose }) => {
         decrementMoves,
         triggerGameOver,
         triggerEvent,
-        boardConfig
+        boardConfig,
+        deckProbabilities
     } = useGameStore();
 
     const [showDeck, setShowDeck] = useState(false);
@@ -148,8 +147,7 @@ export const RouletteBoard: React.FC<RouletteBoardProps> = ({ onClose }) => {
     const activeCards = [
         ...dealer.cards.filter((_, idx) => idx !== 0 || dealer.isRevealed),
         ...playerHands.flatMap(h => h.cards),
-        ...(drawnCard ? [drawnCard] : []),
-        ...discardPile
+        ...drawnCards.filter((c): c is CardType => c !== null)
     ];
 
     const [currentSpaceIndex, setCurrentSpaceIndex] = useState(1);
@@ -853,7 +851,7 @@ export const RouletteBoard: React.FC<RouletteBoardProps> = ({ onClose }) => {
             {/* Modals */}
             {showDeck && (
                 <DeckView
-                    remainingDeck={deck}
+                    probabilities={deckProbabilities}
                     activeCards={activeCards}
                     onClose={() => setShowDeck(false)}
                 />
