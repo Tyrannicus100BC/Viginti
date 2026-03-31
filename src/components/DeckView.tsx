@@ -7,7 +7,6 @@ interface DeckViewProps {
   probabilities: DeckProbabilities;
   activeCards: CardType[];
   onClose: () => void;
-  onSelectCard?: (cardId: string) => void;
   mode?: 'view' | 'remove' | 'enhance';
   onRemoveCard?: (cardId: string) => void;
   onDeductRemovalCost?: () => void;
@@ -29,7 +28,6 @@ export const DeckView: React.FC<DeckViewProps> = ({
     probabilities, 
     activeCards, 
     onClose, 
-    onSelectCard, 
     mode = 'view', 
     onRemoveCard, 
     onDeductRemovalCost, 
@@ -123,9 +121,6 @@ export const DeckView: React.FC<DeckViewProps> = ({
                         handleRemove(card.id);
                     } else if (mode === 'enhance' && selectedEnhancement) {
                         onEnhanceCard?.(card.id, selectedEnhancement);
-                    } else if (onSelectCard) {
-                        onSelectCard(card.id);
-                        onClose();
                     }
                 }}
             >
@@ -158,10 +153,10 @@ export const DeckView: React.FC<DeckViewProps> = ({
                     <span className={styles.titleText}>
                         {mode === 'remove' ? 'Remove In-Play Cards' : 
                          mode === 'enhance' ? 'Enhance Cards' :
-                         onSelectCard ? 'Select a Card' : 'Deck Probabilities'}
+                         'Deck Probabilities'}
                     </span>
                     <div className={styles.titleSide}>
-                        {mode !== 'view' && !onSelectCard && (mode === 'remove' || (mode === 'enhance' && selectedEnhancement)) && (
+                        {mode !== 'view' && (mode === 'remove' || (mode === 'enhance' && selectedEnhancement)) && (
                             <div className={styles.costIndicator} style={comps < currentCost ? { color: '#ff4d4d', borderColor: '#ff4d4d' } : {}}>
                                 Cost ₵{currentCost}
                             </div>

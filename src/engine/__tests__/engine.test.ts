@@ -135,7 +135,7 @@ describe('Game Engine', () => {
         it('updates deals taken and hands remaining', () => {
             const state = dealHand(startGame());
             expect(state.dealsTaken).toBe(1);
-            expect(state.handsRemaining).toBeLessThan(3); // BASE_DEALS = 3, minus 1
+            expect(state.handsRemaining).toBeLessThan(4); // BASE_DEALS = 4, minus 1
         });
     });
 

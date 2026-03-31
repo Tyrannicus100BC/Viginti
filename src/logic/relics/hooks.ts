@@ -184,8 +184,11 @@ const evaluateStandardRelic = (score: HandScore, context: HandContext, type: 'ra
 }
 
 const createCategoryBonusHook = (categoryPrefix: string, type: 'mult' | 'chips') => ({
-    onEvaluateHandScore: (score: HandScore, _context: HandContext, relicState: any, _config: any) => {
+    onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any, _config: any) => {
         let changed = false;
+        
+        const isSingleInstance = context.categoryCounts ? context.categoryCounts[categoryPrefix] === 1 : true;
+
         const updatedCriteria = score.criteria.map(c => {
             const isMatch = (
                 c.id === categoryPrefix || 
@@ -193,7 +196,7 @@ const createCategoryBonusHook = (categoryPrefix: string, type: 'mult' | 'chips')
                 (categoryPrefix === 'rank' && (c.id === 'pair' || c.id === 'three_kind'))
             );
 
-            if (isMatch) {
+            if (isMatch && (type === 'chips' || isSingleInstance)) {
                 changed = true;
                 const val = type === 'mult' ? relicState.bonus_mult : relicState.bonus_chips;
                 if (type === 'mult') {
@@ -222,7 +225,9 @@ const createCategoryBonusHook = (categoryPrefix: string, type: 'mult' | 'chips')
             (categoryPrefix === 'rank' && (context.criterionId === 'pair' || context.criterionId === 'three_kind'))
         );
 
-        if (isMatch) {
+        const isSingleInstance = context.categoryCounts ? context.categoryCounts[categoryPrefix] === 1 : true;
+
+        if (isMatch && (type === 'chips' || isSingleInstance)) {
             const relicId = config?.id || `${categoryPrefix}_${type}`;
             await context.highlightRelic(relicId, { preDelay: 600 });
         }
@@ -281,17 +286,68 @@ export const Hooks = {
     joker_adjust_bj: {
         // @ts-ignore
         adjustBlackjackScore: (currentScore: number, context: { handCards: Card[] }) => {
-            let score = currentScore;
-            if (score <= 21) return score;
+            const jackValues = [11, 10, 5, 1];
+            const ignoreSpecialEffects = (context as any).ignoreSpecialEffects || false;
+            let rawBase = 0;
+            let aces = 0;
+            let jacks = 0;
 
-            const jacks = context.handCards.filter(c => c.rank === 'J');
-            let jacksCount = jacks.length;
-            
-            while (score > 21 && jacksCount > 0) {
-                score -= 5;
-                jacksCount--;
+            for (const card of context.handCards) {
+                if (!ignoreSpecialEffects && card.specialEffect?.type === 'score') {
+                    rawBase -= card.specialEffect.value;
+                }
+                if (card.type === 'chip' || card.type === 'mult') continue;
+                if (card.type === 'score') {
+                    if (!ignoreSpecialEffects) {
+                        rawBase -= (card.chips || 0);
+                    }
+                    continue;
+                }
+
+                if (card.rank === 'J') {
+                    jacks++;
+                } else {
+                    const val = RANK_VALUES[card.rank];
+                    if (val !== undefined) {
+                        rawBase += val;
+                        if (card.rank === 'A') aces++;
+                    }
+                }
             }
-            return score;
+
+            if (jacks === 0) return currentScore;
+
+            let possibleJackSums = new Set<number>([0]);
+            for (let i = 0; i < jacks; i++) {
+                const nextSums = new Set<number>();
+                for (const s of possibleJackSums) {
+                    for (const jv of jackValues) {
+                        nextSums.add(s + jv);
+                    }
+                }
+                possibleJackSums = nextSums;
+            }
+
+            let bestScore = -Infinity;
+            let minBust = Infinity;
+
+            for (const jackSum of possibleJackSums) {
+                let score = rawBase + jackSum;
+                let remainingAces = aces;
+                
+                while (score > 21 && remainingAces > 0) {
+                    score -= 10;
+                    remainingAces--;
+                }
+
+                if (score <= 21) {
+                    if (score > bestScore) bestScore = score;
+                } else {
+                    if (score < minBust) minBust = score;
+                }
+            }
+
+            return bestScore !== -Infinity ? bestScore : minBust;
         }
     },
     idiot_dealer_stop: {
@@ -336,12 +392,13 @@ export const Hooks = {
             const chipCards = config?.handType?.chipCards || false;
             if (context.blackjackValue === 21) {
                 const cardChips = chipCards ? context.handCards.reduce((s, c) => s + RANK_VALUES[c.rank], 0) : 0;
+                const def = config?.extraHandTypes?.viginti;
                 const newCriteria = [{
                     id: 'viginti' as any,
-                    name: 'Viginti',
+                    name: def?.name || 'Viginti',
                     count: 1,
-                    chips: cardChips + 50,
-                    multiplier: 1,
+                    chips: cardChips + (def?.chips ?? 50),
+                    multiplier: def?.mult ?? 0,
                     cardIds: context.handCards.map(c => c.id)
                 }, ...score.criteria];
                 const totalChips = newCriteria.reduce((s, c) => s + c.chips, 0);
@@ -349,12 +406,13 @@ export const Hooks = {
                 return { ...score, criteria: newCriteria, totalChips, totalMultiplier: totalMult, finalScore: Math.floor(totalChips * totalMult) };
             } else if (context.isWin) {
                 const cardChips = chipCards ? context.handCards.reduce((s, c) => s + RANK_VALUES[c.rank], 0) : 0;
+                const def = config?.extraHandTypes?.win;
                 const newCriteria = [{
                     id: 'win' as any,
-                    name: 'Win',
+                    name: def?.name || 'Win',
                     count: 1,
-                    chips: cardChips + 10,
-                    multiplier: 1,
+                    chips: cardChips + (def?.chips ?? 10),
+                    multiplier: def?.mult ?? 0,
                     cardIds: context.handCards.map(c => c.id)
                 }, ...score.criteria];
                 const totalChips = newCriteria.reduce((s, c) => s + c.chips, 0);
@@ -363,6 +421,122 @@ export const Hooks = {
             }
             return score;
         })
+    },
+    standard_relic: {
+        onEvaluateHandScore: withPriority(-5, (score: HandScore, context: HandContext, _relicState: any, _config: any) => {
+            const newCriteria = [...score.criteria];
+            const cards = context.handCards.filter(c => !c.type || c.type === 'standard');
+            let added = false;
+
+            // Pairs
+            const counts = getRankCounts(cards);
+            Object.keys(counts).forEach(rank => {
+                const group = cards.filter(c => c.rank === rank);
+                if (group.length >= 2) {
+                    for (let i = 0; i < group.length; i++) {
+                        for (let j = i + 1; j < group.length; j++) {
+                            const pChips = RANK_VALUES[group[i].rank] + RANK_VALUES[group[j].rank];
+                            newCriteria.push({
+                                id: 'pair' as any,
+                                name: 'Pair',
+                                count: 1,
+                                chips: pChips,
+                                multiplier: 0,
+                                cardIds: [group[i].id, group[j].id]
+                            });
+                            added = true;
+                        }
+                    }
+                }
+            });
+
+            // Flushes
+            const suits: Record<string, Card[]> = {};
+            cards.forEach(c => {
+                suits[c.suit] = suits[c.suit] || [];
+                suits[c.suit].push(c);
+            });
+            Object.values(suits).forEach(group => {
+                if (group.length >= 2) {
+                    const fChips = group.reduce((s, c) => s + RANK_VALUES[c.rank], 0);
+                    newCriteria.push({
+                        id: 'flush' as any,
+                        name: 'Flush',
+                        count: 1,
+                        chips: fChips,
+                        multiplier: 0,
+                        cardIds: group.map(c => c.id)
+                    });
+                    added = true;
+                }
+            });
+
+            // Straights
+            const getRuns = (cardList: Card[], useLowAce: boolean) => {
+                const getOrderVal = (c: Card) => (useLowAce && c.rank === 'A') ? 1 : POKER_ORDER[c.rank];
+                const sorted = [...cardList].sort((a, b) => getOrderVal(a) - getOrderVal(b));
+                
+                let localCandidates: Card[][] = [];
+                if (sorted.length === 0) return localCandidates;
+
+                let currentRun: Card[] = [sorted[0]];
+                for (let i = 1; i < sorted.length; i++) {
+                    const prev = currentRun[currentRun.length - 1];
+                    const curr = sorted[i];
+                    const pVal = getOrderVal(prev);
+                    const cVal = getOrderVal(curr);
+
+                    if (cVal === pVal + 1) {
+                        currentRun.push(curr);
+                    } else if (cVal === pVal) {
+                        continue;
+                    } else {
+                        if (currentRun.length >= 2) localCandidates.push(currentRun);
+                        currentRun = [curr];
+                    }
+                }
+                if (currentRun.length >= 2) localCandidates.push(currentRun);
+                return localCandidates;
+            };
+
+            const allRuns = [...getRuns(cards, false), ...getRuns(cards, true)];
+            const uniqueRuns = new Map<string, Card[]>();
+            allRuns.forEach(run => {
+                const key = run.map(c => c.id).sort().join(',');
+                uniqueRuns.set(key, run);
+            });
+
+            Array.from(uniqueRuns.values()).forEach(run => {
+                const sChips = run.reduce((s, c) => s + RANK_VALUES[c.rank], 0);
+                newCriteria.push({
+                    id: 'straight' as any,
+                    name: 'Straight',
+                    count: 1,
+                    chips: sChips,
+                    multiplier: 0,
+                    cardIds: run.map(c => c.id)
+                });
+                added = true;
+            });
+
+            if (!added) return score;
+
+            const totalChips = newCriteria.reduce((s, c) => s + c.chips, 0);
+            const totalMult = newCriteria.reduce((s, c) => s + c.multiplier, 0);
+            return {
+                ...score,
+                criteria: newCriteria,
+                totalChips,
+                totalMultiplier: totalMult,
+                finalScore: Math.floor(totalChips * totalMult)
+            };
+        }),
+        onScoreRow: async (context: ScoreRowContext, _relicState: any, config: any) => {
+            const id = context.criterionId;
+            if (id === 'pair' || id === 'flush' || id === 'straight') {
+                await context.highlightRelic(config?.id || 'standard', { preDelay: 200 });
+            }
+        }
     },
     double_down_relic: {
         onEvaluateHandScore: (score: HandScore, context: HandContext, _relicState: any, config: any) => {

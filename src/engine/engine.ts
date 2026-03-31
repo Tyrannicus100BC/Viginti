@@ -99,6 +99,8 @@ function processCoreAction(state: GameState, action: PlayerAction): ActionResult
             return processStartGame(state, action.cityId, action.gamblerId, action.seed, action.globalTutorialsCompleted, action.skipAtlanticTutorials);
         case 'deal':
             return processDeal(state, action.forceContinue);
+        case 'leave_casino':
+            return processLeaveCasino(state);
         case 'draw':
             return processDraw(state);
         case 'select_drawn_card':
@@ -190,7 +192,11 @@ export function getValidActions(state: GameState): PlayerAction[] {
             break;
 
         case 'entering_casino':
-            actions.push({ type: 'deal' });
+            if (state.totalScore >= state.targetScore) {
+                actions.push({ type: 'leave_casino' });
+            } else {
+                actions.push({ type: 'deal' });
+            }
             break;
 
         case 'playing': {
@@ -309,7 +315,11 @@ export function getValidActions(state: GameState): PlayerAction[] {
         }
 
         case 'deal_over':
-            actions.push({ type: 'deal' });
+            if (state.totalScore >= state.targetScore) {
+                actions.push({ type: 'leave_casino' });
+            } else {
+                actions.push({ type: 'deal' });
+            }
             break;
 
         case 'casino_payout':
@@ -566,50 +576,8 @@ function processDeal(state: GameState, forceContinue?: boolean): ActionResult {
             };
         }
 
-        // Casino cleared — go to gift shop
-        if (hasReachedTarget && !forceContinue) {
-            const events: GameEvent[] = [];
-            // Calculate reward summary
-            const invArr = state.inventory as RelicInstance[];
-            const hasDoubleDown = invArr.some(r => r.id === 'double_down');
-            const dealsBonus = state.handsRemaining * 2;
-            const doubleDownBonus = hasDoubleDown ? ((state.tableActionCharges['double_down'] ?? 0) * 1) : 0;
-            const hasSurrender = invArr.some(r => r.id === 'surrender');
-            const surrenderBonus = hasSurrender ? ((state.tableActionCharges['surrender'] ?? 0) * 1) : 0;
-            const interestedBonus = Math.min(5, Math.floor(state.comps / 5));
-            const winBonus = 2;
-            const totalBonus = dealsBonus + doubleDownBonus + surrenderBonus + interestedBonus + winBonus;
-
-            const rewardSummary = {
-                dealsBonus,
-                doubleDownBonus,
-                surrenderBonus,
-                interestedBonus,
-                winBonus,
-                total: totalBonus,
-            };
-
-            events.push({ type: 'casino_cleared', deal: state.deal, score: state.totalScore });
-
-            // Payout sequence
-            events.push({ type: 'payout_started', total: totalBonus, rewardSummary });
-            if (dealsBonus > 0) events.push({ type: 'payout_step', label: 'Hands Remaining', amount: dealsBonus, description: '2 chips per hand' });
-            if (doubleDownBonus > 0) events.push({ type: 'payout_step', label: 'Double Down Charges', amount: doubleDownBonus });
-            if (surrenderBonus > 0) events.push({ type: 'payout_step', label: 'Surrender Charges', amount: surrenderBonus });
-            if (interestedBonus > 0) events.push({ type: 'payout_step', label: 'Interest', amount: interestedBonus });
-            events.push({ type: 'payout_step', label: 'Casino Clear Bonus', amount: winBonus });
-            events.push({ type: 'payout_complete', total: totalBonus });
-
-            events.push({ type: 'phase_changed', from: state.phase, to: 'casino_payout' });
-
-            return {
-                nextState: {
-                    ...state,
-                    phase: 'casino_payout',
-                    shopRewardSummary: rewardSummary,
-                },
-                events,
-            };
+        if (hasReachedTarget && state.handsRemaining <= 0 && !forceContinue) {
+             return { nextState: state, events: [] }; // Ignore invalid deal
         }
     }
 
@@ -691,6 +659,59 @@ function processDeal(state: GameState, forceContinue?: boolean): ActionResult {
     events.push({ type: 'phase_changed', from: state.phase, to: 'playing' });
 
     return { nextState, events };
+}
+
+function processLeaveCasino(state: GameState): ActionResult {
+    if (state.phase !== 'deal_over' && state.phase !== 'entering_casino') {
+        return { nextState: state, events: [] };
+    }
+
+    if (state.totalScore < state.targetScore) {
+        return { nextState: state, events: [] };
+    }
+
+    const events: GameEvent[] = [];
+    // Calculate reward summary
+    const invArr = state.inventory as RelicInstance[];
+    const hasDoubleDown = invArr.some(r => r.id === 'double_down');
+    const dealsBonus = state.handsRemaining * 2;
+    const doubleDownBonus = hasDoubleDown ? ((state.tableActionCharges['double_down'] ?? 0) * 1) : 0;
+    const hasSurrender = invArr.some(r => r.id === 'surrender');
+    const surrenderBonus = hasSurrender ? ((state.tableActionCharges['surrender'] ?? 0) * 1) : 0;
+    const interestedBonus = Math.min(5, Math.floor(state.comps / 5));
+    const winBonus = 2;
+    const totalBonus = dealsBonus + doubleDownBonus + surrenderBonus + interestedBonus + winBonus;
+
+    const rewardSummary = {
+        dealsBonus,
+        doubleDownBonus,
+        surrenderBonus,
+        interestedBonus,
+        winBonus,
+        total: totalBonus,
+    };
+
+    events.push({ type: 'casino_cleared', deal: state.deal, score: state.totalScore });
+
+    // Payout sequence
+    events.push({ type: 'payout_started', total: totalBonus, rewardSummary });
+    if (dealsBonus > 0) events.push({ type: 'payout_step', label: 'Hands Remaining', amount: dealsBonus, description: '2 chips per hand' });
+    if (doubleDownBonus > 0) events.push({ type: 'payout_step', label: 'Double Down Charges', amount: doubleDownBonus });
+    if (surrenderBonus > 0) events.push({ type: 'payout_step', label: 'Surrender Charges', amount: surrenderBonus });
+    if (interestedBonus > 0) events.push({ type: 'payout_step', label: 'Interest', amount: interestedBonus });
+    events.push({ type: 'payout_step', label: 'Casino Clear Bonus', amount: winBonus });
+    events.push({ type: 'payout_complete', total: totalBonus });
+
+    events.push({ type: 'phase_changed', from: state.phase, to: 'casino_payout' });
+
+    return {
+        nextState: {
+            ...state,
+            phase: 'casino_payout',
+            shopRewardSummary: rewardSummary,
+        },
+        events,
+    };
 }
 
 function processDraw(state: GameState): ActionResult {
@@ -973,9 +994,16 @@ function processResolveDealerTurn(state: GameState): ActionResult {
 
     // 2. Dealer Draw Loop
     const dealerStopValue = executeValueHook('getDealerStopValue', 17, { inventory: invArr });
+    let debugDeck = (state as any).deck ? [...(state as any).deck] : null;
+    const isDebugWin = (state as any).debugWin === true;
 
-    while (dVal < dealerStopValue) {
-        const c = drawCardFromProbabilities(state.deckProbabilities, rng);
+    while (dVal < dealerStopValue || (isDebugWin && dVal <= 21)) {
+        let c: Card;
+        if (debugDeck && debugDeck.length > 0) {
+            c = debugDeck.pop()!;
+        } else {
+            c = drawCardFromProbabilities(state.deckProbabilities, rng);
+        }
 
         c.isFaceUp = true;
         c.origin = 'deck';
@@ -993,13 +1021,19 @@ function processResolveDealerTurn(state: GameState): ActionResult {
 
     events.push({ type: 'phase_changed', from: 'dealer_turn', to: 'resolving_outcomes' });
 
+    const nextState: any = {
+        ...state,
+        phase: 'resolving_outcomes',
+        dealer: { cards: dCards, isRevealed: true, blackjackValue: dVal },
+        rngState: rng.getState(),
+    };
+    if (debugDeck) {
+        nextState.deck = debugDeck;
+    }
+    delete nextState.debugWin;
+
     return {
-        nextState: {
-            ...state,
-            phase: 'resolving_outcomes',
-            dealer: { cards: dCards, isRevealed: true, blackjackValue: dVal },
-            rngState: rng.getState(),
-        },
+        nextState,
         events,
     };
 }
@@ -1056,7 +1090,10 @@ function processResolveHandOutcome(state: GameState): ActionResult {
     }
     
     // Transition to scoring
-    events.push({ type: 'dealer_fade_out' });
+    const hasWin = scoredHands.some(h => h.outcome === 'win');
+    if (hasWin) {
+        events.push({ type: 'dealer_fade_out' });
+    }
     events.push({ type: 'phase_changed', from: 'resolving_outcomes', to: 'scoring' });
 
     return {
@@ -1065,7 +1102,7 @@ function processResolveHandOutcome(state: GameState): ActionResult {
             phase: 'scoring',
             playerHands: scoredHands,
             tableActionCharges: newCharges,
-            runningSummary: { chips: 0, mult: 0 },
+            runningSummary: { chips: 0, mult: 1 },
         },
         events,
     };
@@ -1075,9 +1112,21 @@ function processScoreRound(state: GameState): ActionResult {
     if (state.phase !== 'scoring') return { nextState: state, events: [] };
 
     const events: GameEvent[] = [];
-    let runningSummary = state.runningSummary || { chips: 0, mult: 0 };
+    let runningSummary = state.runningSummary || { chips: 0, mult: 1 };
     let currentInv = state.inventory as RelicInstance[];
     const scoredHands = state.playerHands;
+
+    // Pre-calculate to count category instances across all winning hands
+    const categoryCounts: Record<string, number> = { flush: 0, rank: 0, straight: 0 };
+    scoredHands.forEach(hand => {
+        if (hand.outcome !== 'win' || hand.cards.length === 0) return;
+        const preScore = evaluateHandScore(hand.cards, true, hand.isDoubled ?? false, currentInv, state.handsRemaining);
+        preScore.criteria.forEach(c => {
+            if (c.id === 'flush' || c.id.startsWith('flush_')) categoryCounts.flush++;
+            if (c.id === 'straight' || c.id.startsWith('straight_')) categoryCounts.straight++;
+            if (c.id === 'rank' || c.id.startsWith('rank_') || c.id === 'pair' || c.id === 'three_kind') categoryCounts.rank++;
+        });
+    });
 
     // 4. Scoring pipeline
     const finalHands = scoredHands.map((hand, i) => {
@@ -1090,7 +1139,8 @@ function processScoreRound(state: GameState): ActionResult {
             true,
             hand.isDoubled ?? false,
             currentInv,
-            state.handsRemaining
+            state.handsRemaining,
+            categoryCounts
         );
 
         events.push({ type: 'scoring_hand_focus', handIndex: i });
@@ -1140,6 +1190,7 @@ function processScoreRound(state: GameState): ActionResult {
                 criterion.id,
                 score,
                 runningSummary,
+                categoryCounts
             );
             events.push(...scoreRowResult.events);
             runningSummary = scoreRowResult.runningSummary ?? runningSummary;
@@ -1263,23 +1314,12 @@ function processDebugWin(state: GameState): ActionResult {
         } as Card);
     }
     
-    // 3. Rig Dealer Hand (Ensure low value so they MUST hit)
-    // Create a 2+3 = 5 hand. Dealer hits on <17.
-    const riggedDealer = {
-        ...state.dealer,
-        cards: [
-            { id: 'debug-d-1', suit: 'clubs', rank: '2', isFaceUp: false, type: 'standard', origin: 'deck' },
-            { id: 'debug-d-2', suit: 'clubs', rank: '3', isFaceUp: true, type: 'standard', origin: 'deck' }
-        ] as Card[],
-        blackjackValue: 5,
-        isRevealed: false
-    };
-
+    // 3. Set debug flag to force dealer to hit until they bust
     const riggedState = {
         ...state,
         playerHands: updatedHands,
         deck,
-        dealer: riggedDealer
+        debugWin: true
     };
 
     return processStand(riggedState);
@@ -1389,18 +1429,39 @@ function processDebugGiveCash(state: GameState, amount: number): ActionResult {
 }
 
 function processDebugDrawCard(state: GameState, cardId: string): ActionResult {
-    const deck = [...((state as any).deck || [])];
-    const cardIndex = deck.findIndex(c => c.id === cardId);
-    if (cardIndex === -1) return { nextState: state, events: [] };
-    
-    const card = deck.splice(cardIndex, 1)[0];
-    card.isFaceUp = true;
-    card.origin = 'deck';
+    let card: Card | undefined;
+    let deck = (state as any).deck;
+    let updatedDeck = deck ? [...deck] : [];
+
+    if (cardId.startsWith('debug_')) {
+        const parts = cardId.split('_');
+        const suitStr = parts[1];
+        const rankStr = parts[2];
+        const rank = rankStr as Rank;
+        const suit = suitStr as Suit;
+        card = {
+            id: `debug_${suit}_${rank}_${Date.now()}`,
+            suit,
+            rank,
+            type: 'standard',
+            isFaceUp: true,
+            origin: 'deck',
+        };
+    } else if (deck) {
+        const cardIndex = updatedDeck.findIndex((c: Card) => c.id === cardId);
+        if (cardIndex !== -1) {
+            card = updatedDeck.splice(cardIndex, 1)[0];
+            card.isFaceUp = true;
+            card.origin = 'deck';
+        }
+    }
+
+    if (!card) return { nextState: state, events: [] };
     
     return {
         nextState: {
             ...state,
-            deck,
+            ...(deck ? { deck: updatedDeck } : {}),
             drawnCards: [card],
             selectedDrawIndex: 0
         },

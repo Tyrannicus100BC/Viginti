@@ -8,6 +8,7 @@ export type PlayerAction =
     // === Game Setup ===
     | { type: 'start_game'; cityId: string; gamblerId: string; seed?: number; globalTutorialsCompleted?: string[]; skipAtlanticTutorials?: boolean }
     | { type: 'deal'; forceContinue?: boolean }
+    | { type: 'leave_casino' }
 
     // === Core Gameplay ===
     | { type: 'draw' }

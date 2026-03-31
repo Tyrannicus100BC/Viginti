@@ -53,6 +53,7 @@ export const useGameStore = <T>(selector?: (state: any) => T): any => {
         holdReturns: (_forceDealerBust?: boolean) => dispatch({ type: 'stand' }), // 'forceDealerBust' ignored in pure engine unless debug action?
         nextDeal: (forceContinue?: boolean) => dispatch({ type: 'deal', forceContinue }),
         completeDealEarly: () => dispatch({ type: 'complete_deal_early' }),
+        leaveCasino: () => dispatch({ type: 'leave_casino' }),
 
         // Table Actions
         startTableAction: (relicId: string) => dispatch({ type: 'activate_table_action', relicId }),

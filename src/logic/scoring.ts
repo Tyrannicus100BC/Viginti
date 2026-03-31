@@ -13,13 +13,14 @@ export function getBlackjackScore(cards: Card[], inventory: RelicInstance[] = []
   // Relic: Adjust Blackjack Score (e.g. Joker)
   score = RelicManager.executeValueHook('adjustBlackjackScore', score, {
     inventory,
-    handCards: cards
+    handCards: cards,
+    ignoreSpecialEffects
   });
 
   return score;
 }
 
-export function evaluateHandScore(cards: Card[], isWin: boolean, isDoubled: boolean = false, inventory: RelicInstance[] = [], handsRemaining: number = 0): HandScore {
+export function evaluateHandScore(cards: Card[], isWin: boolean, isDoubled: boolean = false, inventory: RelicInstance[] = [], handsRemaining: number = 0, categoryCounts?: Record<string, number>): HandScore {
   const blackjackScore = getBlackjackScore(cards, inventory);
 
   // Initial Empty Score
@@ -79,6 +80,7 @@ export function evaluateHandScore(cards: Card[], isWin: boolean, isDoubled: bool
     isWin,
     isDoubled,
     handsRemaining,
-    blackjackValue: blackjackScore
+    blackjackValue: blackjackScore,
+    categoryCounts
   });
 }

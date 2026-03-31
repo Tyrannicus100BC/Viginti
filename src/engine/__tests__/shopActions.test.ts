@@ -311,15 +311,17 @@ describe('Shop Actions', () => {
     describe('enhance_card', () => {
         it('increases special chance', () => {
             const shopState = { ...createGiftShopState(), comps: 100 };
-            const initialSpecial = shopState.deckProbabilities.specialChance;
-
             const enhancement = { type: 'chip' as const, value: 5 };
+            
+            const initialWeight = shopState.deckProbabilities.specialWeights.find(w => w.type === 'chip' && w.value === 5)?.chance ?? 0;
+
             const { nextState, events } = processAction(
                 shopState,
                 { type: 'enhance_card', cardId: 'any', enhancement }
             );
 
-            expect(nextState.deckProbabilities.specialChance).toBeGreaterThan(initialSpecial);
+            const updatedWeight = nextState.deckProbabilities.specialWeights.find(w => w.type === 'chip' && w.value === 5)?.chance ?? 0;
+            expect(updatedWeight).toBeGreaterThan(initialWeight);
             expect(nextState.comps).toBeLessThan(100);
             expect(events.some(e => e.type === 'relic_activated')).toBe(true);
         });

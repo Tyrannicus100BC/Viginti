@@ -5,6 +5,7 @@ import { fireConfetti } from './utils/confetti';
 import { PlayingCard } from './components/PlayingCard';
 import { Hand } from './components/Hand';
 import { DeckView } from './components/DeckView';
+import { ChooseCardView } from './components/ChooseCardView';
 import { PhysicsPot } from './components/PhysicsPot';
 import { TitlePhysics } from './components/TitlePhysics';
 import titleStyles from './components/TitlePhysics.module.css';
@@ -214,7 +215,8 @@ export default function App() {
         isSellingMode,
         toggleSellingMode,
         removalCount,
-        deckProbabilities
+        deckProbabilities,
+        leaveCasino
     } = useGameStore();
 
     const { scale, viewportWidth, viewportHeight } = useLayout();
@@ -1545,14 +1547,16 @@ export default function App() {
         if (phase === 'deal_over' && deal === 1 && totalScore >= targetScore) {
             tutorialManager.completeStep(NEXT_CASINO_TUTORIAL_ID);
         }
-        if (phase === 'entering_casino') {
-            dealFirstHand();
-        } else if (totalScore >= targetScore && isLastCasino) {
+        if (totalScore >= targetScore && isLastCasino) {
             winGame();
+        } else if (totalScore >= targetScore) {
+            leaveCasino();
+        } else if (phase === 'entering_casino') {
+            dealFirstHand();
         } else {
             nextDeal();
         }
-    }, [phase, deal, totalScore, targetScore, isLastCasino, dealFirstHand, winGame, nextDeal]);
+    }, [phase, deal, totalScore, targetScore, isLastCasino, dealFirstHand, winGame, nextDeal, leaveCasino]);
 
     const finalizeGiftShopExit = React.useCallback(() => {
         if (giftShopExitTimeoutRef.current !== null) {
@@ -1580,7 +1584,7 @@ export default function App() {
     }, [finalizeGiftShopExit, giftShopEnterComplete, isGiftShopExiting, phase]);
 
     if (phase === 'init') {
-        const canStartRun = isCityUnlocked(selectedCityId) && isGamblerUnlocked(selectedGamblerId);
+        // const canStartRun = isCityUnlocked(selectedCityId) && isGamblerUnlocked(selectedGamblerId);
 
         return (
             <div className={styles.container} style={{ justifyContent: 'center', cursor: 'default' }}>
@@ -1612,9 +1616,11 @@ export default function App() {
                         style={{ zIndex: 1, marginBottom: 40 }}
                         onClick={() => {
                             playClick();
-                            startGame(selectedGamblerId, selectedCityId, { skipAtlanticTutorials });
+                            const runGamblerId = !skipAtlanticTutorials ? 'newbie' : 'default';
+                            const runCityId = !skipAtlanticTutorials ? 'atlantic_city' : 'las_vegas';
+                            startGame(runGamblerId, runCityId, { skipAtlanticTutorials });
                         }}
-                        title={canStartRun ? 'Start Run' : 'Select unlocked city and gambler'}
+                        title={'Start Run'}
                     >
                         Start Run
                     </button>
@@ -1629,56 +1635,19 @@ export default function App() {
                     )}
                 </div>
 
-                {hasClearedAtlanticCity ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)', alignItems: 'center', zIndex: 100 }}>
-                        {/* We render them in a flex column so they stack naturally without absolute positioning conflicts */}
-                        <div style={{ position: 'relative', bottom: 'auto', left: 'auto', transform: 'none' }}>
-                            <CitySelect
-                                selectedId={selectedCityId}
-                                onSelect={setSelectedCityId}
-                                onClickSound={playClick}
-                            />
-                        </div>
-                        <div style={{ position: 'relative', bottom: 'auto', left: 'auto', transform: 'none' }}>
-                             <GamblerSelect
-                                selectedId={selectedGamblerId}
-                                onSelect={setSelectedGamblerId}
-                                onClickSound={playClick}
-                            />
-                        </div>
-                        {shouldShowSkipTutorial && (
-                            <div className={styles.skipTutorialInline}>
-                                <input
-                                    id="skip-atlantic-city-tutorials"
-                                    type="checkbox"
-                                    checked={skipAtlanticTutorials}
-                                    onChange={(e) => {
-                                        playClick();
-                                        setSkipAtlanticTutorials(e.target.checked);
-                                    }}
-                                    disabled={!skipTutorialToggleEnabled}
-                                />
-                                <label htmlFor="skip-atlantic-city-tutorials">Skip Tutorial</label>
-                            </div>
-                        )}
-                    </div>
-                ) : (
-                    shouldShowSkipTutorial && (
-                        <div className={styles.skipTutorialContainer}>
-                            <input
-                                id="skip-atlantic-city-tutorials"
-                                type="checkbox"
-                                checked={skipAtlanticTutorials}
-                                onChange={(e) => {
-                                    playClick();
-                                    setSkipAtlanticTutorials(e.target.checked);
-                                }}
-                                disabled={!skipTutorialToggleEnabled}
-                            />
-                            <label htmlFor="skip-atlantic-city-tutorials">Skip Tutorial</label>
-                        </div>
-                    )
-                )}
+                <div className={styles.skipTutorialContainer}>
+                    <input
+                        id="play-tutorial"
+                        type="checkbox"
+                        checked={!skipAtlanticTutorials}
+                        onChange={(e) => {
+                            playClick();
+                            setSkipAtlanticTutorials(!e.target.checked);
+                        }}
+                        disabled={!skipTutorialToggleEnabled}
+                    />
+                    <label htmlFor="play-tutorial">Play Tutorial</label>
+                </div>
                 <button
                     className={styles.debugToggle}
                     onClick={(e) => {
@@ -1850,7 +1819,8 @@ export default function App() {
     const scoringOffset = boardWidth / 4;
 
     // Apply the offset based on whether total winnings are displayed
-    const currentPotOffset = isTotalWinningsVisible ? scoringOffset : defaultOffset;
+    const hasMult = !!runningSummary && runningSummary.mult > 1.05;
+    const currentPotOffset = hasMult ? (isTotalWinningsVisible ? scoringOffset : defaultOffset) : 0;
 
     // Calculate stable center X
     const centerX = viewportWidth / 2;
@@ -1966,6 +1936,7 @@ export default function App() {
                     onCollectionComplete={() => { }}
                     onItemArrived={() => { }}
                     labelPrefix="$"
+                    forceHide={isTotalWinningsVisible && !hasMult}
                 />
             )}
 
@@ -2511,21 +2482,47 @@ export default function App() {
                                     Stand
                                 </button>
                             ) : (phase === 'deal_over' || phase === 'entering_casino' || (phase === 'playing' && isInitialDeal)) ? (
-                                <button
-                                    id={phase === 'deal_over' && totalScore >= targetScore ? 'next-casino-button' : undefined}
-                                    className={styles.nextDealButton}
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleDealAdvanceAction();
-                                    }}
-                                    disabled={isInitialDeal}
-                                    style={phase === 'deal_over' && totalScore < targetScore && handsRemaining <= 0 ? { color: '#ff4444', borderColor: '#ff4444' } : {}}
-                                >
-                                    {phase === 'entering_casino' || (phase === 'playing' && isInitialDeal) ? 'Deal' : (
-                                        totalScore >= targetScore ? (isLastCasino ? 'Victory' : 'Leave Casino') :
-                                            (handsRemaining <= 0 ? 'Game Over' : 'Deal')
+                                <>
+                                    {(phase === 'deal_over' || phase === 'entering_casino') && totalScore >= targetScore && (
+                                        <button
+                                            id='next-casino-button'
+                                            className={`${styles.nextDealButton} ${styles.pulseGlow} ${isLastCasino ? styles.victoryButton : ''}`}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                const tutorialManager = TutorialManager.getInstance();
+                                                if (deal === 1) {
+                                                    tutorialManager.completeStep(NEXT_CASINO_TUTORIAL_ID);
+                                                }
+                                                if (isLastCasino) {
+                                                    winGame();
+                                                } else {
+                                                    leaveCasino();
+                                                }
+                                            }}
+                                        >
+                                            {isLastCasino ? 'Victory' : 'Leave Casino'}
+                                        </button>
                                     )}
-                                </button>
+                                    {!((phase === 'deal_over' || phase === 'entering_casino') && totalScore >= targetScore) && (
+                                        <button
+                                            className={styles.nextDealButton}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (phase === 'entering_casino') {
+                                                    dealFirstHand();
+                                                } else {
+                                                    nextDeal();
+                                                }
+                                            }}
+                                            disabled={isInitialDeal}
+                                            style={phase === 'deal_over' && totalScore < targetScore && handsRemaining <= 0 ? { color: '#ff4444', borderColor: '#ff4444' } : {}}
+                                        >
+                                            {phase === 'entering_casino' || (phase === 'playing' && isInitialDeal) ? 'Deal' : (
+                                                handsRemaining <= 0 ? 'Game Over' : 'Deal'
+                                            )}
+                                        </button>
+                                    )}
+                                </>
                             ) : (phase === 'gift_shop') ? (
                                 giftShopEnterComplete && !isGiftShopExiting ? (
                                     isSellingMode ? (
@@ -2564,27 +2561,37 @@ export default function App() {
             </div>
 
             {showDeck && (
-                <DeckView
-                    probabilities={deckProbabilities}
-                    activeCards={activeCards}
-                    removalCount={removalCount}
-                    comps={comps}
-                    onClose={() => {
-                        playClickDown();
-                        setShowDeck(false);
-                        setIsRemovingCards(false);
-                        setIsSelectingDebugCard(false);
-                        setIsEnhancingCards(false);
-                    }}
-                    mode={isRemovingCards ? 'remove' : isEnhancingCards ? 'enhance' : 'view'}
-                    onRemoveCard={isRemovingCards ? (id) => removeCard(id) : undefined}
-                    onDeductRemovalCost={isRemovingCards ? () => deductRemovalCost() : undefined}
-                    onEnhanceCard={isEnhancingCards ? (id, effect) => enhanceCard(id, effect) : undefined}
-                    onSelectCard={isSelectingDebugCard ? (cardId) => {
-                        drawSpecificCard(cardId);
-                        setIsSelectingDebugCard(false);
-                    } : undefined}
-                />
+                isSelectingDebugCard ? (
+                    <ChooseCardView
+                        onClose={() => {
+                            playClickDown();
+                            setShowDeck(false);
+                            setIsSelectingDebugCard(false);
+                        }}
+                        onSelectCard={(cardId) => {
+                            drawSpecificCard(cardId);
+                            setShowDeck(false);
+                            setIsSelectingDebugCard(false);
+                        }}
+                    />
+                ) : (
+                    <DeckView
+                        probabilities={deckProbabilities}
+                        activeCards={activeCards}
+                        removalCount={removalCount}
+                        comps={comps}
+                        onClose={() => {
+                            playClickDown();
+                            setShowDeck(false);
+                            setIsRemovingCards(false);
+                            setIsEnhancingCards(false);
+                        }}
+                        mode={isRemovingCards ? 'remove' : isEnhancingCards ? 'enhance' : 'view'}
+                        onRemoveCard={isRemovingCards ? (id) => removeCard(id) : undefined}
+                        onDeductRemovalCost={isRemovingCards ? () => deductRemovalCost() : undefined}
+                        onEnhanceCard={isEnhancingCards ? (id, effect) => enhanceCard(id, effect) : undefined}
+                    />
+                )
             )}
 
             {/* showHandRankings block removed */}

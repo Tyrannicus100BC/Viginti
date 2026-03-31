@@ -354,6 +354,9 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
     async dealer_fade_out(_event, config) {
         config.updateUI({ dealerVisible: false });
         await wait(400, config);
+        config.updateUI({
+            dealer: (prev: any) => ({ ...prev, cards: [], blackjackValue: 0 })
+        });
     },
 
 
@@ -543,7 +546,7 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
         }
         
         if (event.to === 'scoring') {
-            config.updateUI({ runningSummary: { chips: 0, mult: 0 } });
+            config.updateUI({ runningSummary: { chips: 0, mult: 1 } });
             await wait(200, config);
         }
 

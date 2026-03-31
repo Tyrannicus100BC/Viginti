@@ -39,14 +39,12 @@ export const GAMBLER_DEFINITIONS: GamblerDefinition[] = [
     {
         id: 'default',
         name: 'The Tourist',
-        description: 'Just here for a good time. Starts with standard distribution and run-focused scoring angles.',
+        description: 'Just here for a good time. Starts with standard distribution and the Standard scoring angle.',
         unlockCondition: { type: 'beat_city', cityId: 'atlantic_city' },
         getInitialProbabilities: () => ({ ...BASE_PROBS }),
         getInitialRelics: () => [
             getRelicInstance('viginti'),
-            getRelicInstance('rank_run_chips'),
-            getRelicInstance('flush_run_chips'),
-            getRelicInstance('straight_run_chips')
+            getRelicInstance('standard')
         ]
     },
     {

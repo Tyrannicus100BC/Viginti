@@ -6,7 +6,8 @@
 
 import type { Card, PlayerHand } from '../../types';
 import type { RelicInstance } from '../../logic/relics/types';
-import type { GameState, ShopItem, INITIAL_HAND_COUNT, BASE_DEALS_PER_CASINO } from '../GameState';
+import type { GameState, ShopItem } from '../GameState';
+import { INITIAL_HAND_COUNT, BASE_DEALS_PER_CASINO } from '../GameState';
 import type { GameEvent } from '../GameEvent';
 import type { ActionResult } from '../engine';
 import { RelicManager } from '../../logic/relics/manager';

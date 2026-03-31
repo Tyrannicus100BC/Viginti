@@ -263,27 +263,27 @@ describe('CLI Simulator', () => {
     });
 
     describe('runGame', () => {
-        it('completes a game with random strategy', () => {
-            const result = runGame(randomStrategy, { seed: 42 });
+        it('completes a game with random strategy', async () => {
+            const result = await runGame(randomStrategy, { seed: 42 });
             expect(['game_over', 'victory']).toContain(result.phase);
             expect(result.actionCount).toBeGreaterThan(0);
             expect(result.deal).toBeGreaterThanOrEqual(1);
         });
 
-        it('completes a game with greedy strategy', () => {
-            const result = runGame(greedyStrategy, { seed: 42 });
+        it('completes a game with greedy strategy', async () => {
+            const result = await runGame(greedyStrategy, { seed: 42 });
             expect(['game_over', 'victory']).toContain(result.phase);
             expect(result.actionCount).toBeGreaterThan(0);
         });
 
-        it('respects maxActions', () => {
-            const result = runGame(randomStrategy, { seed: 42, maxActions: 5 });
+        it('respects maxActions', async () => {
+            const result = await runGame(randomStrategy, { seed: 42, maxActions: 5 });
             expect(result.actionCount).toBeLessThanOrEqual(5);
         });
 
-        it('deterministic with same seed', () => {
-            const r1 = runGame(greedyStrategy, { seed: 123 });
-            const r2 = runGame(greedyStrategy, { seed: 123 });
+        it('deterministic with same seed', async () => {
+            const r1 = await runGame(greedyStrategy, { seed: 123 });
+            const r2 = await runGame(greedyStrategy, { seed: 123 });
             expect(r1.finalScore).toBe(r2.finalScore);
             expect(r1.deal).toBe(r2.deal);
             expect(r1.actionCount).toBe(r2.actionCount);
@@ -291,8 +291,8 @@ describe('CLI Simulator', () => {
     });
 
     describe('runBatch', () => {
-        it('runs multiple games', () => {
-            const stats = runBatch(10, randomStrategy);
+        it('runs multiple games', async () => {
+            const stats = await runBatch(10, randomStrategy);
             expect(stats.games).toBe(10);
             expect(stats.wins + stats.losses).toBe(10);
             expect(stats.winRate).toBeGreaterThanOrEqual(0);
@@ -302,9 +302,9 @@ describe('CLI Simulator', () => {
             expect(stats.avgActions).toBeGreaterThan(0);
         });
 
-        it('greedy outperforms random (on average)', () => {
-            const randomStats = runBatch(20, randomStrategy);
-            const greedyStats = runBatch(20, greedyStrategy);
+        it('greedy outperforms random (on average)', async () => {
+            const randomStats = await runBatch(20, randomStrategy);
+            const greedyStats = await runBatch(20, greedyStrategy);
 
             // Greedy should at least get further on average
             expect(greedyStats.avgDeal).toBeGreaterThanOrEqual(randomStats.avgDeal * 0.5);

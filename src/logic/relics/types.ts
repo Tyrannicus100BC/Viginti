@@ -176,6 +176,7 @@ export type HandContext = GameContext & {
     isDoubled: boolean;
     handsRemaining: number;
     blackjackValue: number;
+    categoryCounts?: Record<string, number>;
 }
 
 export type InterruptContext = GameContext & {
@@ -214,6 +215,7 @@ export type ScoreRowContext = InterruptContext & {
     criterionId: ScoringCriterionId;
     score: HandScore;
     modifyRunningSummary: (chipsToAdd: number, multToAdd: number) => void;
+    categoryCounts?: Record<string, number>;
 }
 
 export type HandBustContext = InterruptContext & {

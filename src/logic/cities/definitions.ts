@@ -54,17 +54,17 @@ export const CITY_DEFINITIONS: CityDefinition[] = [
         name: 'Las Vegas', // Complex City
         description: 'The Neon Oasis. A moderate challenge with varied options.',
         unlockCondition: { type: 'beat_city', cityId: 'atlantic_city' },
-        casinoTargets: [450, 700, 1100, 1500, 2000, 3000, 3750, 4500],
+        casinoTargets: [150, 200, 300, 450, 600, 800, 1200, 1500],
         getRewards: (index) => {
             return [
                 { 
                     type: 'Charm', 
                     count: 3, 
-                    categories: ['Suite', 'Global', 'Cards', 'Rank', 'Flush', 'Straight', 'Dealer', 'Hands']
+                    categories: ['New']
                 },
                 {
                     type: 'Angle',
-                    count: 1,
+                    count: 0,
                     excludeCategories: ['Triple']
                 },
                 {

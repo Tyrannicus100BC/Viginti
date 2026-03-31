@@ -10,6 +10,7 @@ interface PhysicsPotProps {
   onItemArrived?: (value: number) => void;
   labelPrefix?: string; // '$' or 'x'
   labelId?: string;
+  forceHide?: boolean;
 }
 
 export const PhysicsPot: React.FC<PhysicsPotProps> = ({
@@ -20,7 +21,8 @@ export const PhysicsPot: React.FC<PhysicsPotProps> = ({
   onCollectionComplete,
   onItemArrived,
   labelPrefix = '$',
-  labelId
+  labelId,
+  forceHide = false
 }) => {
 const [isPulsing, setIsPulsing] = useState(false);
   const prevValueRef = useRef(totalValue);
@@ -51,13 +53,16 @@ const [isPulsing, setIsPulsing] = useState(false);
     }
   }, [isCollecting, totalValue, onItemArrived, onCollectionComplete]);
 
-  const isEmpty = totalValue === 0 && !isCollecting;
+  const isEssentiallyEmpty = variant === 'multiplier' 
+    ? (totalValue <= 1)
+    : (totalValue === 0);
+  const isEmpty = forceHide || isEssentiallyEmpty;
 
   return (
     <div 
       className={`${styles.container} ${isEmpty ? styles.empty : ''}`}
       style={{
-        transition: isCollecting ? 'none' : 'transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)'
+        transition: isCollecting ? 'opacity 0.8s ease' : 'transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.8s ease'
       }}
     >
       <div 

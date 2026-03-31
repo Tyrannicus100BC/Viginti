@@ -319,7 +319,7 @@ export const CasinoWinScreen: React.FC = () => {
                 </div>
                 {sequenceComplete && (
                     <div className={styles.actionButtonDock}>
-                        <button className={appStyles.nextRoundButton} onClick={transitionToShop}>
+                        <button className={appStyles.nextDealButton} onClick={transitionToShop}>
                             VISIT GIFT SHOP
                         </button>
                     </div>

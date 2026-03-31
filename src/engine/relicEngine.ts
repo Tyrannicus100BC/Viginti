@@ -241,6 +241,7 @@ export function executeOnScoreRow(
     criterionId: string,
     score: HandScore,
     runningSummary: { chips: number; mult: number },
+    categoryCounts?: Record<string, number>,
 ): RelicHookResult {
     const events: GameEvent[] = [];
     const inv = inventory.map(i => ({ ...i, state: cloneRelicState(i.state) }));
@@ -255,6 +256,7 @@ export function executeOnScoreRow(
             inventory: inv,
             criterionId,
             score,
+            categoryCounts,
             highlightRelic: async (relicId: string, options?: any) => {
                 events.push({ type: 'relic_activated', relicId, description: `${hook.config.name} scored` });
                 if (options?.trigger) {
