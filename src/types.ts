@@ -52,6 +52,7 @@ export interface ScoringDetail {
   chips: number; // Total chips from this criterion
   multiplier: number; // Total multiplier from this criterion
   cardIds?: string[]; // IDs of cards that contributed to this criterion
+  sourceRelicId?: string; // ID of the relic that triggered this, used for UI highlights
   matches?: ScoringMatch[];
 }
 

@@ -173,7 +173,8 @@ const evaluateStandardRelic = (score: HandScore, context: HandContext, type: 'ra
              count: 1,
              chips: chips,
              multiplier: mult,
-             cardIds: bestGroup.map(c => c.id)
+             cardIds: bestGroup.map(c => c.id),
+             sourceRelicId: config?.id
          }];
          
          const totalChips = newCriteria.reduce((s, c) => s + c.chips, 0);
@@ -251,7 +252,8 @@ const createSuitBonusHook = (suit: string) => ({
                 count: 1,
                 chips: count * relicState.bonus_chips,
                 multiplier: 0,
-                cardIds: matchingCards.map(c => c.id)
+                cardIds: matchingCards.map(c => c.id),
+                sourceRelicId: relicId
             }];
 
             const totalChips = newCriteria.reduce((s, c) => s + c.chips, 0);
@@ -259,12 +261,6 @@ const createSuitBonusHook = (suit: string) => ({
             return { ...score, criteria: newCriteria, totalChips, totalMultiplier: totalMult, finalScore: Math.floor(totalChips * totalMult) };
         }
         return score;
-    },
-    onScoreRow: async (context: ScoreRowContext, _relicState: any, config: any) => {
-        const relicId = config?.id || `suit_${suit}`;
-        if (context.criterionId === relicId) {
-            await context.highlightRelic(relicId, { preDelay: 200 });
-        }
     }
 });
 
@@ -399,7 +395,8 @@ export const Hooks = {
                     count: 1,
                     chips: cardChips + (def?.chips ?? 50),
                     multiplier: def?.mult ?? 0,
-                    cardIds: context.handCards.map(c => c.id)
+                    cardIds: context.handCards.map(c => c.id),
+                    sourceRelicId: config?.id || 'viginti'
                 }, ...score.criteria];
                 const totalChips = newCriteria.reduce((s, c) => s + c.chips, 0);
                 const totalMult = newCriteria.reduce((s, c) => s + c.multiplier, 0);
@@ -413,7 +410,8 @@ export const Hooks = {
                     count: 1,
                     chips: cardChips + (def?.chips ?? 10),
                     multiplier: def?.mult ?? 0,
-                    cardIds: context.handCards.map(c => c.id)
+                    cardIds: context.handCards.map(c => c.id),
+                    sourceRelicId: config?.id || 'viginti'
                 }, ...score.criteria];
                 const totalChips = newCriteria.reduce((s, c) => s + c.chips, 0);
                 const totalMult = newCriteria.reduce((s, c) => s + c.multiplier, 0);
@@ -423,7 +421,7 @@ export const Hooks = {
         })
     },
     standard_relic: {
-        onEvaluateHandScore: withPriority(-5, (score: HandScore, context: HandContext, _relicState: any, _config: any) => {
+        onEvaluateHandScore: withPriority(-5, (score: HandScore, context: HandContext, _relicState: any, config: any) => {
             const newCriteria = [...score.criteria];
             const cards = context.handCards.filter(c => !c.type || c.type === 'standard');
             let added = false;
@@ -442,7 +440,8 @@ export const Hooks = {
                                 count: 1,
                                 chips: pChips,
                                 multiplier: 0,
-                                cardIds: [group[i].id, group[j].id]
+                                cardIds: [group[i].id, group[j].id],
+                                sourceRelicId: config?.id || 'standard'
                             });
                             added = true;
                         }
@@ -465,7 +464,8 @@ export const Hooks = {
                         count: 1,
                         chips: fChips,
                         multiplier: 0,
-                        cardIds: group.map(c => c.id)
+                        cardIds: group.map(c => c.id),
+                        sourceRelicId: config?.id || 'standard'
                     });
                     added = true;
                 }
@@ -514,7 +514,8 @@ export const Hooks = {
                     count: 1,
                     chips: sChips,
                     multiplier: 0,
-                    cardIds: run.map(c => c.id)
+                    cardIds: run.map(c => c.id),
+                    sourceRelicId: config?.id || 'standard'
                 });
                 added = true;
             });
@@ -530,13 +531,7 @@ export const Hooks = {
                 totalMultiplier: totalMult,
                 finalScore: Math.floor(totalChips * totalMult)
             };
-        }),
-        onScoreRow: async (context: ScoreRowContext, _relicState: any, config: any) => {
-            const id = context.criterionId;
-            if (id === 'pair' || id === 'flush' || id === 'straight') {
-                await context.highlightRelic(config?.id || 'standard', { preDelay: 200 });
-            }
-        }
+        })
     },
     double_down_relic: {
         onEvaluateHandScore: (score: HandScore, context: HandContext, _relicState: any, config: any) => {
@@ -550,18 +545,14 @@ export const Hooks = {
                     count: 1,
                     chips: cardChips,
                     multiplier: config?.handType?.mult ?? 1,
-                    cardIds: ddCard ? [ddCard.id] : []
+                    cardIds: ddCard ? [ddCard.id] : [],
+                    sourceRelicId: config?.id || 'double_down'
                 }];
                 const totalChips = newCriteria.reduce((s, c) => s + c.chips, 0);
                 const totalMult = newCriteria.reduce((s, c) => s + c.multiplier, 0);
                 return { ...score, criteria: newCriteria, totalChips, totalMultiplier: totalMult, finalScore: Math.floor(totalChips * totalMult) };
             }
             return score;
-        },
-        onScoreRow: async (context: ScoreRowContext, _relicState: any) => {
-            if (context.criterionId === 'double_down') {
-                await context.highlightRelic('double_down', { preDelay: 200 });
-            }
         }
     },
 
@@ -1057,23 +1048,7 @@ export const Hooks = {
             }
         }
     },
-    spyglass_13: {
-        onDealCompletion: async (_context: DealCompletionContext, relicState: any, _config: any) => {
-             relicState.used_this_deal = false;
-        },
-        onCheckCardPlace: (context: any, relicState: any, _config: any) => {
-             // Wait if we are at 13 and haven't used spyglass yet
-             return !relicState.used_this_deal && context.blackjackValue === 13;
-        },
-        onCardPlaced: async (context: any, relicState: any, _config: any) => {
-            if (!relicState.used_this_deal && context.blackjackValue === 13) {
-                 await context.highlightRelic('spyglass', {
-                     trigger: () => {
-                         context.revealDealerHiddenCard();
-                         relicState.used_this_deal = true;
-                     }
-                 });
-            }
-        }
+    spyglass_always: {
+        getDealerRevealed: (_val: boolean, _context: any, _relicState: any) => true
     }
 }

@@ -5,12 +5,12 @@ import styles from './CasinoWinScreen.module.css';
 import appStyles from '../App.module.css';
 import { sfxEngine } from '../utils/sfxEngine';
 
-const INTRO_DELAY_MS = 1500;
+const INTRO_DELAY_MS = 500;
 const ROW_REVEAL_MS = 500;
 const SLAM_MS = 220;
 const BETWEEN_ROW_MS = 700;
-const TOTAL_HUD_CREDIT_DELAY_MS = 500;
-const END_HOLD_MS = 1400;
+const TOTAL_HUD_CREDIT_DELAY_MS = 0;
+const END_HOLD_MS = 0;
 const FAST_FORWARD_SPEED = 4;
 const FAST_FORWARD_AUTOTRANSITION_DELAY_MS = 500;
 const EXIT_FADE_MS = 200;

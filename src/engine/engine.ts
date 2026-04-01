@@ -606,7 +606,11 @@ function processDeal(state: GameState, forceContinue?: boolean): ActionResult {
     // Deal dealer cards
     const dealerCard1 = drawCardFromProbabilities(state.deckProbabilities, rng);
     const dealerCard2 = drawCardFromProbabilities(state.deckProbabilities, rng);
-    dealerCard1.isFaceUp = false;
+    
+    // Check if player has spyglass
+    const isDealerRevealed = executeValueHook('getDealerRevealed', false, { inventory: state.inventory as RelicInstance[] });
+    
+    dealerCard1.isFaceUp = isDealerRevealed;
     dealerCard1.origin = 'deck';
     dealerCard2.isFaceUp = true;
     dealerCard2.origin = 'deck';
@@ -641,7 +645,7 @@ function processDeal(state: GameState, forceContinue?: boolean): ActionResult {
         dealer: {
             cards: dealerCards,
             isRevealed: false,
-            blackjackValue: getBlackjackScore([dealerCard2], state.inventory as RelicInstance[], true),
+            blackjackValue: getBlackjackScore(dealerCards.filter(c => c.isFaceUp), state.inventory as RelicInstance[], true),
         },
         drawnCards: [],
         selectedDrawIndex: null,
@@ -1262,6 +1266,7 @@ function processScoreRound(state: GameState): ActionResult {
     events.push({ type: 'phase_changed', from: 'scoring', to: nextPhase });
 
     const rng = new SeededRNG(state.rngState);
+    const hasWin = scoredHands.some(h => h.outcome === 'win');
     return {
         nextState: {
             ...state,
@@ -1271,6 +1276,7 @@ function processScoreRound(state: GameState): ActionResult {
             runningSummary,
             inventory: currentInv,
             rngState: rng.getState(),
+            ...(hasWin ? { dealer: { cards: [], isRevealed: false, blackjackValue: 0 } } : {}),
         },
         events,
     };

@@ -102,27 +102,24 @@ describe('RelicEngine', () => {
         });
 
         it('does not mutate original inventory', () => {
-            const inv: RelicInstance[] = [{ id: 'spyglass', state: { used_this_deal: false } }];
+            const inv: RelicInstance[] = [{ id: 'safety_net', state: { armed: false } }];
             const originalState = JSON.parse(JSON.stringify(inv[0].state));
 
-            // 13 triggers spyglass
+            // 20 triggers safety_net
             executeOnCardPlaced(
-                inv, 0, [makeCard('3'), makeCard('10')], makeCard('10'), 13, [makeCard('K')]
+                inv, 0, [makeCard('10'), makeCard('10')], makeCard('10'), 20, [makeCard('K')]
             );
 
             // Original should be unchanged
             expect(inv[0].state).toEqual(originalState);
         });
+    });
 
-        it('spyglass emits reveal event at blackjack value 13', () => {
-            const inv: RelicInstance[] = [{ id: 'spyglass', state: { used_this_deal: false } }];
-            const dealerHidden = makeCard('K', 'spades', { isFaceUp: false });
-            const result = executeOnCardPlaced(
-                inv, 0, [makeCard('3'), makeCard('10')], makeCard('10'), 13, [dealerHidden]
-            );
-
-            const revealEvents = result.events.filter(e => e.type === 'dealer_card_revealed');
-            expect(revealEvents.length).toBeGreaterThanOrEqual(1);
+    describe('getDealerRevealed hook', () => {
+        it('spyglass reveals dealer card', () => {
+            const inv: RelicInstance[] = [{ id: 'spyglass', state: {} }];
+            const result = executeValueHook('getDealerRevealed', false, { inventory: inv });
+            expect(result).toBe(true);
         });
     });
 

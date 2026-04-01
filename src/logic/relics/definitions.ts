@@ -10,10 +10,10 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
         rarity: 'Uncommon',
         categories: ['Angle', 'Win', 'HandType'],
         description: 'Winning hands earn {win.score}\nExactly 21 earn {viginti.score}',
-        handType: { id: 'viginti', name: 'Viginti', chips: 50, mult: 0, order: 0 },
+        handType: { id: 'viginti', name: 'Viginti', chips: 25, mult: 0, order: 0 },
         extraHandTypes: {
             'win': { id: 'win', name: 'Win', chips: 10, mult: 0, order: 1 },
-            'viginti': { id: 'viginti', name: 'Viginti', chips: 50, mult: 0, order: 0 }
+            'viginti': { id: 'viginti', name: 'Viginti', chips: 25, mult: 0, order: 0 }
         },
         hooks: Hooks.viginti_relic,
         icon: '🏛️'
@@ -586,9 +586,8 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
         name: 'Spyglass',
         rarity: 'Common',
         categories: ['Charm', 'Meta'],
-        description: 'If a hand reaches 13, reveal the Dealer\'s hidden card',
-        properties: { used_this_round: false },
-        hooks: Hooks.spyglass_13,
+        description: 'The Dealer\'s hidden card is always revealed',
+        hooks: Hooks.spyglass_always,
         icon: '🔭'
     }
 ];

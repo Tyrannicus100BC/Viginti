@@ -397,6 +397,7 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
                 };
             },
             activeHighlightIds: criterion.cardIds || [],
+            activeRelicId: criterion.sourceRelicId || null,
         });
 
         // Track row index for next step
@@ -472,15 +473,16 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
         if (event.type !== 'scoring_hand_complete') return;
         
         // Wait while hand is still focused so user can see the final state
-        await wait(500, config);
+        await wait(200, config);
 
         config.updateUI({ 
             activeHighlightIds: null,
+            activeRelicId: null,
             scoringHandIndex: -1
         });
 
         // Wait after shrinking before moving to the next hand
-        await wait(500, config);
+        await wait(200, config);
     },
 
     async summary_update(event, config) {
@@ -501,7 +503,7 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
             },
         });
         resetScoreRowPitch();
-        await wait(400, config);
+        await wait(100, config);
     },
 
     async chip_collection(event, config) {
@@ -511,8 +513,9 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
             isCollectingChips: true,
             totalScore: event.newTotalScore 
         });
-        await wait(1000, config);
-        config.updateUI({ isCollectingChips: false });
+        void wait(1000, config).then(() => {
+            config.updateUI({ isCollectingChips: false });
+        });
     },
 
     // === Charge Changes ===
@@ -530,7 +533,18 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
 
         // Reset some UI state on phase transitions
         if (event.to === 'entering_casino') {
-            config.updateUI({ dealerVisible: true });
+            config.updateUI({
+                dealerVisible: true,
+                playerHands: Array.from({ length: 3 }, (_, i) => ({
+                    id: i,
+                    cards: [],
+                    isHeld: false,
+                    isBust: false,
+                    blackjackValue: 0,
+                })),
+                dealer: { cards: [], isRevealed: false, blackjackValue: 0 },
+                drawnCards: []
+            });
         }
         if (event.to === 'playing' || event.to === 'scoring') {
             config.updateUI({
@@ -559,8 +573,9 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
         if (event.type !== 'target_reached') return;
         config.sfx?.play('confetti');
         config.updateUI({ isShaking: true });
-        await wait(1000, config);
-        config.updateUI({ isShaking: false });
+        void wait(1000, config).then(() => {
+            config.updateUI({ isShaking: false });
+        });
     },
 
     async game_over(event, config) {
@@ -642,7 +657,6 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
     async casino_cleared(event, config) {
         if (event.type !== 'casino_cleared') return;
         config.sfx?.play('confetti');
-        await wait(500, config);
     },
 
     async payout_started(event, config) {
@@ -650,7 +664,6 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
         config.updateUI({ 
             shopRewardSummary: event.rewardSummary,
         });
-        await wait(200, config);
     },
 
     async payout_step(_event, config) {

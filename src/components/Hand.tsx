@@ -82,15 +82,20 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
     }
   }, [hand.id, hand.cards.length, hand.isBust, isViginti, triggerVigintiSound]);
 
+  const phase = useGameStore(state => state.phase);
+  const prevPhase = useRef(phase);
+
   // Sync hand.cards to visualCards
   useEffect(() => {
     // If hand ID changed, hard reset (new hand slot content)
-    if (hand.id !== prevHandId.current) {
+    if (hand.id !== prevHandId.current || (phase === 'entering_casino' && prevPhase.current !== 'entering_casino')) {
         setVisualCards(hand.cards.map((c, i) => ({ card: c, isDiscarding: false, posIndex: i, hasEntered: false })));
         prevHandId.current = hand.id;
+        prevPhase.current = phase;
         discardSoundPlayedRef.current.clear();
         return;
     }
+    prevPhase.current = phase;
 
     const newlyDiscarded: string[] = [];
 
@@ -148,7 +153,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
     if (onCardDiscardSound && newlyDiscarded.length > 0) {
         newlyDiscarded.forEach(cardId => onCardDiscardSound(cardId));
     }
-  }, [hand.cards, hand.id, onCardDiscardSound]);
+  }, [hand.cards, hand.id, onCardDiscardSound, phase]);
 
   // Cleanup discarding cards
   useEffect(() => {

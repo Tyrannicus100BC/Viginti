@@ -1446,6 +1446,12 @@ export default function App() {
         };
     }, [phase]);
 
+    useEffect(() => {
+        if (phase === 'deal_over' || phase === 'init' || phase === 'gift_shop' || phase === 'victory' || phase === 'game_over') {
+            setAnimationSpeed(1);
+        }
+    }, [phase, setAnimationSpeed]);
+
     // Reset debug button state when draw area reappears
     React.useEffect(() => {
         if (isDrawAreaVisible) {
@@ -1782,7 +1788,8 @@ export default function App() {
         // Speed up animations if dealer is revealed (Dealer Turn OR Scoring Phase)
         // or during the entering_casino interstitial
         // and the round is not yet over.
-        const canSpeedUp = (dealer.isRevealed && phase !== 'deal_over') || (phase === 'entering_casino' && !overlayComplete);
+        const isDealerTurnPhase = phase === 'dealer_turn' || phase === 'resolving_outcomes' || phase === 'scoring';
+        const canSpeedUp = (dealer.isRevealed && isDealerTurnPhase) || (phase === 'entering_casino' && !overlayComplete);
 
         if (canSpeedUp && animationSpeed === 1) {
             setAnimationSpeed(4);
