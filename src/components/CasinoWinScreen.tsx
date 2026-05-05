@@ -208,9 +208,6 @@ export const CasinoWinScreen: React.FC = () => {
             if (cancelled) return;
             creditTotal();
             
-            // Signal engine for tutorial trigger
-            dispatch({ type: 'signal_animation_complete', animationId: 'total_comps_calculated' });
-
             await waitScaled(END_HOLD_MS);
             if (cancelled) return;
 

@@ -125,7 +125,7 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
     },
 
     async initial_deal_complete(_event, config) {
-        // config.updateUI({ isInitialDeal: false }); // Now handled by animation_complete signal
+        config.updateUI({ isInitialDeal: false });
         await wait(200, config);
     },
 
@@ -706,13 +706,6 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
     async tutorial_skipped(event, config) {
          if (event.type !== 'tutorial_skipped') return;
          config.updateUI({ activeTutorialId: null });
-    },
-
-    async animation_complete(event, config) {
-        if (event.type !== 'animation_complete') return;
-        if (event.animationId === 'dealer_initial_deal_complete') {
-            config.updateUI({ isInitialDeal: false });
-        }
     },
 };
 

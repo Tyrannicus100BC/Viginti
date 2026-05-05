@@ -96,7 +96,4 @@ export type GameEvent =
     // === Tutorial ===
     | { type: 'tutorial_triggered'; stepId: string; config: TutorialDisplayConfig }
     | { type: 'tutorial_completed'; stepId: string; scope: TutorialScope }
-    | { type: 'tutorial_skipped'; stepId: string }
-    
-    // === System ===
-    | { type: 'animation_complete'; animationId: string };
+    | { type: 'tutorial_skipped'; stepId: string };

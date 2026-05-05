@@ -117,12 +117,6 @@ function processCoreAction(state: GameState, action: PlayerAction): ActionResult
             return processScoreRound(state);
         case 'complete_deal_early':
             return processCompleteDealEarly(state);
-        case 'signal_animation_complete':
-            return {
-                nextState: state,
-                events: [{ type: 'animation_complete', animationId: action.animationId }]
-            };
-        // Table actions
         case 'activate_table_action':
             return processActivateTableAction(state, action.relicId);
         case 'cancel_table_action':

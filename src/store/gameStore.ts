@@ -116,11 +116,6 @@ export const useGameStore = <T>(selector?: (state: any) => T): any => {
         isTutorialInputLocked: () => gameState.tutorial?.activeStepId ? true : false, // Approx
         onTutorialContinue: () => {}, // Legacy callback registration - not supported in new engine
         
-        // Signal event mapping
-        signalTotalWinningsAnimationComplete: () => dispatch({ type: 'signal_animation_complete', animationId: 'total_winnings_shown' }),
-        onInitialDealAnimationsComplete: () => dispatch({ type: 'signal_animation_complete', animationId: 'dealer_initial_deal_complete' }),
-
-
         setDrawTutorialReady: (_ready: boolean) => {}, // No-op? Or dispatch action? 
                                                       // 'mark_draw_tutorial_ready' was an action in legacy.
                                                       // If tutorial needs it, we might need an action.

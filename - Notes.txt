@@ -1,0 +1,46 @@
+Played Viginti... a lot today. It's very addicting! I ended up getting to Casino 8 on a god-run.. (But I cheated and abused bugs to get there)
+
+Have quite a bit of feedback. Probably too much.
+
+Bones feel super fun so far. There's def something here, but in my mind there are still some iterations between you and greatness before you're off to the races.
+
+The #1 thing to focus on is the game's relationship with luck - because it isn't in the right place yet.
+
+You mentioned wanting to be somewhere between Bolatro and Cloverpit on the RNG factor, which makes sense. But right now, you have dramatically more RNG than either of them due to their being randomness both on the player hand side, as well as the oppositions hand.
+
+Imagine if in Balatro, you could put together a great hand, and then there was effectively a coin-flip at the end of each hand with a huge chance of just deleting massive chunks of your score.. it wouldn't feel great, and that's effectively what is happening in Viginti. And if the opposition gets 2-3 high scoring hands within a Casino, you're run is bricked, even if you played perfectly. Since this is blackjack, scores of 20 or 21 are quite common, so this is a pretty common occurrence. Right now, my wins/losses are more determined by whether or not the opposition gets 2+ good hands within a casino more so than my choices, which doesn't feel very good.
+
+Neither Cloverpit nor Bolatro have this oppositional RNG factor, likely for this reason. Yet the decisionmaking process it forces is pretty key to what you're building. The risk/reward of multiple smaller but higher scoring hands vs bigger winning hands. So while it would be easiest to remove it, I'd instead focus on how to make it feel less of a random win/lose coin flip and more of an integrated mechanic the player has to manage.
+
+Spitballing ideas:
+- Enemy hand is static per casino (IE. first casino always 16)
+	Maybe only later casinos add more rng
+- Give more ways for player to discover and/or manipulate opponent hand
+	- Many of my good runs abused the charm which let me swap my card with oppositions. B/c the AI always sits on 17/18, giving them a 7 or 8 near guarantees a victory
+- Minimize punishment of losing a hand
+	- Maybe you still get the score of a losing hand, but just don't get the 1x win multiplier
+	- This would let you still build up a big $$ value in one hand, while the others are more focused on winning for the x multipliers
+- More hands per casino
+	- doesn't solve the problem, but gives more time for the opponent's hands to average out a bit. 3 feels pretty low, it's lower than both balatro and Cloverpit start on low normal difficulties
+
+
+Side note, some bugs I've found. I was only able to consistently beat casino 3 due to abusing the heck out of some of these:
+- Key Charm gives me a bonus 2x mult per hand on the last deal instead of just for the entire hand.
+- Deleting cards for free: As long as you can pay for the first deletion, you can continue to delete cards even if you do not have to funds to do so.
+- Interactions between multiple cards that have multiple potential values sometimes don't calculate properly. For example if you have the Jack is 10 or 5 joker + an ace in one hand, things don't always behave properly
+- Your deck reshuffles on casino start, not casino end.. which I think is backwards? It means that while you're in the shop, you can only edit part of your hand, which seems random/arbitrary
+
+
+
+Other UX stuff:
+- UX should be improved around cards w/ multiple values so I don't have to live do math. for example would be great if an Ace+5 would say 16/6 below it for every possible legal value. If you have multiple Aces, or a jack w/ the Joker charm, just list all non-bust values
+- Hand/Round/Draw/Casino nomenclature feels a bit janky. Bolatro did a great job fictionalizing / iconographizing this, so I'd take some inspiration from them here
+- Card upgrading/deleting popup is pretty rough/confusing
+
+Tuning: Super low level, so probaby too early to worry about this stuff yet
+- victory $$ seems way too low. Unless you save money and gain interest, you really don't earn enough to play with the fun toys
+- Hand upgrading/deleting: Almost too much choice here. I'd consider doing something closer to balatro where you are given a more limited decision space at any given time. Right now, you're going to almost always edit your deck the same way at the start of each run because you can, vs having to react in a more rogue-like way with the more limited decision space you're given. It's also way too cheap to get insanely high value. An extra 1x multiplier only 1$ is really cheap, given the impact it has on your score... Way better value than most jokers
+	- b/c of these 2 things, my strat is generally to get 1-2 jokers then pump all of my money into deck editing because that's what is mathematically strongest, but imo better design is to get a palyer to interact w/ way more jokers and spend more effort changing the rules
+- Viginti isn't rewarded enough, and due to it usually happening from an ace+face card, usually is a bad thing to get one
+	- Consider upping the multiplier to make it a better risk/reward decision to go for it.
+

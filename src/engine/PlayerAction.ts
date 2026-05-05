@@ -50,5 +50,4 @@ export type PlayerAction =
     | { type: 'debug_draw_card'; cardId: string }
 
     // === Tutorial & Animations ===
-    | { type: 'acknowledge_tutorial'; stepId: string }
-    | { type: 'signal_animation_complete'; animationId: string };
+    | { type: 'acknowledge_tutorial'; stepId: string };

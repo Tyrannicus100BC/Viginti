@@ -467,7 +467,7 @@ export async function runGame(
             process.stdout.write(`  → ${desc}\n`);
             for (const event of result.events) {
                 // Filter out non-representative events for logs
-                if (event.type === 'animation_complete' || event.type === 'initial_deal_complete' || 
+                if (event.type === 'initial_deal_complete' || 
                     event.type === 'draw_complete' || event.type === 'placement_complete' ||
                     event.type === 'summary_update') continue;
                 process.stdout.write(`    ⚡ ${formatEvent(event)}\n`);

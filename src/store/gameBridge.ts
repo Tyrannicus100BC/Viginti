@@ -56,8 +56,6 @@ function isActionEquivalent(a: PlayerAction, b: PlayerAction): boolean {
             return a.cardId === b.cardId;
         case 'acknowledge_tutorial':
             return a.stepId === b.stepId;
-        case 'signal_animation_complete':
-            return a.animationId === b.animationId;
         default:
             // For simple types like 'deal', 'draw', 'stand', 'cancel_table_action', etc.
             return true;
@@ -296,7 +294,6 @@ export const useGameBridge = create<GameBridgeState>((set, get) => {
                     // This handles the "interpretation of the click" problem.
                     const valid = getValidActions(gameState);
                     const isInfra = [
-                        'signal_animation_complete', 
                         'debug_win', 
                         'debug_undo',
                         'debug_victory',

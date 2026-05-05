@@ -276,7 +276,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
             isAtlanticCity(state) &&
             state.phase === 'casino_payout' && 
             state.deal === 1 &&
-            events.some(e => e.type === 'animation_complete' && e.animationId === 'total_comps_calculated'), 
+            events.some(e => e.type === 'payout_complete'), 
     },
     {
         id: 'spend_comps',
