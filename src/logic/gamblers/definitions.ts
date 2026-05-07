@@ -29,22 +29,29 @@ export const GAMBLER_DEFINITIONS: GamblerDefinition[] = [
     {
         id: 'newbie',
         name: 'The Newbie',
-        description: 'Fresh off the bus. Starts with standard distribution and only the Viginti angle.',
+        description: 'Fresh off the bus. Starts with Victory, Failure, Pairs, Flush, and Straight angles.',
         unlockCondition: { type: 'always' },
         getInitialProbabilities: () => ({ ...BASE_PROBS }),
         getInitialRelics: () => [
-            getRelicInstance('viginti')
+            getRelicInstance('victory'),
+            getRelicInstance('failure'),
+            getRelicInstance('pairs'),
+            getRelicInstance('flush'),
+            getRelicInstance('straight')
         ]
     },
     {
         id: 'default',
         name: 'The Tourist',
-        description: 'Just here for a good time. Starts with standard distribution and the Standard scoring angle.',
+        description: 'Just here for a good time. Starts with Victory, Failure, Pairs, Flush, and Straight angles.',
         unlockCondition: { type: 'beat_city', cityId: 'atlantic_city' },
         getInitialProbabilities: () => ({ ...BASE_PROBS }),
         getInitialRelics: () => [
-            getRelicInstance('viginti'),
-            getRelicInstance('standard')
+            getRelicInstance('victory'),
+            getRelicInstance('failure'),
+            getRelicInstance('pairs'),
+            getRelicInstance('flush'),
+            getRelicInstance('straight')
         ]
     },
     {
@@ -105,7 +112,7 @@ export const GAMBLER_DEFINITIONS: GamblerDefinition[] = [
                 getRelicInstance('double_down'),
                 getRelicInstance('royalty'),
 
-                getRelicInstance('viginti')
+                getRelicInstance('victory')
             ];
 
             const allRelics = RelicManager.getAllRelics();

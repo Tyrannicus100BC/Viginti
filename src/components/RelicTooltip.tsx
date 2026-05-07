@@ -84,11 +84,13 @@ export const RelicTooltip: React.FC<RelicTooltipProps> = ({
         // 3. [...] (bracketed text for hand highlighting)
         // 4. x followed by digits (multipliers)
         // 5. $ or + followed by digits, or digits followed by "chips" (chips values)
-        const parts = text.split(/(<[^>]+>|\{[^}]+\}|\[.*?\]|x\d+(?:\.\d+)?|[₵\$\+]{1,2}\d+(?:\s*chips?)?|\d+\s*chips?)/gi);
+        const parts = text.split(/(<[^>]+>|\{[^}]+\}|\[.*?\]|x\d+(?:\.\d+)?|-?\$-?\d+(?:\s*chips?)?|[₵\$\+]{1,2}\d+(?:\s*chips?)?|-?\d+\s*chips?)/gi);
         
         return parts.map((part, i) => {
             if (part.startsWith('<') && part.endsWith('>')) {
-                return <span key={i} className={styles.chipsValue}>{part.slice(1, -1)}</span>;
+                const value = part.slice(1, -1);
+                const isNegative = value.trim().startsWith('-') || value.trim().startsWith('$-');
+                return <span key={i} className={isNegative ? styles.negativeValue : styles.chipsValue}>{value}</span>;
             }
             if (part.startsWith('{') && part.endsWith('}')) {
                 return <span key={i} className={styles.multValue}>{part.slice(1, -1)}</span>;
@@ -103,7 +105,8 @@ export const RelicTooltip: React.FC<RelicTooltipProps> = ({
                 /^[₵\$\+\d]/i.test(part.trim()) && (part.trim().startsWith('₵') || part.trim().startsWith('$') || part.trim().startsWith('+') || part.toLowerCase().includes('chips'))
             ) {
                 const isComps = part.trim().includes('₵');
-                return <span key={i} className={isComps ? styles.compsValue : styles.chipsValue}>{part}</span>;
+                const isNegative = part.trim().startsWith('-') || part.trim().startsWith('$-');
+                return <span key={i} className={isNegative ? styles.negativeValue : (isComps ? styles.compsValue : styles.chipsValue)}>{part}</span>;
             }
             if (part.includes('\n')) {
                 return (

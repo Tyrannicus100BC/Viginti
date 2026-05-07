@@ -177,6 +177,7 @@ export type HandContext = GameContext & {
     isDoubled: boolean;
     handsRemaining: number;
     blackjackValue: number;
+    outcome?: 'win' | 'loss' | 'push' | null;
     categoryCounts?: Record<string, number>;
 }
 

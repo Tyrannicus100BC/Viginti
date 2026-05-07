@@ -344,6 +344,10 @@
     color: #ffd700;
 }
 
+.itemChips.isNegative {
+    color: #ff4444;
+}
+
 .itemChips span {
     display: inline-block;
     opacity: 0;

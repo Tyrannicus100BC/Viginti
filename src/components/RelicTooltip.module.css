@@ -148,6 +148,16 @@
     white-space: normal;
 }
 
+.negativeValue {
+    color: #ff4444;
+    font-weight: bold;
+    white-space: nowrap;
+}
+
+.flexible .negativeValue {
+    white-space: normal;
+}
+
 .multValue {
     color: #f1c40f;
     font-weight: bold;

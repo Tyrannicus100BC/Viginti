@@ -35,7 +35,7 @@ export const RelicStore: React.FC<RelicStoreProps> = ({ onClose, filterCategory 
     }, {} as Record<string, typeof allRelics>);
 
     // Sort categories
-    const categoryOrder = ['Win', 'Rank', 'Flush', 'Straight'];
+    const categoryOrder = ['Win', 'Loss', 'Rank', 'Flush', 'Straight'];
     const categories = Object.keys(groupedRelics).sort((a, b) => {
         const indexA = categoryOrder.indexOf(a);
         const indexB = categoryOrder.indexOf(b);

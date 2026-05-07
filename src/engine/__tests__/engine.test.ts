@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { processAction, createInitialState, getValidActions } from '../engine';
 import type { GameState } from '../GameState';
 import type { PlayerAction } from '../PlayerAction';
+import type { Card } from '../../types';
 import { TUTORIAL_STEPS } from '../tutorial/definitions';
 
 describe('Game Engine', () => {
@@ -30,6 +31,10 @@ describe('Game Engine', () => {
     function drawCards(state: GameState): GameState {
         const { nextState } = processAction(state, { type: 'draw' });
         return nextState;
+    }
+
+    function testCard(id: string, rank: Card['rank'], suit: Card['suit']): Card {
+        return { id, rank, suit, type: 'standard', isFaceUp: true };
     }
 
     // ─── createInitialState ─────────────────────────────
@@ -243,7 +248,16 @@ describe('Game Engine', () => {
             // Place a card to have a real hand value, then we can stand
             const drawn = drawCards(dealHand(startGame(seed)));
             const { nextState } = processAction(drawn, { type: 'place_card', handIndex: 1 });
-            return nextState;
+            return {
+                ...nextState,
+                inventory: [
+                    { id: 'victory', state: {} },
+                    { id: 'pairs', state: {} },
+                    { id: 'flush', state: {} },
+                    { id: 'straight', state: {} },
+                    { id: 'failure', state: {} }
+                ]
+            };
         }
 
         // Helper to run the full stand sequence
@@ -317,6 +331,81 @@ describe('Game Engine', () => {
 
             // Score should be >= 0 (could be 0 if all losses)
             expect(finalState.totalScore).toBeGreaterThanOrEqual(0);
+        });
+
+        it('scores non-winning hands without awarding win or viginti rows', () => {
+            const base = startGame();
+            const losingPair = [
+                testCard('loss_7h', '7', 'hearts'),
+                testCard('loss_7c', '7', 'clubs'),
+                { id: 'loss_chip', rank: 'none', suit: 'diamonds', type: 'chip', chips: 5, isFaceUp: true } as Card
+            ];
+            const bustedFlush = [
+                testCard('bust_ks', 'K', 'spades'),
+                testCard('bust_qs', 'Q', 'spades'),
+                testCard('bust_5s', '5', 'spades')
+            ];
+            const winningViginti = [
+                testCard('win_ah', 'A', 'hearts'),
+                testCard('win_kd', 'K', 'diamonds')
+            ];
+            const scoringState: GameState = {
+                ...base,
+                phase: 'scoring',
+                runningSummary: { chips: 0, mult: 1 },
+                inventory: [
+                    { id: 'victory', state: {} },
+                    { id: 'pairs', state: {} },
+                    { id: 'flush', state: {} },
+                    { id: 'failure', state: {} }
+                ],
+                dealer: {
+                    cards: [testCard('dealer_10h', '10', 'hearts'), testCard('dealer_9c', '9', 'clubs')],
+                    isRevealed: true,
+                    blackjackValue: 19
+                },
+                playerHands: [
+                    {
+                        id: 0,
+                        cards: losingPair,
+                        isHeld: true,
+                        isBust: false,
+                        blackjackValue: 14,
+                        outcome: 'loss',
+                        resultRevealed: true
+                    },
+                    {
+                        id: 1,
+                        cards: bustedFlush,
+                        isHeld: true,
+                        isBust: true,
+                        blackjackValue: 25,
+                        outcome: 'loss',
+                        resultRevealed: true
+                    },
+                    {
+                        id: 2,
+                        cards: winningViginti,
+                        isHeld: true,
+                        isBust: false,
+                        blackjackValue: 21,
+                        outcome: 'win',
+                        resultRevealed: true
+                    }
+                ]
+            };
+
+            const { nextState, events } = processAction(scoringState, { type: 'score_round' });
+
+            expect(events.filter(e => e.type === 'scoring_hand_focus').map(e => e.handIndex)).toEqual([0, 1, 2]);
+            expect(nextState.playerHands[0].finalScore?.criteria.some(c => c.id === 'pair')).toBe(true);
+            expect(nextState.playerHands[0].finalScore?.criteria.some(c => c.id === 'special_cards')).toBe(true);
+            expect(nextState.playerHands[0].finalScore?.criteria.some(c => c.id === 'loss')).toBe(true);
+            expect(nextState.playerHands[1].finalScore?.criteria.some(c => c.id === 'flush')).toBe(true);
+            expect(nextState.playerHands[1].finalScore?.criteria.some(c => c.id === 'bust')).toBe(true);
+            expect(nextState.playerHands[0].finalScore?.criteria.some(c => c.id === 'win' || c.id === 'viginti')).toBe(false);
+            expect(nextState.playerHands[1].finalScore?.criteria.some(c => c.id === 'win' || c.id === 'viginti')).toBe(false);
+            expect(nextState.playerHands[2].finalScore?.criteria.some(c => c.id === 'viginti')).toBe(true);
         });
     });
 

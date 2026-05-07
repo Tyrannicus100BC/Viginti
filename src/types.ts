@@ -27,6 +27,8 @@ export interface ScoringMatch {
 export type ScoringCriterionId =
   | 'win'
   | 'viginti'
+  | 'loss'
+  | 'bust'
   | 'pair'
   | 'flush'
   | 'straight'

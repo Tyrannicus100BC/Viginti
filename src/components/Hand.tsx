@@ -329,6 +329,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
     hand.cards.length > 0;
   const overlayFanDepthPx = Math.max(0, visualCards.length - 1);
   const useOverlayScrim = isDealerHand && showOverlay;
+  const formatDollarValue = (value: number) => value < 0 ? `-$${Math.abs(value)}` : `$${value}`;
 
   return (
     <div
@@ -345,7 +346,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
       id={id}
     >
       {/* Scoring List */}
-      {hand.outcome === 'win' && (
+      {scoringCriteria.length > 0 && (
         <div
           id={isScoringFocus ? 'score-rows-zone' : undefined}
           className={styles.scoringList}
@@ -359,9 +360,9 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
                 {item.name}
                 {(scoringRowValues[idx]?.count ?? 0) > 1 && <span className={styles.itemCount}>x{scoringRowValues[idx].count}</span>}
               </div>
-              <div className={`${styles.itemChips} ${item.id === 'viginti' ? styles.isViginti : ''}`}>
+              <div className={`${styles.itemChips} ${item.id === 'viginti' ? styles.isViginti : ''} ${(scoringRowValues[idx]?.chips ?? 0) < 0 ? styles.isNegative : ''}`}>
                 <span className={(scoringRowValues[idx]?.chips !== undefined && visibleScoringRowIndices.length > idx) ? styles.visible : ''}>
-                  {(scoringRowValues[idx]?.chips ?? 0) === 0 ? '-' : `$${scoringRowValues[idx]?.chips}`}
+                  {(scoringRowValues[idx]?.chips ?? 0) === 0 ? '-' : formatDollarValue(scoringRowValues[idx]?.chips ?? 0)}
                 </span>
               </div>
               <div className={styles.itemMult}>

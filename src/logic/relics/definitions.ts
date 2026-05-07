@@ -6,11 +6,12 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     // Angles
 
     {
-        name: 'Viginti',
+        id: 'victory',
+        name: 'Victory',
         rarity: 'Uncommon',
         categories: ['Angle', 'Win', 'HandType'],
         description: 'Winning hands earn {win.score}\nExactly 21 earn {viginti.score}',
-        handType: { id: 'viginti', name: 'Viginti', chips: 25, mult: 0, order: 0 },
+        handType: { id: 'viginti', name: 'Victory', chips: 25, mult: 0, order: 0 },
         extraHandTypes: {
             'win': { id: 'win', name: 'Win', chips: 10, mult: 0, order: 1 },
             'viginti': { id: 'viginti', name: 'Viginti', chips: 25, mult: 0, order: 0 }
@@ -19,17 +20,52 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
         icon: '🏛️'
     },
     {
-        name: 'Standard',
+        name: 'Failure',
         rarity: 'Uncommon',
-        categories: ['Angle', 'HandType'],
-        description: 'Each [Pair], [Flush], and [Straight] earn <Cards>',
-        handType: { id: 'standard', name: 'Standard', chips: 0, mult: 1, order: 2 },
+        categories: ['Angle', 'Loss', 'HandType'],
+        description: '[Loss] earns <-$10>\n[Bust] earns <-$20>',
+        handType: { id: 'loss', name: 'Failure', chips: -10, mult: 0, order: 1.3 },
         extraHandTypes: {
-            'pair': { id: 'pair', name: 'Pair', chips: 0, mult: 0, order: 1, chipCards: true },
-            'flush': { id: 'flush', name: 'Flush', chips: 0, mult: 0, order: 1.1, chipCards: true },
+            'loss': { id: 'loss', name: 'Loss', chips: -10, mult: 0, order: 1.3 },
+            'bust': { id: 'bust', name: 'Bust', chips: -20, mult: 0, order: 1.4 }
+        },
+        hooks: Hooks.failure_relic,
+        icon: '💥'
+    },
+    {
+        name: 'Pairs',
+        rarity: 'Uncommon',
+        categories: ['Angle', 'Rank', 'HandType'],
+        description: 'Each [Pair] earns <Cards>',
+        handType: { id: 'pair', name: 'Pairs', chips: 0, mult: 0, order: 1, chipCards: true },
+        extraHandTypes: {
+            'pair': { id: 'pair', name: 'Pair', chips: 0, mult: 0, order: 1, chipCards: true }
+        },
+        hooks: Hooks.standard_pairs_relic,
+        icon: '🎴'
+    },
+    {
+        name: 'Flush',
+        rarity: 'Uncommon',
+        categories: ['Angle', 'Flush', 'HandType'],
+        description: 'Each [Flush] earns <Cards>',
+        handType: { id: 'flush', name: 'Flush', chips: 0, mult: 0, order: 1.1, chipCards: true },
+        extraHandTypes: {
+            'flush': { id: 'flush', name: 'Flush', chips: 0, mult: 0, order: 1.1, chipCards: true }
+        },
+        hooks: Hooks.standard_flush_relic,
+        icon: '🎴'
+    },
+    {
+        name: 'Straight',
+        rarity: 'Uncommon',
+        categories: ['Angle', 'Straight', 'HandType'],
+        description: 'Each [Straight] earns <Cards>',
+        handType: { id: 'straight', name: 'Straight', chips: 0, mult: 0, order: 1.2, chipCards: true },
+        extraHandTypes: {
             'straight': { id: 'straight', name: 'Straight', chips: 0, mult: 0, order: 1.2, chipCards: true }
         },
-        hooks: Hooks.standard_relic,
+        hooks: Hooks.standard_straight_relic,
         icon: '🎴'
     },
     // Rank Types

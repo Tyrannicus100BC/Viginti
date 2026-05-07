@@ -331,7 +331,7 @@ export function getValidActions(state: GameState): PlayerAction[] {
 
             // Buyable items
             for (const item of state.shopItems) {
-                if (!item.purchased && state.comps >= item.cost) {
+                if (!item.purchased && state.comps >= item.cost && canAddShopItem(state, item.id)) {
                     actions.push({ type: 'buy_shop_item', itemId: item.id });
                 }
             }
@@ -548,6 +548,27 @@ function processStartGame(
         nextState: { ...nextState, tutorial: tutorialState }, 
         events 
     };
+}
+
+function canAddShopItem(state: GameState, itemId: string): boolean {
+    const config = getRelicConfig(itemId);
+    if (!config) return false;
+
+    const inventory = state.inventory as RelicInstance[];
+
+    if (config.categories.includes('Charm')) {
+        const currentCharms = inventory.filter(inst => getRelicConfig(inst.id)?.categories.includes('Charm')).length;
+        const maxCharms = executeValueHook('getMaxCharms', 5, { inventory, dryRun: true });
+        return currentCharms < maxCharms;
+    }
+
+    if (config.categories.includes('Angle')) {
+        const currentAngles = inventory.filter(inst => getRelicConfig(inst.id)?.categories.includes('Angle')).length;
+        const maxAngles = executeValueHook('getMaxAngles', 5, { inventory, dryRun: true });
+        return currentAngles < maxAngles;
+    }
+
+    return true;
 }
 
 function processDeal(state: GameState, forceContinue?: boolean): ActionResult {
@@ -1114,11 +1135,12 @@ function processScoreRound(state: GameState): ActionResult {
     let currentInv = state.inventory as RelicInstance[];
     const scoredHands = state.playerHands;
 
-    // Pre-calculate to count category instances across all winning hands
+    // Pre-calculate to count category instances across all scored hands
     const categoryCounts: Record<string, number> = { flush: 0, rank: 0, straight: 0 };
     scoredHands.forEach(hand => {
-        if (hand.outcome !== 'win' || hand.cards.length === 0) return;
-        const preScore = evaluateHandScore(hand.cards, true, hand.isDoubled ?? false, currentInv, state.handsRemaining);
+        if (hand.cards.length === 0) return;
+        const isWin = hand.outcome === 'win';
+        const preScore = evaluateHandScore(hand.cards, isWin, hand.isDoubled ?? false, currentInv, state.handsRemaining, undefined, hand.outcome);
         preScore.criteria.forEach(c => {
             if (c.id === 'flush' || c.id.startsWith('flush_')) categoryCounts.flush++;
             if (c.id === 'straight' || c.id.startsWith('straight_')) categoryCounts.straight++;
@@ -1128,17 +1150,19 @@ function processScoreRound(state: GameState): ActionResult {
 
     // 4. Scoring pipeline
     const finalHands = scoredHands.map((hand, i) => {
-        if (hand.outcome !== 'win' || hand.cards.length === 0) {
+        if (hand.cards.length === 0) {
             return { ...hand, finalScore: null, resultRevealed: true };
         }
 
+        const isWin = hand.outcome === 'win';
         const score = evaluateHandScore(
             hand.cards,
-            true,
+            isWin,
             hand.isDoubled ?? false,
             currentInv,
             state.handsRemaining,
-            categoryCounts
+            categoryCounts,
+            hand.outcome
         );
 
         events.push({ type: 'scoring_hand_focus', handIndex: i });
@@ -1170,7 +1194,7 @@ function processScoreRound(state: GameState): ActionResult {
                      }
                  }
             } else {
-                 if (criterion.chips > 0) {
+                 if (criterion.chips !== 0) {
                      events.push({ type: 'scoring_row_chips', handIndex: i, criterionId: criterion.id, chips: criterion.chips });
                      runningSummary = { ...runningSummary, chips: runningSummary.chips + criterion.chips };
                      events.push({ type: 'summary_update', ...runningSummary });

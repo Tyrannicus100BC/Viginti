@@ -20,7 +20,7 @@ export function getBlackjackScore(cards: Card[], inventory: RelicInstance[] = []
   return score;
 }
 
-export function evaluateHandScore(cards: Card[], isWin: boolean, isDoubled: boolean = false, inventory: RelicInstance[] = [], handsRemaining: number = 0, categoryCounts?: Record<string, number>): HandScore {
+export function evaluateHandScore(cards: Card[], isWin: boolean, isDoubled: boolean = false, inventory: RelicInstance[] = [], handsRemaining: number = 0, categoryCounts?: Record<string, number>, outcome?: 'win' | 'loss' | 'push' | null): HandScore {
   const blackjackScore = getBlackjackScore(cards, inventory);
 
   // Initial Empty Score
@@ -33,44 +33,42 @@ export function evaluateHandScore(cards: Card[], isWin: boolean, isDoubled: bool
   };
 
   // Special Cards Calculation (Chip & Mult cards)
-  if (isWin) {
-    let specialChips = 0;
-    let specialMult = 0;
-    const specialCardIds: string[] = [];
+  let specialChips = 0;
+  let specialMult = 0;
+  const specialCardIds: string[] = [];
 
-    for (const card of cards) {
-      // Check for inline special effects
-      if (card.specialEffect) {
-        if (card.specialEffect.type === 'chip') {
-          specialChips += card.specialEffect.value;
-          specialCardIds.push(card.id);
-        } else if (card.specialEffect.type === 'mult') {
-          specialMult += card.specialEffect.value;
-          specialCardIds.push(card.id);
-        }
-      }
-
-      if (card.type === 'chip') {
-        specialChips += (card.chips || 0);
+  for (const card of cards) {
+    // Check for inline special effects
+    if (card.specialEffect) {
+      if (card.specialEffect.type === 'chip') {
+        specialChips += card.specialEffect.value;
         specialCardIds.push(card.id);
-      } else if (card.type === 'mult') {
-        specialMult += (card.mult || 0);
+      } else if (card.specialEffect.type === 'mult') {
+        specialMult += card.specialEffect.value;
         specialCardIds.push(card.id);
       }
     }
 
-    if (specialChips > 0 || specialMult > 0) {
-      initialScore.criteria.push({
-        id: 'special_cards',
-        name: 'Special Cards',
-        count: specialCardIds.length,
-        chips: specialChips,
-        multiplier: specialMult,
-        cardIds: specialCardIds
-      });
-      initialScore.totalChips += specialChips;
-      initialScore.totalMultiplier += specialMult;
+    if (card.type === 'chip') {
+      specialChips += (card.chips || 0);
+      specialCardIds.push(card.id);
+    } else if (card.type === 'mult') {
+      specialMult += (card.mult || 0);
+      specialCardIds.push(card.id);
     }
+  }
+
+  if (specialChips > 0 || specialMult > 0) {
+    initialScore.criteria.push({
+      id: 'special_cards',
+      name: 'Special Cards',
+      count: specialCardIds.length,
+      chips: specialChips,
+      multiplier: specialMult,
+      cardIds: specialCardIds
+    });
+    initialScore.totalChips += specialChips;
+    initialScore.totalMultiplier += specialMult;
   }
 
 
@@ -81,6 +79,7 @@ export function evaluateHandScore(cards: Card[], isWin: boolean, isDoubled: bool
     isDoubled,
     handsRemaining,
     blackjackValue: blackjackScore,
+    outcome,
     categoryCounts
   });
 }
