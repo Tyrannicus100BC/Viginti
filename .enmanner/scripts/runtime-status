@@ -1,0 +1,61 @@
+#!/bin/bash
+set -euo pipefail
+
+usage() {
+  echo "Usage: $0 [--json]" >&2
+}
+
+json=false
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --json) json=true ;;
+    --help|-h) usage; exit 0 ;;
+    *) usage; exit 64 ;;
+  esac
+  shift
+done
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+project_dir="$(cd "$script_dir/../.." && pwd -P)"
+manifest="$project_dir/enmanner/enmanner.json"
+identifier="$(/usr/bin/plutil -extract identifier raw "$manifest" 2>/dev/null || true)"
+if [[ -z "$identifier" ]]; then
+  echo "Error: enmanner/enmanner.json has no valid identifier." >&2
+  exit 1
+fi
+
+runtime_dir="/tmp/enmanner-$(/usr/bin/id -u)/$identifier"
+status_file="$runtime_dir/status.json"
+if [[ ! -f "$status_file" ]]; then
+  echo "Error: no managed Enmanner instance is running for this project." >&2
+  exit 3
+fi
+
+status_project="$(/usr/bin/plutil -extract project raw "$status_file" 2>/dev/null || true)"
+launcher_pid="$(/usr/bin/plutil -extract launcherProcessIdentifier raw "$status_file" 2>/dev/null || true)"
+if [[ ! -d "$status_project" || ! "$status_project" -ef "$project_dir" ]]; then
+  echo "Error: runtime status belongs to a different project: $status_project" >&2
+  exit 4
+fi
+if [[ ! "$launcher_pid" =~ ^[0-9]+$ ]] ||
+  ! /bin/kill -0 "$launcher_pid" 2>/dev/null; then
+  echo "Error: managed runtime status is stale; reopen the generated app." >&2
+  exit 3
+fi
+
+if [[ "$json" == true ]]; then
+  /bin/cat "$status_file"
+  echo
+else
+  state="$(/usr/bin/plutil -extract state raw "$status_file")"
+  generation="$(/usr/bin/plutil -extract runtimeGeneration raw "$status_file")"
+  application_url="$(/usr/bin/plutil -extract applicationURL raw "$status_file")"
+  configuration_changed="$(
+    /usr/bin/plutil -extract configuration.changedSinceLaunch raw "$status_file"
+  )"
+  echo "Managed Enmanner runtime: $state"
+  echo "  Project: $status_project"
+  echo "  Application: ${application_url:-not ready}"
+  echo "  Process generation: $generation"
+  echo "  Configuration changed since launch: $configuration_changed"
+fi

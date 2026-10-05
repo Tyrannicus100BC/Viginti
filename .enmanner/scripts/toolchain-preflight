@@ -1,0 +1,79 @@
+#!/bin/bash
+set -euo pipefail
+
+json=false
+if [[ "${1:-}" == "--json" ]]; then
+  json=true
+  shift
+fi
+if [[ $# -ne 0 ]]; then
+  echo "Usage: $0 [--json]" >&2
+  exit 64
+fi
+
+json_escape() {
+  local value="$1"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  value="${value//$'\n'/\\n}"
+  value="${value//$'\r'/\\r}"
+  value="${value//$'\t'/\\t}"
+  printf '%s' "$value"
+}
+
+emit_failure() {
+  local code="$1"
+  local message="$2"
+  local details="${3:-}"
+  local developer_directory="${4:-}"
+  if [[ "$json" == true ]]; then
+    printf '{"schemaVersion":1,"valid":false,"error":{"stage":"toolchainPreflight","code":"%s","message":"%s","developerDirectory":"%s","stderrTail":"%s"}}\n' \
+      "$code" "$(json_escape "$message")" \
+      "$(json_escape "$developer_directory")" "$(json_escape "$details")"
+  else
+    echo "Error: $message" >&2
+    [[ -z "$developer_directory" ]] || \
+      echo "  Selected developer tools: $developer_directory" >&2
+    [[ -z "$details" ]] || printf '%s\n' "$details" >&2
+  fi
+}
+
+developer_directory="$(/usr/bin/xcode-select -p 2>/dev/null || true)"
+if ! command -v swift >/dev/null 2>&1; then
+  emit_failure \
+    "swiftUnavailable" \
+    "Apple developer tools are unavailable. Install Command Line Tools or Xcode, then select that installation." \
+    "" "$developer_directory"
+  exit 1
+fi
+
+temporary_directory="$(mktemp -d "${TMPDIR:-/tmp}/enmanner-toolchain.XXXXXX")"
+cleanup() {
+  rm -rf "$temporary_directory"
+}
+trap cleanup EXIT
+source_file="$temporary_directory/Preflight.swift"
+printf '%s\n' \
+  'import Foundation' \
+  'let value = URL(fileURLWithPath: ".").standardizedFileURL.path' \
+  'precondition(!value.isEmpty)' > "$source_file"
+
+diagnostics="$temporary_directory/diagnostics.txt"
+if ! swiftc -typecheck "$source_file" >"$diagnostics" 2>&1; then
+  details="$(/usr/bin/tail -n 24 "$diagnostics")"
+  code="swiftToolchainDamaged"
+  message="The selected Apple developer toolchain cannot compile a basic Swift program. Select or reinstall Command Line Tools or Xcode before using Enmanner."
+  if grep -Fq "SwiftBridging" "$diagnostics" && \
+    grep -Eqi "redefinition|duplicate|already defined" "$diagnostics"; then
+    code="duplicateSwiftBridgingModule"
+    message="The selected Apple developer tools contain conflicting SwiftBridging module definitions, usually from a damaged or mixed Command Line Tools installation. Select a healthy Xcode installation or reinstall Command Line Tools."
+  fi
+  emit_failure "$code" "$message" "$details" "$developer_directory"
+  exit 1
+fi
+
+if [[ "$json" == true ]]; then
+  swift_version="$(swift --version 2>/dev/null | /usr/bin/head -n 1)"
+  printf '{"schemaVersion":1,"valid":true,"stage":"toolchainPreflight","developerDirectory":"%s","swiftVersion":"%s"}\n' \
+    "$(json_escape "$developer_directory")" "$(json_escape "$swift_version")"
+fi

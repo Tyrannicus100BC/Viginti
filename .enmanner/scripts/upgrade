@@ -1,0 +1,362 @@
+#!/bin/bash
+set -euo pipefail
+
+usage() {
+  cat >&2 <<EOF
+Usage:
+  $0 --latest [--verify] [--json]
+  $0 --check --latest [--json]
+  $0 (--check | --apply) --from /path/to/Enmanner [--target /path/to/.enmanner] [--upstream-url URL] [--verify] [--json]
+
+--latest fetches the upstream recorded in INSTALLATION.json and applies it.
+--verify adds bounded runtime validation, a native rebuild when required, two
+native launch/quit cycles, and final Doctor evidence.
+EOF
+}
+
+json_escape() {
+  local value="$1"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  value="${value//$'\n'/\\n}"
+  value="${value//$'\r'/\\r}"
+  value="${value//$'\t'/\\t}"
+  printf '%s' "$value"
+}
+
+json_string_array() {
+  local separator=""
+  local value
+  printf '['
+  for value in "$@"; do
+    printf '%s"%s"' "$separator" "$(json_escape "$value")"
+    separator=","
+  done
+  printf ']'
+}
+
+mode=""
+source_argument=""
+target_argument=""
+json=false
+latest=false
+verify=false
+explicit_upstream_url=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --check|--apply)
+      [[ -z "$mode" ]] || { usage; exit 64; }
+      mode="$1"
+      ;;
+    --latest) latest=true ;;
+    --verify) verify=true ;;
+    --from)
+      shift
+      source_argument="${1:-}"
+      ;;
+    --target)
+      shift
+      target_argument="${1:-}"
+      ;;
+    --upstream-url)
+      shift
+      explicit_upstream_url="${1:-}"
+      [[ -n "$explicit_upstream_url" ]] || { usage; exit 64; }
+      ;;
+    --json) json=true ;;
+    --help|-h) usage; exit 0 ;;
+    *) usage; exit 64 ;;
+  esac
+  shift
+done
+if [[ "$latest" == true && -n "$source_argument" ]]; then
+  echo "Error: --latest and --from are mutually exclusive." >&2
+  exit 64
+fi
+if [[ "$latest" == false && -z "$source_argument" ]]; then
+  usage
+  exit 64
+fi
+[[ -n "$mode" ]] || mode="--apply"
+if [[ "$verify" == true && "$mode" != "--apply" ]]; then
+  echo "Error: --verify requires an applied upgrade." >&2
+  exit 64
+fi
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -n "$target_argument" ]]; then
+  installation_root="$(cd "$target_argument" && pwd)"
+else
+  installation_root="$(cd "$script_dir/.." && pwd)"
+fi
+project_dir="$(cd "$installation_root/.." && pwd)"
+provenance="$installation_root/INSTALLATION.json"
+[[ -f "$provenance" ]] || {
+  echo "Error: INSTALLATION.json is missing; reinstall this pre-0.3 integration from scratch." >&2
+  exit 1
+}
+
+work_dir="$(mktemp -d "${TMPDIR:-/tmp}/enmanner-upgrade.XXXXXX")"
+tracked_paths="$work_dir/tracked-paths"
+source_paths="$work_dir/source-paths"
+verification_dir="$work_dir/verification"
+mkdir -p "$verification_dir"
+cleanup() { rm -rf "$work_dir"; }
+trap cleanup EXIT
+
+if [[ "$latest" == true ]]; then
+  upstream_url="$explicit_upstream_url"
+  [[ -n "$upstream_url" ]] || upstream_url="$(
+    /usr/bin/plutil -extract upstreamURL raw "$provenance" 2>/dev/null || true
+  )"
+  [[ -n "$upstream_url" ]] || {
+    echo "Error: INSTALLATION.json has no upstream URL; use --from or --upstream-url." >&2
+    exit 1
+  }
+  [[ "$json" == true ]] || echo "Fetching the recorded Enmanner upstream…"
+  /usr/bin/git clone --quiet --depth 1 "$upstream_url" "$work_dir/upstream"
+  /usr/bin/git -C "$work_dir/upstream" fsck --no-dangling >/dev/null
+  source_argument="$work_dir/upstream"
+  explicit_upstream_url="$upstream_url"
+fi
+
+if [[ -f "$source_argument/integration/VERSION" ]]; then
+  source_root="$(cd "$source_argument/integration" && pwd)"
+else
+  source_root="$(cd "$source_argument" && pwd)"
+fi
+[[ -f "$source_root/VERSION" && -f "$source_root/enmanner.schema.json" &&
+  -x "$source_root/scripts/validate" ]] || {
+  echo "Error: $source_root is not a complete Enmanner distribution source." >&2
+  exit 1
+}
+
+from_version="$(/usr/bin/plutil -extract version raw "$provenance")"
+from_commit="$(/usr/bin/plutil -extract upstreamCommit raw "$provenance" 2>/dev/null || true)"
+to_version="$(tr -d '[:space:]' < "$source_root/VERSION")"
+to_commit=""
+target_dirty=false
+if command -v git >/dev/null 2>&1; then
+  to_commit="$(git -C "$source_root" rev-parse HEAD 2>/dev/null || true)"
+  if [[ -n "$(git -C "$source_root" status --porcelain -- . 2>/dev/null)" ]]; then
+    target_dirty=true
+  fi
+fi
+from_revision="${from_commit:0:7}"
+to_revision="${to_commit:0:7}"
+[[ -n "$from_revision" ]] || from_revision="unknown"
+[[ -n "$to_revision" ]] || to_revision="unknown"
+[[ "$target_dirty" == true ]] && to_revision="$to_revision-dirty"
+
+conflicts=()
+index=0
+while path="$(/usr/bin/plutil -extract "files.$index.path" raw "$provenance" 2>/dev/null)"; do
+  printf '%s\n' "$path" >> "$tracked_paths"
+  expected="$(/usr/bin/plutil -extract "files.$index.sha256" raw "$provenance")"
+  destination_file="$installation_root/$path"
+  if [[ -f "$destination_file" ]]; then
+    actual="$(/usr/bin/shasum -a 256 "$destination_file" | /usr/bin/awk '{print $1}')"
+    [[ "$actual" == "$expected" ]] || conflicts+=("$path")
+  else
+    conflicts+=("$path (missing framework file)")
+  fi
+  index=$((index + 1))
+done
+
+while IFS= read -r -d '' installed_file; do
+  relative="${installed_file#"$installation_root"/}"
+  [[ "$relative" == "INSTALLATION.json" ]] && continue
+  [[ "$relative" == framework/.build/* ]] && continue
+  if ! /usr/bin/grep -Fqx "$relative" "$tracked_paths"; then
+    conflicts+=("$relative (untracked framework file)")
+  fi
+done < <(find "$installation_root" -type f -not -path '*/.build/*' -print0)
+
+while IFS= read -r -d '' source_file; do
+  relative="${source_file#"$source_root"/}"
+  [[ "$relative" == "INSTALLATION.json" ]] && continue
+  [[ "$relative" == framework/Tests/* ]] && continue
+  [[ "$relative" == "scripts/install" ]] && continue
+  printf '%s\n' "$relative" >> "$source_paths"
+done < <(find "$source_root" -type f -not -path '*/.build/*' \
+  -not -name '.DS_Store' -not -name 'INSTALLATION.json' -print0)
+
+added_paths=()
+modified_paths=()
+removed_paths=()
+native_rebuild_required=false
+schema_changed=false
+while IFS= read -r relative; do
+  [[ -n "$relative" ]] || continue
+  if [[ ! -f "$installation_root/$relative" ]]; then
+    added_paths+=("$relative")
+  elif ! /usr/bin/cmp -s "$source_root/$relative" "$installation_root/$relative"; then
+    modified_paths+=("$relative")
+  else
+    continue
+  fi
+  [[ "$relative" == framework/Sources/* || "$relative" == "framework/Package.swift" ||
+    "$relative" == "framework/Package.resolved" ]] && native_rebuild_required=true
+  [[ "$relative" == "enmanner.schema.json" ]] && schema_changed=true
+done < <(LC_ALL=C sort -u "$source_paths")
+while IFS= read -r relative; do
+  [[ -n "$relative" ]] || continue
+  if ! /usr/bin/grep -Fqx "$relative" "$source_paths"; then
+    removed_paths+=("$relative")
+    [[ "$relative" == framework/Sources/* || "$relative" == "framework/Package.swift" ||
+      "$relative" == "framework/Package.resolved" ]] && native_rebuild_required=true
+    [[ "$relative" == "enmanner.schema.json" ]] && schema_changed=true
+  fi
+done < "$tracked_paths"
+
+release_notes=()
+manifest_migration_required=false
+release_notes_file="$source_root/RELEASE_NOTES.json"
+if [[ -f "$release_notes_file" ]]; then
+  note_version="$(/usr/bin/plutil -extract releases.0.version raw "$release_notes_file" 2>/dev/null || true)"
+  if [[ "$note_version" == "$to_version" ]]; then
+    manifest_migration_required="$(/usr/bin/plutil -extract releases.0.manifestMigrationRequired raw "$release_notes_file" 2>/dev/null || echo false)"
+    note_index=0
+    while note="$(/usr/bin/plutil -extract "releases.0.summary.$note_index" raw "$release_notes_file" 2>/dev/null)"; do
+      release_notes+=("$note")
+      note_index=$((note_index + 1))
+    done
+  fi
+fi
+
+project_manifest="$project_dir/enmanner/enmanner.json"
+backup_recommended=false
+if [[ -f "$project_manifest" ]] &&
+  /usr/bin/plutil -extract backup.command json -o /dev/null "$project_manifest" >/dev/null 2>&1; then
+  backup_recommended=true
+fi
+
+emit_upgrade_json() {
+  local applied="$1"
+  local verified="$2"
+  printf '{"schemaVersion":2,"mode":"%s","source":"%s","fromVersion":"%s","toVersion":"%s","fromCommit":"%s","toCommit":"%s","fromRevision":"%s","toRevision":"%s","targetDirty":%s,' \
+    "${mode#--}" "$([[ "$latest" == true ]] && echo latest || echo local)" \
+    "$(json_escape "$from_version")" "$(json_escape "$to_version")" \
+    "$(json_escape "$from_commit")" "$(json_escape "$to_commit")" \
+    "$(json_escape "$from_revision")" "$(json_escape "$to_revision")" "$target_dirty"
+  printf '"changes":{"modified":%d,"added":%d,"removed":%d,"modifiedPaths":' \
+    "${#modified_paths[@]}" "${#added_paths[@]}" "${#removed_paths[@]}"
+  if [[ ${#modified_paths[@]} -gt 0 ]]; then json_string_array "${modified_paths[@]}"; else printf '[]'; fi
+  printf ',"addedPaths":'
+  if [[ ${#added_paths[@]} -gt 0 ]]; then json_string_array "${added_paths[@]}"; else printf '[]'; fi
+  printf ',"removedPaths":'
+  if [[ ${#removed_paths[@]} -gt 0 ]]; then json_string_array "${removed_paths[@]}"; else printf '[]'; fi
+  printf ',"nativeRebuildRequired":%s,"schemaChanged":%s},' "$native_rebuild_required" "$schema_changed"
+  printf '"migration":{"manifestMigrationRequired":%s,"configurationChanged":false},"releaseNotes":' "$manifest_migration_required"
+  if [[ ${#release_notes[@]} -gt 0 ]]; then json_string_array "${release_notes[@]}"; else printf '[]'; fi
+  printf ',"conflicts":'
+  if [[ ${#conflicts[@]} -gt 0 ]]; then json_string_array "${conflicts[@]}"; else printf '[]'; fi
+  printf ',"backupRecommendedBeforeApply":%s,"applicable":%s,"applied":%s,"verified":%s' \
+    "$backup_recommended" "$([[ ${#conflicts[@]} -eq 0 ]] && echo true || echo false)" "$applied" "$verified"
+  if [[ "$applied" == true ]]; then
+    printf ',"uncommittedFiles":'
+    if [[ ${#uncommitted_files[@]} -gt 0 ]]; then json_string_array "${uncommitted_files[@]}"; else printf '[]'; fi
+  fi
+  if [[ "$verified" == true ]]; then
+    printf ',"verification":{"runtime":'; /bin/cat "$verification_dir/runtime.json"
+    printf ',"build":'; /bin/cat "$verification_dir/build.json"
+    printf ',"nativeTest":'; /bin/cat "$verification_dir/native-test.json"
+    printf ',"doctor":'; /bin/cat "$verification_dir/doctor.json"
+    printf ',"nativeRebuilt":%s,"appPath":"%s"' \
+      "$native_rebuilt" "$(json_escape "$final_app_path")"
+    printf '}'
+  fi
+  printf '}\n'
+}
+
+if [[ "$json" != true ]]; then
+  echo "Enmanner $from_version ($from_revision) → $to_version ($to_revision)"
+  echo "Upgrade summary: ${#modified_paths[@]} modified, ${#added_paths[@]} added, ${#removed_paths[@]} removed"
+  echo "Native launcher rebuild: $([[ "$native_rebuild_required" == true ]] && echo required || echo not-required)"
+  echo "Manifest schema: $([[ "$schema_changed" == true ]] && echo changed || echo unchanged)"
+  echo "Project manifest migration: $([[ "$manifest_migration_required" == true ]] && echo required || echo not-required)"
+  if [[ ${#release_notes[@]} -gt 0 ]]; then
+    echo "Relevant changes:"
+    printf '  - %s\n' "${release_notes[@]}"
+  fi
+  if [[ ${#conflicts[@]} -gt 0 ]]; then
+    echo "Conflicting locally modified framework files:"
+    printf '  %s\n' "${conflicts[@]}"
+  else
+    echo "✓ No locally modified framework files conflict."
+  fi
+  [[ "$backup_recommended" == false ]] || echo "! Run the project's declared backup before applying when current data is not already protected."
+fi
+
+if [[ "$mode" == "--check" ]]; then
+  [[ "$json" == true ]] && emit_upgrade_json false false
+  exit 0
+fi
+if [[ ${#conflicts[@]} -gt 0 ]]; then
+  [[ "$json" == true ]] && emit_upgrade_json false false
+  echo "Error: upgrade was not applied. Reinstall or resolve the listed files first." >&2
+  exit 2
+fi
+
+/usr/bin/rsync -a --delete \
+  --exclude ".build" \
+  --exclude ".DS_Store" \
+  --exclude "INSTALLATION.json" \
+  --exclude "framework/Tests/" \
+  --exclude "scripts/install" \
+  "$source_root/" "$installation_root/"
+
+record_args=(--source "$source_root")
+[[ -n "$explicit_upstream_url" ]] && record_args+=(--upstream-url "$explicit_upstream_url")
+"$installation_root/scripts/record-installation" "${record_args[@]}" >/dev/null
+"$installation_root/scripts/validate" --json >/dev/null
+
+uncommitted_files=()
+if /usr/bin/git -C "$project_dir" rev-parse --show-toplevel >/dev/null 2>&1; then
+  while IFS= read -r -d '' status_entry; do
+    uncommitted_files+=("${status_entry:3}")
+  done < <(/usr/bin/git -C "$project_dir" status --porcelain=v1 -z \
+    --untracked-files=all -- .enmanner enmanner/enmanner.json AGENTS.md .gitignore)
+fi
+
+native_rebuilt=false
+final_app_path=""
+if [[ "$verify" == true ]]; then
+  [[ "$json" == true ]] || echo "Running bounded runtime validation…"
+  "$installation_root/scripts/validate" --runtime --json >"$verification_dir/runtime.json"
+  "$installation_root/scripts/doctor" --json >"$verification_dir/pre-build-doctor.json"
+  app_path="$(/usr/bin/plutil -extract doctor.appPath raw "$verification_dir/pre-build-doctor.json" 2>/dev/null || true)"
+  if [[ "$native_rebuild_required" == true || ! -d "$app_path" ]]; then
+    [[ "$json" == true ]] || echo "Rebuilding the native application…"
+    "$installation_root/scripts/build-app" --json >"$verification_dir/build.json"
+    native_rebuilt=true
+  else
+    printf '{"schemaVersion":1,"valid":true,"skipped":true,"reason":"nativeFrameworkUnchanged","appPath":"%s"}\n' \
+      "$(json_escape "$app_path")" >"$verification_dir/build.json"
+    [[ "$json" == true ]] || echo "✓ Existing native application is current; rebuild skipped"
+  fi
+  [[ "$json" == true ]] || echo "Testing two native launch and quit cycles…"
+  "$installation_root/scripts/test-app" --json >"$verification_dir/native-test.json"
+  "$installation_root/scripts/doctor" --json >"$verification_dir/doctor.json"
+  final_app_path="$(/usr/bin/plutil -extract doctor.appPath raw "$verification_dir/doctor.json")"
+  if [[ "$json" != true ]]; then
+    echo "✓ Configuration unchanged; no manifest migration applied"
+    echo "✓ Runtime validation passed"
+    echo "✓ Native launch/quit: 2/2 passed"
+    echo "✓ Application: $final_app_path"
+  fi
+fi
+
+if [[ "$json" == true ]]; then
+  emit_upgrade_json true "$verify"
+else
+  if [[ "$from_version" == "$to_version" && "$from_commit" == "$to_commit" ]]; then
+    echo "✓ Refreshed installation provenance and statically validated Enmanner $to_version"
+  else
+    echo "✓ Updated Enmanner $from_version ($from_revision) → $to_version ($to_revision)"
+  fi
+  if [[ ${#uncommitted_files[@]} -gt 0 ]]; then
+    echo "Changes ready to commit:"
+    printf '  %s\n' "${uncommitted_files[@]}"
+  fi
+fi

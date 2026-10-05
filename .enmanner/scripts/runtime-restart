@@ -1,0 +1,108 @@
+#!/bin/bash
+set -euo pipefail
+
+usage() {
+  echo "Usage: $0 [--component NAME] [--wait] [--json]" >&2
+}
+
+component=""
+wait_for_ready=false
+json=false
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --component)
+      shift
+      component="${1:-}"
+      [[ "$component" =~ ^[a-z0-9][a-z0-9-]*$ ]] || {
+        echo "Error: --component requires a valid component name." >&2
+        exit 64
+      }
+      ;;
+    --wait) wait_for_ready=true ;;
+    --json) json=true ;;
+    --help|-h) usage; exit 0 ;;
+    *) usage; exit 64 ;;
+  esac
+  shift
+done
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+project_dir="$(cd "$script_dir/../.." && pwd -P)"
+status_script="$script_dir/runtime-status"
+status_file_json="$("$status_script" --json)"
+manifest="$project_dir/enmanner/enmanner.json"
+identifier="$(/usr/bin/plutil -extract identifier raw "$manifest")"
+runtime_dir="/tmp/enmanner-$(/usr/bin/id -u)/$identifier"
+status_file="$runtime_dir/status.json"
+initial_generation="$(
+  printf '%s' "$status_file_json" |
+    /usr/bin/plutil -extract runtimeGeneration raw -o - -
+)"
+
+request_id="$(/usr/bin/uuidgen | /usr/bin/tr '[:upper:]' '[:lower:]')"
+request_staging="$runtime_dir/.request-$request_id.json"
+response_file="$runtime_dir/response-$request_id.json"
+cleanup() {
+  rm -f "$request_staging" "$response_file"
+}
+trap cleanup EXIT
+umask 077
+if [[ -n "$component" ]]; then
+  printf '{"schemaVersion":1,"requestID":"%s","action":"restart","component":"%s"}\n' \
+    "$request_id" "$component" > "$request_staging"
+else
+  printf '{"schemaVersion":1,"requestID":"%s","action":"restart"}\n' \
+    "$request_id" > "$request_staging"
+fi
+/bin/mv "$request_staging" "$runtime_dir/request-$request_id.json"
+request_staging=""
+
+for _ in {1..100}; do
+  [[ -f "$response_file" ]] && break
+  /bin/sleep 0.05
+done
+if [[ ! -f "$response_file" ]]; then
+  echo "Error: the managed Enmanner instance did not acknowledge the restart." >&2
+  exit 1
+fi
+accepted="$(/usr/bin/plutil -extract accepted raw "$response_file")"
+if [[ "$accepted" != "true" ]]; then
+  error="$(/usr/bin/plutil -extract error raw "$response_file")"
+  echo "Error: $error" >&2
+  exit 1
+fi
+
+if [[ "$wait_for_ready" == true ]]; then
+  for _ in {1..3600}; do
+    if [[ -f "$status_file" ]]; then
+      state="$(/usr/bin/plutil -extract state raw "$status_file" 2>/dev/null || true)"
+      generation="$(
+        /usr/bin/plutil -extract runtimeGeneration raw "$status_file" 2>/dev/null || true
+      )"
+      if [[ "$state" == "ready" && "$generation" =~ ^[0-9]+$ &&
+        "$generation" -gt "$initial_generation" ]]; then
+        if [[ "$json" == true ]]; then
+          /bin/cat "$status_file"
+          echo
+        else
+          echo "✓ Managed Enmanner runtime is ready at generation $generation"
+          /usr/bin/plutil -extract applicationURL raw "$status_file"
+        fi
+        exit 0
+      fi
+      if [[ "$state" == "failed" || "$state" == "waitingForConfiguration" ]]; then
+        echo "Error: managed runtime entered state $state during restart." >&2
+        exit 1
+      fi
+    fi
+    /bin/sleep 0.05
+  done
+  echo "Error: timed out waiting for the managed runtime to become ready." >&2
+  exit 1
+fi
+
+if [[ "$json" == true ]]; then
+  printf '{"schemaVersion":1,"accepted":true,"requestID":"%s"}\n' "$request_id"
+else
+  echo "✓ Managed Enmanner runtime accepted the restart request"
+fi

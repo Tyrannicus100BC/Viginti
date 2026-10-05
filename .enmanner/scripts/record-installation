@@ -1,0 +1,138 @@
+#!/bin/bash
+set -euo pipefail
+
+usage() {
+  echo "Usage: $0 --source /path/to/framework [--manifest-status STATUS] [--upstream-url URL] [--unversioned-acknowledged]" >&2
+}
+
+source_root=""
+manifest_status=""
+explicit_upstream_url=""
+unversioned_acknowledged=false
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --source)
+      shift
+      source_root="${1:-}"
+      ;;
+    --manifest-status)
+      shift
+      manifest_status="${1:-}"
+      ;;
+    --upstream-url)
+      shift
+      explicit_upstream_url="${1:-}"
+      [[ -n "$explicit_upstream_url" ]] || { usage; exit 64; }
+      ;;
+    --unversioned-acknowledged)
+      unversioned_acknowledged=true
+      ;;
+    *) usage; exit 64 ;;
+  esac
+  shift
+done
+[[ $# -eq 0 && -n "$source_root" ]] || { usage; exit 64; }
+source_root="$(cd "$source_root" && pwd)"
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+installation_root="$(cd "$script_dir/.." && pwd)"
+output="$installation_root/INSTALLATION.json"
+if [[ -f "$output" ]]; then
+  prior_provenance_confidence="$(
+    /usr/bin/plutil -extract provenanceConfidence raw "$output" 2>/dev/null || true
+  )"
+  if [[ -z "$explicit_upstream_url" &&
+    "$prior_provenance_confidence" == "explicit" ]]; then
+    explicit_upstream_url="$(
+      /usr/bin/plutil -extract upstreamURL raw "$output" 2>/dev/null || true
+    )"
+  fi
+  if [[ "$unversioned_acknowledged" == false &&
+    "$(/usr/bin/plutil -extract unversionedAcknowledged raw "$output" 2>/dev/null || true)" == "true" ]]; then
+    unversioned_acknowledged=true
+  fi
+fi
+if [[ -z "$manifest_status" && -f "$output" ]]; then
+  manifest_status="$(
+    /usr/bin/plutil -extract manifestStatus raw "$output" 2>/dev/null || true
+  )"
+fi
+[[ -n "$manifest_status" ]] || manifest_status="project-owned"
+temporary_dir="$(mktemp -d "${TMPDIR:-/tmp}/enmanner-installation.XXXXXX")"
+temporary="$temporary_dir/INSTALLATION.plist"
+trap 'rm -rf "$temporary_dir"' EXIT
+
+/usr/bin/plutil -create xml1 "$temporary"
+/usr/bin/plutil -insert formatVersion -integer 2 "$temporary"
+version="$(tr -d '[:space:]' < "$source_root/VERSION")"
+/usr/bin/plutil -insert version -string "$version" "$temporary"
+upstream_commit=""
+if command -v git >/dev/null 2>&1; then
+  upstream_commit="$(git -C "$source_root" rev-parse HEAD 2>/dev/null || true)"
+fi
+/usr/bin/plutil -insert upstreamCommit -string "$upstream_commit" "$temporary"
+upstream_url=""
+provenance_confidence="unknown"
+checkout_url=""
+if command -v git >/dev/null 2>&1; then
+  checkout_url="$(
+    git -C "$source_root" remote get-url origin 2>/dev/null || true
+  )"
+fi
+if [[ -n "$explicit_upstream_url" ]]; then
+  upstream_url="$explicit_upstream_url"
+  provenance_confidence="explicit"
+elif [[ -f "$source_root/PROVENANCE.json" ]]; then
+  upstream_url="$(
+    /usr/bin/plutil -extract upstreamURL raw \
+      "$source_root/PROVENANCE.json" 2>/dev/null || true
+  )"
+  [[ -n "$upstream_url" ]] && provenance_confidence="declared"
+elif [[ -n "$checkout_url" ]]; then
+  upstream_url="$checkout_url"
+  provenance_confidence="inferred"
+fi
+/usr/bin/plutil -insert upstreamURL -string "$upstream_url" "$temporary"
+/usr/bin/plutil -insert sourceCheckoutURL -string "$checkout_url" "$temporary"
+/usr/bin/plutil -insert provenanceConfidence -string \
+  "$provenance_confidence" "$temporary"
+/usr/bin/plutil -insert unversionedAcknowledged -bool \
+  "$unversioned_acknowledged" "$temporary"
+/usr/bin/plutil -insert upstreamDirty -bool "$(
+  if command -v git >/dev/null 2>&1 &&
+    [[ -n "$(git -C "$source_root" status --porcelain -- . 2>/dev/null)" ]]; then
+    echo true
+  else
+    echo false
+  fi
+)" "$temporary"
+/usr/bin/plutil -insert manifestStatus -string "$manifest_status" "$temporary"
+if [[ "$manifest_status" == "inferred" ]]; then
+  /usr/bin/plutil -insert inferredManifestFields -json \
+    '["name","identifier","application.command","application.workingDirectory","application.environment","application.readiness"]' \
+    "$temporary"
+else
+  /usr/bin/plutil -insert inferredManifestFields -json '[]' "$temporary"
+fi
+/usr/bin/plutil -insert files -json '[]' "$temporary"
+index=0
+while IFS= read -r -d '' source_file; do
+  relative="${source_file#"$source_root"/}"
+  [[ "$relative" == "INSTALLATION.json" ]] && continue
+  [[ "$relative" == framework/Tests/* ]] && continue
+  [[ "$relative" == "scripts/install" ]] && continue
+  checksum="$(/usr/bin/shasum -a 256 "$source_file" | /usr/bin/awk '{print $1}')"
+  /usr/bin/plutil -insert "files.$index" -json '{}' "$temporary"
+  /usr/bin/plutil -insert "files.$index.path" -string "$relative" "$temporary"
+  /usr/bin/plutil -insert "files.$index.sha256" -string "$checksum" "$temporary"
+  index=$((index + 1))
+done < <(find "$source_root" -type f \
+  -not -path '*/.build/*' \
+  -not -name '.DS_Store' \
+  -not -name 'INSTALLATION.json' \
+  -print0)
+
+/usr/bin/plutil -convert json -o "$output" "$temporary"
+rm -rf "$temporary_dir"
+trap - EXIT
+echo "✓ Recorded Enmanner $version provenance for $index framework files"

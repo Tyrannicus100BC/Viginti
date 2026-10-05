@@ -1,2 +1,9 @@
 node_modules/
 .DS_Store
+
+# enmanner:begin
+/.enmanner/framework/.build/
+/.enmanner/.build/
+/Viginti.app/
+/Viginti Development.app/
+# enmanner:end

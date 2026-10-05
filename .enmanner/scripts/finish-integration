@@ -1,0 +1,103 @@
+#!/bin/bash
+set -euo pipefail
+
+usage() {
+  cat >&2 <<'EOF'
+Usage: $0 --runtime [--open] [--json] [--allow-legacy-icon] [--replace-existing-app]
+
+Runs final lifecycle validation, builds the finished app, verifies two native
+launch-and-quit cycles, and reports the resulting doctor evidence. --runtime is
+required because validation starts project services and may mutate local state.
+EOF
+}
+
+runtime=false
+open_app=false
+json=false
+allow_legacy_icon=false
+replace_existing_app=false
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --runtime) runtime=true ;;
+    --open) open_app=true ;;
+    --json) json=true ;;
+    --allow-legacy-icon) allow_legacy_icon=true ;;
+    --replace-existing-app) replace_existing_app=true ;;
+    --help|-h) usage; exit 0 ;;
+    *) usage; exit 64 ;;
+  esac
+  shift
+done
+if [[ "$runtime" != true ]]; then
+  echo "Error: finish-integration requires explicit --runtime opt-in." >&2
+  usage
+  exit 64
+fi
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+integration_dir="$(cd "$script_dir/.." && pwd)"
+project_dir="$(cd "$integration_dir/.." && pwd)"
+if [[ -x "$script_dir/install" ]]; then
+  echo "Error: finish-integration is installed-project tooling." >&2
+  echo "  Run it through ./.enmanner/scripts/finish-integration in the target project." >&2
+  exit 64
+fi
+
+build_command=("$script_dir/build-app")
+[[ "$allow_legacy_icon" == true ]] && build_command+=(--allow-legacy-icon)
+[[ "$replace_existing_app" == true ]] && build_command+=(--replace-existing-app)
+
+if [[ "$json" != true ]]; then
+  echo "Running final lifecycle validation…"
+  "$script_dir/validate" --runtime
+  echo "Building the finished app…"
+  "${build_command[@]}"
+  echo "Testing native launch and quit…"
+  "$script_dir/test-app"
+  "$script_dir/doctor"
+  if [[ "$open_app" == true ]]; then
+    bin_dir="$("$script_dir/prepare-framework")"
+    app_name="$("$bin_dir/enmanner-validator" --project "$project_dir" --print name)"
+    /usr/bin/open "$project_dir/$app_name.app"
+  fi
+  exit 0
+fi
+
+result_dir="$(mktemp -d "${TMPDIR:-/tmp}/enmanner-finish.XXXXXX")"
+cleanup() {
+  rm -rf "$result_dir"
+}
+trap cleanup EXIT
+
+run_json_step() {
+  local output="$1"
+  shift
+  if ! "$@" --json >"$output"; then
+    /bin/cat "$output" >&2
+    return 1
+  fi
+}
+
+validation_result="$result_dir/validation.json"
+build_result="$result_dir/build.json"
+test_result="$result_dir/native-test.json"
+doctor_result="$result_dir/doctor.json"
+run_json_step "$validation_result" "$script_dir/validate" --runtime
+run_json_step "$build_result" "${build_command[@]}"
+run_json_step "$test_result" "$script_dir/test-app"
+run_json_step "$doctor_result" "$script_dir/doctor"
+
+if [[ "$open_app" == true ]]; then
+  app_path="$(/usr/bin/plutil -extract appPath raw "$build_result")"
+  /usr/bin/open "$app_path"
+fi
+
+printf '{"schemaVersion":1,"valid":true,"opened":%s,"validation":' "$open_app"
+/bin/cat "$validation_result"
+printf ',"build":'
+/bin/cat "$build_result"
+printf ',"nativeTest":'
+/bin/cat "$test_result"
+printf ',"doctor":'
+/bin/cat "$doctor_result"
+printf '}\n'

@@ -1,0 +1,54 @@
+#!/bin/bash
+set -euo pipefail
+
+usage() {
+  echo "Usage: $0 [--force]" >&2
+}
+
+force=false
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --force) force=true ;;
+    --help|-h) usage; exit 0 ;;
+    *) usage; exit 64 ;;
+  esac
+  shift
+done
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+integration_dir="$(cd "$script_dir/.." && pwd)"
+framework_dir="$integration_dir/framework"
+stamp_dir="$framework_dir/.build"
+stamp="$stamp_dir/enmanner-framework-fingerprint"
+fingerprint_input="$(mktemp "${TMPDIR:-/tmp}/enmanner-fingerprint.XXXXXX")"
+build_log="$(mktemp "${TMPDIR:-/tmp}/enmanner-framework-build.XXXXXX")"
+trap 'rm -f "$fingerprint_input" "$build_log"' EXIT
+
+{
+  swift --version 2>/dev/null
+  while IFS= read -r file; do
+    /usr/bin/shasum -a 256 "$file"
+  done < <(find "$framework_dir" -type f \
+    \( -path '*/Sources/*' -o -name Package.swift -o -name Package.resolved \) \
+    -not -path '*/.build/*' | LC_ALL=C sort)
+} >"$fingerprint_input"
+fingerprint="$(/usr/bin/shasum -a 256 "$fingerprint_input" | /usr/bin/awk '{print $1}')"
+bin_dir="$(swift build --package-path "$framework_dir" -c release --show-bin-path 2>/dev/null)"
+
+if [[ "$force" != true && -f "$stamp" &&
+  "$(<"$stamp")" == "$fingerprint" &&
+  -x "$bin_dir/enmanner-validator" &&
+  -x "$bin_dir/EnmannerLauncher" ]]; then
+  printf '%s\n' "$bin_dir"
+  exit 0
+fi
+
+echo "Compiling Enmanner once for this framework revision…" >&2
+if ! swift build --package-path "$framework_dir" -c release \
+  >"$build_log" 2>&1; then
+  /usr/bin/tail -n 30 "$build_log" >&2
+  exit 1
+fi
+mkdir -p "$stamp_dir"
+printf '%s\n' "$fingerprint" >"$stamp"
+printf '%s\n' "$bin_dir"

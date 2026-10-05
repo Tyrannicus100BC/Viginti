@@ -1,0 +1,466 @@
+#!/bin/bash
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+integration_dir="$(cd "$script_dir/.." && pwd)"
+project_dir="$(cd "$integration_dir/.." && pwd)"
+framework_dir="$integration_dir/framework"
+
+json_escape() {
+  local value="$1"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  value="${value//$'\n'/\\n}"
+  value="${value//$'\r'/\\r}"
+  value="${value//$'\t'/\\t}"
+  printf '%s' "$value"
+}
+
+allow_legacy_icon=false
+replace_existing_app=false
+development=false
+json=false
+while [[ "${1:-}" == --* ]]; do
+  case "$1" in
+    --allow-legacy-icon) allow_legacy_icon=true ;;
+    --replace-existing-app) replace_existing_app=true ;;
+    --development) development=true ;;
+    --json) json=true ;;
+    *)
+      echo "Usage: $0 [--development] [--allow-legacy-icon] [--replace-existing-app] [--json]" >&2
+      exit 64
+      ;;
+  esac
+  shift
+done
+if [[ $# -ne 0 ]]; then
+  echo "Usage: $0 [--development] [--allow-legacy-icon] [--replace-existing-app] [--json]" >&2
+  exit 64
+fi
+if [[ "$development" == true &&
+  ( "$allow_legacy_icon" == true || "$replace_existing_app" == true ) ]]; then
+  echo "Error: --development cannot be combined with final-build options." >&2
+  exit 64
+fi
+
+stage_dir=""
+json_log=""
+build_succeeded=false
+app_path=""
+app_size=""
+cache_size=""
+bundle_identifier=""
+icon_path=""
+legacy_icon_path=""
+icon_packaging=""
+signing_verified=false
+replaced_existing_app=false
+build_kind="final"
+[[ "$development" == true ]] && build_kind="development"
+
+finish() {
+  local status=$?
+  if [[ -n "$stage_dir" && -d "$stage_dir" ]]; then
+    rm -rf "$stage_dir"
+  fi
+  if [[ "$json" == true ]]; then
+    exec 1>&3
+    if [[ $status -eq 0 && "$build_succeeded" == true ]]; then
+      printf '{"schemaVersion":1,"valid":true,"buildKind":"%s","appPath":"%s","bundleIdentifier":"%s","icon":{"source":"%s","packaging":"%s","verified":true},"signing":{"verified":%s},"replacement":{"replacedExistingApp":%s,"explicitlyAuthorized":%s},"sizes":{"app":"%s","buildCache":"%s"}}\n' \
+        "$build_kind" \
+        "$(json_escape "$app_path")" \
+        "$(json_escape "$bundle_identifier")" \
+        "$(json_escape "$icon_path")" \
+        "$(json_escape "$icon_packaging")" \
+        "$signing_verified" "$replaced_existing_app" "$replace_existing_app" \
+        "$(json_escape "$app_size")" "$(json_escape "$cache_size")"
+    else
+      local message
+      local details
+      message="$(
+        /usr/bin/awk '/^(Error:|error:)/ { last = $0 } END { print last }' \
+          "$json_log"
+      )"
+      [[ -n "$message" ]] || message="build-app failed"
+      details="$(/usr/bin/tail -n 20 "$json_log")"
+      printf '{"schemaVersion":1,"valid":false,"error":{"code":"buildFailed","message":"%s","details":"%s"}}\n' \
+        "$(json_escape "$message")" "$(json_escape "$details")"
+    fi
+    rm -f "$json_log"
+  fi
+}
+
+if [[ "$json" == true ]]; then
+  json_log="$(mktemp "${TMPDIR:-/tmp}/enmanner-build.XXXXXX")"
+  exec 3>&1
+  exec >"$json_log" 2>&1
+fi
+trap finish EXIT
+
+available_kib="$(df -Pk "$project_dir" | /usr/bin/awk 'NR == 2 { print $4 }')"
+if [[ "$available_kib" =~ ^[0-9]+$ && "$available_kib" -lt 1048576 ]]; then
+  echo "Error: building an app requires at least 1 GiB of free disk space." >&2
+  echo "  Available: $((available_kib / 1024)) MiB on the project filesystem." >&2
+  echo "  Run ./.enmanner/scripts/clean or remove other safe caches first." >&2
+  echo "  Enmanner will not alter Docker data or project-owned state." >&2
+  exit 1
+fi
+
+if [[ "$development" == true ]]; then
+  "$script_dir/validate" --development
+elif [[ "$allow_legacy_icon" == true ]]; then
+  "$script_dir/validate" --allow-legacy-icon
+else
+  "$script_dir/validate"
+fi
+
+validator_dir="$("$script_dir/prepare-framework")"
+validator="$validator_dir/enmanner-validator"
+manifest_app_name="$("$validator" --project "$project_dir" --print name)"
+app_name="$manifest_app_name"
+manifest_bundle_identifier="$("$validator" --project "$project_dir" --print identifier)"
+managed_components="$("$validator" --project "$project_dir" --print managed-components)"
+prerequisites="$("$validator" --project "$project_dir" --print prerequisites)"
+icon_path="$("$validator" --project "$project_dir" --print icon)"
+legacy_icon_path="$("$validator" --project "$project_dir" --print icon-legacy)"
+bundle_identifier="$manifest_bundle_identifier"
+if [[ "$development" == true ]]; then
+  app_name="$app_name Development"
+  bundle_identifier="$bundle_identifier.development"
+  icon_path="framework-generated-development-icon"
+elif [[ -z "$icon_path" ]]; then
+  echo "Error: no app icon is configured in enmanner/enmanner.json." >&2
+  echo "  Enmanner does not build placeholder launchers. Create and inspect a" >&2
+  echo "  distinctive icon using .enmanner/instructions/icon.md, then rebuild." >&2
+  exit 1
+fi
+app_path="$project_dir/$app_name.app"
+launcher_path="$app_path/Contents/MacOS/EnmannerLauncher"
+ownership_marker="$app_path/Contents/Resources/EnmannerOwnership.plist"
+
+if [[ -e "$app_path" && "$replace_existing_app" != true ]]; then
+  existing_identifier=""
+  existing_executable=""
+  if [[ -f "$ownership_marker" ]]; then
+    existing_identifier="$(
+      /usr/bin/plutil -extract bundleIdentifier raw "$ownership_marker" \
+        2>/dev/null || true
+    )"
+    if [[ "$existing_identifier" != "$bundle_identifier" ]]; then
+      echo "Error: refusing to replace $app_name.app because its Enmanner" >&2
+      echo "  ownership marker belongs to a different project identifier." >&2
+      echo "  Review the collision, then use --replace-existing-app if intentional." >&2
+      exit 1
+    fi
+  elif [[ -f "$app_path/Contents/Info.plist" ]]; then
+    existing_identifier="$(
+      /usr/bin/plutil -extract CFBundleIdentifier raw \
+        "$app_path/Contents/Info.plist" 2>/dev/null || true
+    )"
+    existing_executable="$(
+      /usr/bin/plutil -extract CFBundleExecutable raw \
+        "$app_path/Contents/Info.plist" 2>/dev/null || true
+    )"
+    if [[ "$existing_identifier" != "$bundle_identifier" ||
+      "$existing_executable" != "EnmannerLauncher" ]]; then
+      echo "Error: refusing to replace an unowned existing $app_name.app." >&2
+      echo "  Review the collision, then use --replace-existing-app if intentional." >&2
+      exit 1
+    fi
+    echo "Warning: upgrading a legacy Enmanner app without an ownership marker." >&2
+  else
+    echo "Error: refusing to replace an unowned existing $app_name.app." >&2
+    echo "  Review the collision, then use --replace-existing-app if intentional." >&2
+    exit 1
+  fi
+fi
+[[ -e "$app_path" ]] && replaced_existing_app=true
+
+escaped_manifest_app_name="$manifest_app_name"
+escaped_manifest_app_name="${escaped_manifest_app_name//\\/\\\\}"
+escaped_manifest_app_name="${escaped_manifest_app_name//\[/\\[}"
+escaped_manifest_app_name="${escaped_manifest_app_name//\]/\\]}"
+escaped_manifest_app_name="${escaped_manifest_app_name//\*/\\*}"
+escaped_manifest_app_name="${escaped_manifest_app_name//\?/\\?}"
+escaped_manifest_app_name="${escaped_manifest_app_name//#/\\#}"
+escaped_manifest_app_name="${escaped_manifest_app_name//!/\\!}"
+final_app_ignore="/$escaped_manifest_app_name.app/"
+development_app_ignore="/$escaped_manifest_app_name Development.app/"
+gitignore="$project_dir/.gitignore"
+gitignore_update="$(mktemp "${TMPDIR:-/tmp}/enmanner-gitignore.XXXXXX")"
+if grep -Fqx "# enmanner:end" "$gitignore" 2>/dev/null; then
+  /usr/bin/awk \
+    -v final_entry="$final_app_ignore" \
+    -v development_entry="$development_app_ignore" '
+    $0 == "# enmanner:begin" {
+      in_enmanner = 1
+      print
+      next
+    }
+    $0 == "# enmanner:end" {
+      print final_entry
+      print development_entry
+      in_enmanner = 0
+      print
+      next
+    }
+    in_enmanner && /^\/.*\.app\/$/ { next }
+    { print }
+  ' "$gitignore" > "$gitignore_update"
+else
+  {
+    [[ -f "$gitignore" ]] && cat "$gitignore"
+    echo
+    echo "# enmanner:begin"
+    echo "/.enmanner/framework/.build/"
+    echo "/.enmanner/.build/"
+    echo "$final_app_ignore"
+    echo "$development_app_ignore"
+    echo "# enmanner:end"
+  } > "$gitignore_update"
+fi
+if ! cmp -s "$gitignore_update" "$gitignore" 2>/dev/null; then
+  mv "$gitignore_update" "$gitignore"
+else
+  rm -f "$gitignore_update"
+fi
+
+while read -r running_pid running_command; do
+  if [[ "$running_command" == "$launcher_path" ]]; then
+    echo "Warning: $app_name is currently running (PID $running_pid)." >&2
+    echo "  This build updates the app on disk; quit and reopen it to use the" >&2
+    echo "  new launcher, native configuration, and resources." >&2
+  fi
+done < <(/bin/ps -axo pid=,comm=)
+
+echo "Using the verified native Enmanner launcher…"
+bin_dir="$("$script_dir/prepare-framework")"
+
+stage_dir="$(mktemp -d "${TMPDIR:-/tmp}/enmanner-app.XXXXXX")"
+
+staged_app="$stage_dir/$app_name.app"
+contents="$staged_app/Contents"
+mkdir -p "$contents/MacOS" "$contents/Resources"
+cp "$bin_dir/EnmannerLauncher" "$contents/MacOS/EnmannerLauncher"
+chmod 755 "$contents/MacOS/EnmannerLauncher"
+
+plist="$contents/Info.plist"
+/usr/bin/plutil -create xml1 "$plist"
+/usr/bin/plutil -insert CFBundleDevelopmentRegion -string "en" "$plist"
+/usr/bin/plutil -insert CFBundleDisplayName -string "$app_name" "$plist"
+/usr/bin/plutil -insert CFBundleExecutable -string "EnmannerLauncher" "$plist"
+/usr/bin/plutil -insert CFBundleIdentifier -string "$bundle_identifier" "$plist"
+/usr/bin/plutil -insert CFBundleInfoDictionaryVersion -string "6.0" "$plist"
+/usr/bin/plutil -insert CFBundleName -string "$app_name" "$plist"
+/usr/bin/plutil -insert CFBundlePackageType -string "APPL" "$plist"
+framework_version="$(tr -d '[:space:]' < "$integration_dir/VERSION")"
+/usr/bin/plutil -insert CFBundleShortVersionString \
+  -string "$framework_version" "$plist"
+/usr/bin/plutil -insert CFBundleVersion -string "1" "$plist"
+/usr/bin/plutil -insert LSMinimumSystemVersion -string "13.0" "$plist"
+/usr/bin/plutil -insert LSMultipleInstancesProhibited -bool true "$plist"
+/usr/bin/plutil -insert NSHighResolutionCapable -bool true "$plist"
+/usr/bin/plutil -insert NSAppTransportSecurity -json \
+  '{"NSAllowsLocalNetworking":true}' "$plist"
+folder_usage_description="This folder contains your project, which the app needs to run."
+folder_usage_keys=(
+  NSDesktopFolderUsageDescription
+  NSDocumentsFolderUsageDescription
+  NSDownloadsFolderUsageDescription
+  NSNetworkVolumesUsageDescription
+  NSRemovableVolumesUsageDescription
+)
+for usage_key in "${folder_usage_keys[@]}"; do
+  /usr/bin/plutil -insert "$usage_key" \
+    -string "$folder_usage_description" "$plist"
+done
+
+ownership_plist="$contents/Resources/EnmannerOwnership.plist"
+/usr/bin/plutil -create xml1 "$ownership_plist"
+/usr/bin/plutil -insert formatVersion -integer 1 "$ownership_plist"
+/usr/bin/plutil -insert generator -string "Enmanner" "$ownership_plist"
+/usr/bin/plutil -insert bundleIdentifier -string "$bundle_identifier" "$ownership_plist"
+/usr/bin/plutil -insert manifestBundleIdentifier \
+  -string "$manifest_bundle_identifier" "$ownership_plist"
+/usr/bin/plutil -insert buildKind -string "$build_kind" "$ownership_plist"
+
+if [[ "$development" == true ]]; then
+  icon_packaging="developmentIcns"
+  development_png="$stage_dir/development-icon.png"
+  /usr/bin/swift - "$development_png" <<'SWIFT'
+import AppKit
+
+let output = CommandLine.arguments[1]
+let size = NSSize(width: 1024, height: 1024)
+let image = NSImage(size: size)
+image.lockFocus()
+NSColor(calibratedRed: 0.16, green: 0.17, blue: 0.20, alpha: 1).setFill()
+NSBezierPath(roundedRect: NSRect(origin: .zero, size: size), xRadius: 220, yRadius: 220).fill()
+NSColor(calibratedRed: 1.0, green: 0.55, blue: 0.08, alpha: 1).setFill()
+NSBezierPath(
+    roundedRect: NSRect(x: 92, y: 92, width: 840, height: 840),
+    xRadius: 170,
+    yRadius: 170
+).fill()
+let style = NSMutableParagraphStyle()
+style.alignment = .center
+let attributes: [NSAttributedString.Key: Any] = [
+    .font: NSFont.systemFont(ofSize: 270, weight: .black),
+    .foregroundColor: NSColor(calibratedWhite: 0.10, alpha: 1),
+    .paragraphStyle: style
+]
+("DEV" as NSString).draw(
+    in: NSRect(x: 92, y: 345, width: 840, height: 330),
+    withAttributes: attributes
+)
+image.unlockFocus()
+guard let tiff = image.tiffRepresentation,
+      let bitmap = NSBitmapImageRep(data: tiff),
+      let png = bitmap.representation(using: .png, properties: [:]) else {
+    fatalError("Could not render the Enmanner development icon.")
+}
+try png.write(to: URL(fileURLWithPath: output), options: .atomic)
+SWIFT
+  development_iconset="$stage_dir/Development.iconset"
+  mkdir -p "$development_iconset"
+  while read -r pixels filename; do
+    /usr/bin/sips -z "$pixels" "$pixels" "$development_png" \
+      --out "$development_iconset/$filename" >/dev/null
+  done <<'ICON_SIZES'
+16 icon_16x16.png
+32 icon_16x16@2x.png
+32 icon_32x32.png
+64 icon_32x32@2x.png
+128 icon_128x128.png
+256 icon_128x128@2x.png
+256 icon_256x256.png
+512 icon_256x256@2x.png
+512 icon_512x512.png
+1024 icon_512x512@2x.png
+ICON_SIZES
+  /usr/bin/iconutil -c icns "$development_iconset" \
+    -o "$contents/Resources/Development.icns"
+  /usr/bin/plutil -insert CFBundleIconFile -string "Development" "$plist"
+  echo "✓ Packaged an unmistakable development-only icon"
+else
+  icon_source="$project_dir/$icon_path"
+  icon_extension="${icon_path##*.}"
+
+  if [[ "$icon_extension" == "icon" ]]; then
+    icon_packaging="modernIconImageStack"
+    if ! command -v xcrun >/dev/null 2>&1 ||
+      ! xcrun --find actool >/dev/null 2>&1; then
+      echo "Error: building an Icon Composer package requires Xcode with actool." >&2
+      echo "  Install current Xcode, or configure a legacy .icns fallback." >&2
+      exit 1
+    fi
+
+    icon_name="$(basename "$icon_path" .icon)"
+    icon_output="$stage_dir/icon-output"
+    icon_plist="$stage_dir/icon-info.plist"
+    mkdir -p "$icon_output"
+    xcrun actool "$icon_source" \
+      --compile "$icon_output" \
+      --platform macosx \
+      --minimum-deployment-target 13.0 \
+      --app-icon "$icon_name" \
+      --standalone-icon-behavior all \
+      --output-partial-info-plist "$icon_plist" \
+      --warnings \
+      --errors \
+      --notices \
+      --output-format human-readable-text \
+      3>&-
+
+    modern_icon_verified=false
+    asset_info="$stage_dir/icon-assets.json"
+    if [[ -f "$icon_output/Assets.car" ]]; then
+      if ! xcrun assetutil --info "$icon_output/Assets.car" > "$asset_info"; then
+        echo "Error: assetutil could not inspect the compiled icon catalog." >&2
+        exit 1
+      fi
+      if /usr/bin/grep -Eq \
+        '"AssetType"[[:space:]]*:[[:space:]]*"IconImageStack"' "$asset_info"; then
+        modern_icon_verified=true
+      fi
+    fi
+
+    if [[ "$modern_icon_verified" == true ]]; then
+      cp "$icon_output/Assets.car" "$contents/Resources/Assets.car"
+      if [[ -f "$icon_output/$icon_name.icns" ]]; then
+        cp "$icon_output/$icon_name.icns" "$contents/Resources/$icon_name.icns"
+      fi
+      /usr/bin/plutil -insert CFBundleIconFile -string "$icon_name" "$plist"
+      /usr/bin/plutil -insert CFBundleIconName -string "$icon_name" "$plist"
+
+      compiled_icon_name="$(/usr/bin/plutil -extract CFBundleIconName raw "$plist")"
+      if [[ "$compiled_icon_name" != "$icon_name" ]]; then
+        echo "Error: the compiled app is missing the expected CFBundleIconName." >&2
+        exit 1
+      fi
+      echo "✓ Verified CFBundleIconName and the compiled IconImageStack"
+    elif [[ -n "$legacy_icon_path" && -f "$project_dir/$legacy_icon_path" ]]; then
+      echo "Warning: this Xcode actool cannot compile an Icon Composer image stack." >&2
+      echo "  Using the configured legacy fallback: $legacy_icon_path" >&2
+      icon_path="$legacy_icon_path"
+      icon_source="$project_dir/$icon_path"
+      icon_packaging="legacyIcns"
+      cp "$icon_source" "$contents/Resources/AppIcon.icns"
+      /usr/bin/plutil -insert CFBundleIconFile -string "AppIcon" "$plist"
+    else
+      echo "Error: actool did not produce a modern IconImageStack for $icon_path." >&2
+      echo "  Install a current Xcode, or configure icon.legacy as a fallback." >&2
+      exit 1
+    fi
+  else
+    icon_packaging="legacyIcns"
+    cp "$icon_source" "$contents/Resources/AppIcon.icns"
+    /usr/bin/plutil -insert CFBundleIconFile -string "AppIcon" "$plist"
+  fi
+fi
+
+if command -v codesign >/dev/null 2>&1; then
+  /usr/bin/codesign --force --sign - --timestamp=none "$staged_app"
+  /usr/bin/codesign --verify --deep --strict "$staged_app"
+  signing_verified=true
+  echo "✓ Verified the app's ad-hoc code signature"
+fi
+
+previous_app=""
+if [[ -e "$app_path" ]]; then
+  previous_app="$stage_dir/previous.app"
+  mv "$app_path" "$previous_app"
+fi
+if ! mv "$staged_app" "$app_path"; then
+  if [[ -n "$previous_app" && -e "$previous_app" ]]; then
+    mv "$previous_app" "$app_path"
+  fi
+  exit 1
+fi
+
+launch_services_register="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+if [[ -x "$launch_services_register" ]]; then
+  "$launch_services_register" -f "$app_path" >/dev/null 2>&1 || true
+fi
+touch "$app_path"
+
+app_size="$(du -sh "$app_path" | awk '{print $1}')"
+cache_size="$(du -sh "$framework_dir/.build" | awk '{print $1}')"
+echo "✓ Created $app_name.app beside the project source ($app_size)"
+if [[ "$development" == true ]]; then
+  echo "  Integration-test artifact: this DEV bundle cannot satisfy doctor.complete."
+  echo "  Use $manifest_app_name.app—not this bundle—as the finished app."
+elif [[ -d "$project_dir/$manifest_app_name Development.app" ]]; then
+  echo "  $manifest_app_name Development.app is a provisional integration-test artifact."
+  echo "  $manifest_app_name.app is the finished app; the DEV artifact preserves test evidence."
+fi
+echo "  Enmanner build cache: $cache_size (remove with ./.enmanner/scripts/clean)"
+echo "  This launcher runs the local source checkout at: $project_dir"
+echo "  Managed runtime components: ${managed_components:-none}"
+echo "  Required external prerequisites: ${prerequisites:-none declared}"
+echo "  Source reload behavior comes from each component command; Enmanner adds no watcher."
+echo "  Declared project settings restart on Save or stable external file edits."
+echo "  Discover or restart this managed instance with ./.enmanner/scripts/runtime-status and runtime-restart."
+echo "  Runtime output appears under Window → Runtime Logs; Quit stops managed components."
+echo "  Move the whole project folder together on this Mac; rebuild on another Mac."
+build_succeeded=true

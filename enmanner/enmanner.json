@@ -1,0 +1,26 @@
+{
+  "$schema": "../.enmanner/enmanner.schema.json",
+  "version": 3,
+  "name": "Viginti",
+  "identifier": "local.enmanner.viginti",
+  "application": {
+    "command": ["npm", "run", "dev", "--", "--host", "127.0.0.1", "--port", "${self.endpoints.http.port}", "--strictPort"],
+    "workingDirectory": ".",
+    "environment": {"PORT": "${self.endpoints.http.port}"},
+    "preferredPort": 42236,
+    "readiness": {
+      "path": "/",
+      "timeoutSeconds": 30
+    }
+  },
+  "icon": {
+    "modern": "enmanner/icon/Viginti.icon",
+    "legacy": "enmanner/icon/Viginti.icns"
+  },
+  "window": {
+    "mode": "browser",
+    "width": 1200,
+    "height": 800,
+    "resizable": true
+  }
+}

@@ -1,0 +1,436 @@
+#!/bin/bash
+set -euo pipefail
+
+usage() {
+  echo "Usage: $0 --background path.png --foreground path.png --output AppIcon.icon [options]" >&2
+  echo "  All paths are project-relative; output must end in .icon." >&2
+  echo "  Options:" >&2
+  echo "    --legacy-output AppIcon.icns" >&2
+  echo "    --foreground-scale NUMBER" >&2
+  echo "    --foreground-offset-x PIXELS" >&2
+  echo "    --foreground-offset-y PIXELS" >&2
+  echo "    --replace" >&2
+}
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+project_dir="$(cd "$script_dir/../.." && pwd -P)"
+background_path=""
+foreground_path=""
+output_path=""
+legacy_output_path=""
+foreground_scale="1"
+foreground_offset_x="0"
+foreground_offset_y="0"
+replace=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --background|--foreground|--output|--legacy-output|--foreground-scale|--foreground-offset-x|--foreground-offset-y)
+      if [[ $# -lt 2 ]]; then
+        usage
+        exit 64
+      fi
+      case "$1" in
+        --background) background_path="$2" ;;
+        --foreground) foreground_path="$2" ;;
+        --output) output_path="$2" ;;
+        --legacy-output) legacy_output_path="$2" ;;
+        --foreground-scale) foreground_scale="$2" ;;
+        --foreground-offset-x) foreground_offset_x="$2" ;;
+        --foreground-offset-y) foreground_offset_y="$2" ;;
+      esac
+      shift 2
+      ;;
+    --replace)
+      replace=true
+      shift
+      ;;
+    *)
+      usage
+      exit 64
+      ;;
+  esac
+done
+
+if [[ -z "$background_path" || -z "$foreground_path" || -z "$output_path" ]]; then
+  usage
+  exit 64
+fi
+if ! /usr/bin/awk -v value="$foreground_scale" \
+  'BEGIN { exit !(value ~ /^[0-9]+([.][0-9]+)?$/ && value >= 0.1 && value <= 1.5) }'; then
+  echo "Error: --foreground-scale must be between 0.1 and 1.5." >&2
+  exit 64
+fi
+for offset in "$foreground_offset_x" "$foreground_offset_y"; do
+  if ! [[ "$offset" =~ ^-?[0-9]+([.][0-9]+)?$ ]]; then
+    echo "Error: foreground offsets must be numeric pixel values." >&2
+    exit 64
+  fi
+done
+
+icon_paths=("$background_path" "$foreground_path" "$output_path")
+[[ -n "$legacy_output_path" ]] && icon_paths+=("$legacy_output_path")
+for relative_path in "${icon_paths[@]}"; do
+  if [[ "$relative_path" == /* ||
+    "$relative_path" == ".." ||
+    "$relative_path" == ../* ||
+    "$relative_path" == */../* ||
+    "$relative_path" == */.. ]]; then
+    echo "Error: icon paths must stay inside the project: $relative_path" >&2
+    exit 1
+  fi
+done
+if [[ "$output_path" != *.icon ]]; then
+  echo "Error: --output must end in .icon." >&2
+  exit 64
+fi
+if [[ -n "$legacy_output_path" && "$legacy_output_path" != *.icns ]]; then
+  echo "Error: --legacy-output must end in .icns." >&2
+  exit 64
+fi
+
+background_source="$project_dir/$background_path"
+foreground_source="$project_dir/$foreground_path"
+output="$project_dir/$output_path"
+legacy_output=""
+[[ -n "$legacy_output_path" ]] &&
+  legacy_output="$project_dir/$legacy_output_path"
+if [[ ! -f "$background_source" || ! -f "$foreground_source" ]]; then
+  echo "Error: both source layers must be existing PNG files." >&2
+  exit 1
+fi
+if [[ -L "$background_source" || -L "$foreground_source" ]]; then
+  echo "Error: icon source layers must not be symbolic links." >&2
+  exit 1
+fi
+if [[ "${background_source##*.}" != "png" || "${foreground_source##*.}" != "png" ]]; then
+  echo "Error: both source layers must use the .png extension." >&2
+  exit 1
+fi
+is_generated_icon_package() {
+  local package="$1"
+  local contents
+  [[ -d "$package" && ! -L "$package" ]] || return 1
+  contents="$(
+    cd "$package"
+    find . \( -type f -o -type l \) -print | LC_ALL=C sort
+  )"
+  [[ "$contents" == $'./Assets/background.png\n./Assets/foreground.png\n./icon.json' ]] ||
+    return 1
+  [[ -f "$package/Assets/background.png" &&
+    ! -L "$package/Assets/background.png" &&
+    -f "$package/Assets/foreground.png" &&
+    ! -L "$package/Assets/foreground.png" &&
+    -f "$package/icon.json" && ! -L "$package/icon.json" ]] || return 1
+  [[ "$(/usr/bin/plutil -extract groups.0.layers.0.image-name raw \
+    "$package/icon.json" 2>/dev/null || true)" == "foreground.png" ]] || return 1
+  [[ "$(/usr/bin/plutil -extract groups.0.layers.1.image-name raw \
+    "$package/icon.json" 2>/dev/null || true)" == "background.png" ]] || return 1
+}
+
+existing_package_is_generated=false
+if [[ -e "$output" ]]; then
+  if [[ "$replace" != true ]]; then
+    echo "Error: refusing to overwrite existing icon package: $output_path" >&2
+    echo "  Use --replace only for an unchanged package created by this command." >&2
+    exit 1
+  fi
+  if ! is_generated_icon_package "$output"; then
+    echo "Error: --replace requires an unchanged Enmanner-generated icon package: $output_path" >&2
+    exit 1
+  fi
+  existing_package_is_generated=true
+fi
+if [[ -n "$legacy_output" && -e "$legacy_output" ]]; then
+  if [[ "$replace" != true ]]; then
+    echo "Error: refusing to overwrite existing legacy icon: $legacy_output_path" >&2
+    exit 1
+  fi
+  if [[ "$existing_package_is_generated" != true ||
+    ! -f "$legacy_output" || -L "$legacy_output" ||
+    "$(LC_ALL=C head -c 4 "$legacy_output")" != "icns" ]]; then
+    echo "Error: --replace can replace a legacy icon only beside a validated Enmanner-generated package." >&2
+    exit 1
+  fi
+fi
+if [[ -n "$legacy_output" ]] &&
+  { ! command -v xcrun >/dev/null 2>&1 ||
+    ! xcrun --find actool >/dev/null 2>&1; }; then
+  echo "Error: --legacy-output requires current Xcode with actool." >&2
+  echo "  Generate and commit both icon formats on the Xcode-equipped Mac." >&2
+  exit 1
+fi
+
+inspect_png() {
+  local source="$1"
+  local role="$2"
+  local width
+  local height
+  width="$(/usr/bin/sips -g pixelWidth "$source" | /usr/bin/awk '/pixelWidth:/ {print $2}')"
+  height="$(/usr/bin/sips -g pixelHeight "$source" | /usr/bin/awk '/pixelHeight:/ {print $2}')"
+  if [[ -z "$width" || "$width" != "$height" || "$width" -lt 1024 ]]; then
+    echo "Error: $role artwork must be a square PNG at least 1024×1024." >&2
+    exit 1
+  fi
+}
+
+inspect_png "$background_source" "background"
+inspect_png "$foreground_source" "foreground"
+
+alpha_ranges="$(
+  /usr/bin/xcrun swift - "$background_source" "$foreground_source" <<'SWIFT'
+import CoreGraphics
+import Foundation
+import ImageIO
+
+for path in CommandLine.arguments.dropFirst() {
+    let url = URL(fileURLWithPath: path) as CFURL
+    guard let source = CGImageSourceCreateWithURL(url, nil),
+          let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+        fatalError("Could not decode \(path) as an image.")
+    }
+    let width = image.width
+    let height = image.height
+    guard let context = CGContext(
+        data: nil,
+        width: width,
+        height: height,
+        bitsPerComponent: 8,
+        bytesPerRow: width * 4,
+        space: CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+    ), let data = context.data else {
+        fatalError("Could not inspect \(path).")
+    }
+    context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+    let bytes = data.bindMemory(to: UInt8.self, capacity: width * height * 4)
+    var minimum: UInt8 = 255
+    var maximum: UInt8 = 0
+    for index in 0..<(width * height) {
+        let alpha = bytes[index * 4 + 3]
+        minimum = min(minimum, alpha)
+        maximum = max(maximum, alpha)
+    }
+    print("\(minimum) \(maximum)")
+}
+SWIFT
+)"
+background_min_alpha="$(printf '%s\n' "$alpha_ranges" | /usr/bin/awk 'NR == 1 {print $1}')"
+foreground_min_alpha="$(printf '%s\n' "$alpha_ranges" | /usr/bin/awk 'NR == 2 {print $1}')"
+foreground_max_alpha="$(printf '%s\n' "$alpha_ranges" | /usr/bin/awk 'NR == 2 {print $2}')"
+if [[ "$background_min_alpha" != "255" ]]; then
+  echo "Error: background artwork must be opaque and full-bleed." >&2
+  echo "  Transparent corners usually mean a legacy container is baked into the source." >&2
+  exit 1
+fi
+if [[ "$foreground_min_alpha" == "255" || "$foreground_max_alpha" == "0" ]]; then
+  echo "Error: foreground artwork must have real alpha transparency." >&2
+  exit 1
+fi
+
+for source in "$background_source" "$foreground_source"; do
+  source_parent="$(cd "$(dirname "$source")" && pwd -P)"
+  case "$source_parent" in
+    "$project_dir"|"$project_dir"/*) ;;
+    *)
+      echo "Error: icon source layers must stay inside the project." >&2
+      exit 1
+      ;;
+  esac
+done
+
+validate_output_parent() {
+  local destination="$1"
+  local parent
+  local existing_parent
+  local resolved_parent
+  parent="$(dirname "$destination")"
+  existing_parent="$parent"
+  while [[ ! -e "$existing_parent" ]]; do
+    existing_parent="$(dirname "$existing_parent")"
+  done
+  if [[ ! -d "$existing_parent" ]]; then
+    echo "Error: the icon output parent path is not a directory." >&2
+    exit 1
+  fi
+  resolved_parent="$(cd "$existing_parent" && pwd -P)"
+  case "$resolved_parent" in
+    "$project_dir"|"$project_dir"/*) ;;
+    *)
+      echo "Error: icon output must stay inside the project." >&2
+      exit 1
+      ;;
+  esac
+}
+
+output_parent="$(dirname "$output")"
+validate_output_parent "$output"
+legacy_output_parent=""
+if [[ -n "$legacy_output" ]]; then
+  legacy_output_parent="$(dirname "$legacy_output")"
+  validate_output_parent "$legacy_output"
+fi
+mkdir -p "$output_parent"
+[[ -n "$legacy_output_parent" ]] && mkdir -p "$legacy_output_parent"
+stage_dir="$(mktemp -d "$output_parent/.enmanner-icon.XXXXXX")"
+completed=false
+published_modern=false
+published_legacy=false
+previous_modern=""
+previous_legacy=""
+cleanup() {
+  if [[ "$completed" != true ]]; then
+    [[ "$published_modern" == true ]] && rm -rf "$output"
+    [[ "$published_legacy" == true ]] && rm -f "$legacy_output"
+    [[ -n "$previous_modern" && -e "$previous_modern" ]] &&
+      mv "$previous_modern" "$output"
+    [[ -n "$previous_legacy" && -e "$previous_legacy" ]] &&
+      mv "$previous_legacy" "$legacy_output"
+  fi
+  rm -rf "$stage_dir"
+}
+trap cleanup EXIT
+
+icon_name="$(basename "$output_path" .icon)"
+staged_icon="$stage_dir/$icon_name.icon"
+mkdir -p "$staged_icon/Assets"
+cp "$background_source" "$staged_icon/Assets/background.png"
+if [[ "$foreground_scale" == "1" &&
+  "$foreground_offset_x" == "0" &&
+  "$foreground_offset_y" == "0" ]]; then
+  cp "$foreground_source" "$staged_icon/Assets/foreground.png"
+else
+  /usr/bin/xcrun swift - "$foreground_source" \
+    "$staged_icon/Assets/foreground.png" "$foreground_scale" \
+    "$foreground_offset_x" "$foreground_offset_y" <<'SWIFT'
+import CoreGraphics
+import Foundation
+import ImageIO
+import UniformTypeIdentifiers
+
+let arguments = CommandLine.arguments
+let sourceURL = URL(fileURLWithPath: arguments[1]) as CFURL
+let outputURL = URL(fileURLWithPath: arguments[2]) as CFURL
+let scale = Double(arguments[3])!
+let offsetX = Double(arguments[4])!
+let offsetY = Double(arguments[5])!
+guard let source = CGImageSourceCreateWithURL(sourceURL, nil),
+      let image = CGImageSourceCreateImageAtIndex(source, 0, nil),
+      let context = CGContext(
+        data: nil,
+        width: image.width,
+        height: image.height,
+        bitsPerComponent: 8,
+        bytesPerRow: image.width * 4,
+        space: CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+      ) else {
+    fatalError("Could not transform foreground artwork.")
+}
+context.clear(CGRect(x: 0, y: 0, width: image.width, height: image.height))
+let width = Double(image.width) * scale
+let height = Double(image.height) * scale
+let rect = CGRect(
+    x: (Double(image.width) - width) / 2 + offsetX,
+    y: (Double(image.height) - height) / 2 - offsetY,
+    width: width,
+    height: height
+)
+context.interpolationQuality = .high
+context.draw(image, in: rect)
+guard let transformed = context.makeImage(),
+      let destination = CGImageDestinationCreateWithURL(
+        outputURL,
+        UTType.png.identifier as CFString,
+        1,
+        nil
+      ) else {
+    fatalError("Could not encode transformed foreground artwork.")
+}
+CGImageDestinationAddImage(destination, transformed, nil)
+guard CGImageDestinationFinalize(destination) else {
+    fatalError("Could not write transformed foreground artwork.")
+}
+SWIFT
+fi
+printf '%s\n' \
+  '{' \
+  '  "groups" : [' \
+  '    {' \
+  '      "layers" : [' \
+  '        {' \
+  '          "image-name" : "foreground.png",' \
+  '          "name" : "Foreground"' \
+  '        },' \
+  '        {' \
+  '          "image-name" : "background.png",' \
+  '          "name" : "Background"' \
+  '        }' \
+  '      ]' \
+  '    }' \
+  '  ],' \
+  '  "supported-platforms" : {' \
+  '    "circles" : ["watchOS"],' \
+  '    "squares" : "shared"' \
+  '  }' \
+  '}' > "$staged_icon/icon.json"
+
+staged_legacy=""
+if [[ -n "$legacy_output" ]]; then
+  compiled_output="$stage_dir/compiled"
+  partial_plist="$stage_dir/icon-info.plist"
+  mkdir -p "$compiled_output"
+  xcrun actool "$staged_icon" \
+    --compile "$compiled_output" \
+    --platform macosx \
+    --minimum-deployment-target 13.0 \
+    --app-icon "$icon_name" \
+    --standalone-icon-behavior all \
+    --output-partial-info-plist "$partial_plist" \
+    --warnings \
+    --errors \
+    --notices \
+    --output-format human-readable-text
+  generated_legacy="$compiled_output/$icon_name.icns"
+  if [[ ! -s "$generated_legacy" ]]; then
+    echo "Error: actool did not generate the expected legacy .icns fallback." >&2
+    exit 1
+  fi
+  staged_legacy="$stage_dir/$(basename "$legacy_output_path")"
+  cp "$generated_legacy" "$staged_legacy"
+fi
+
+if [[ -e "$output" ]]; then
+  previous_modern="$stage_dir/previous.icon"
+  mv "$output" "$previous_modern"
+fi
+if [[ -n "$legacy_output" && -e "$legacy_output" ]]; then
+  previous_legacy="$stage_dir/previous.icns"
+  mv "$legacy_output" "$previous_legacy"
+fi
+mv "$staged_icon" "$output"
+published_modern=true
+if [[ -n "$staged_legacy" ]]; then
+  mv "$staged_legacy" "$legacy_output"
+  published_legacy=true
+fi
+completed=true
+if [[ "$replace" == true && -n "$previous_modern" ]]; then
+  echo "✓ Atomically replaced $output_path"
+fi
+echo "✓ Created $output_path from separate full-canvas layers"
+if [[ -n "$legacy_output_path" ]]; then
+  echo "✓ Created $legacy_output_path from actool's legacy fallback"
+fi
+if [[ "$foreground_scale" != "1" ||
+  "$foreground_offset_x" != "0" ||
+  "$foreground_offset_y" != "0" ]]; then
+  echo "  Applied foreground transform: scale $foreground_scale, x $foreground_offset_x px, y $foreground_offset_y px"
+fi
+if [[ -n "$legacy_output_path" ]]; then
+  echo "  Run ./.enmanner/scripts/preview-icon --package $output_path,"
+  echo "  then configure icon.modern and icon.legacy in enmanner/enmanner.json."
+else
+  echo "  Run ./.enmanner/scripts/preview-icon --package $output_path,"
+  echo "  then configure it in enmanner/enmanner.json."
+fi

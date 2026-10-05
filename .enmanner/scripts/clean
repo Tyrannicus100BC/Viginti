@@ -1,0 +1,14 @@
+#!/bin/bash
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+integration_dir="$(cd "$script_dir/.." && pwd)"
+build_dir="$integration_dir/framework/.build"
+
+if [[ -d "$build_dir" ]]; then
+  before="$(du -sh "$build_dir" | awk '{print $1}')"
+  swift package --package-path "$integration_dir/framework" clean
+  echo "✓ Removed Enmanner Swift build products ($before before cleaning)"
+else
+  echo "✓ No Enmanner Swift build products are present"
+fi

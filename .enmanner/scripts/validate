@@ -1,0 +1,195 @@
+#!/bin/bash
+set -euo pipefail
+
+usage() {
+  cat >&2 <<EOF
+Usage: $0 [--runtime] [--soak-seconds SECONDS] [--doctor] [--next] [--development] [--json|--json-lines] [--allow-legacy-icon]
+
+Examples:
+  $0
+  $0 --runtime --json-lines
+  $0 --doctor --json
+  $0 --doctor --next
+
+--runtime starts the declared component graph, waits for readiness, then
+observes service stability for five seconds before checking shutdown. JSON
+Lines includes component output and lifecycle events.
+EOF
+}
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+integration_dir="$(cd "$script_dir/.." && pwd)"
+project_dir="$(cd "$integration_dir/.." && pwd)"
+framework_dir="$integration_dir/framework"
+runtime_flag=""
+soak_seconds=""
+doctor_flag=false
+next_flag=false
+allow_legacy_icon=false
+development=false
+json=false
+json_lines=false
+
+while [[ "${1:-}" == --* ]]; do
+  case "$1" in
+    --runtime) runtime_flag="--runtime" ;;
+    --soak-seconds)
+      shift
+      soak_seconds="${1:-}"
+      [[ -n "$soak_seconds" ]] || { usage; exit 64; }
+      ;;
+    --doctor) doctor_flag=true ;;
+    --next) next_flag=true ;;
+    --allow-legacy-icon) allow_legacy_icon=true ;;
+    --development) development=true ;;
+    --json) json=true ;;
+    --json-lines) json_lines=true ;;
+    --help|-h) usage; exit 0 ;;
+    *)
+      usage
+      exit 64
+      ;;
+  esac
+  shift
+done
+if [[ $# -ne 0 || ( "$json" == true && "$json_lines" == true ) ]]; then
+  usage
+  exit 64
+fi
+if [[ -n "$soak_seconds" && -z "$runtime_flag" ]]; then
+  echo "Error: --soak-seconds requires --runtime." >&2
+  exit 64
+fi
+if [[ "$next_flag" == true &&
+  ( "$doctor_flag" != true || "$json" == true || "$json_lines" == true ||
+    -n "$runtime_flag" ) ]]; then
+  echo "Error: --next requires --doctor and plain, non-runtime output." >&2
+  exit 64
+fi
+
+if [[ -x "$script_dir/install" ]]; then
+  echo "Error: integration/scripts/validate is installed-project tooling." >&2
+  echo "  First run integration/scripts/install /path/to/project, then run" >&2
+  echo "  ./.enmanner/scripts/validate from that target project." >&2
+  exit 64
+fi
+
+if [[ -n "$runtime_flag" && "$json" != true && "$json_lines" != true ]]; then
+  echo "Warning: runtime validation starts and stops the configured application." >&2
+  echo "  It may mutate databases, containers, volumes, caches, or other local state." >&2
+  echo "  Review state ownership and persistence before using it." >&2
+fi
+
+if [[ "$json" == true ]]; then
+  if ! toolchain_result="$("$script_dir/toolchain-preflight" --json)"; then
+    printf '%s\n' "$toolchain_result"
+    exit 1
+  fi
+elif [[ "$json_lines" == true ]]; then
+  if ! toolchain_result="$("$script_dir/toolchain-preflight" --json)"; then
+    printf '{"event":"error","report":%s}\n' "$toolchain_result"
+    exit 1
+  fi
+else
+  "$script_dir/toolchain-preflight"
+fi
+
+available_kib="$(df -Pk "$project_dir" | /usr/bin/awk 'NR == 2 { print $4 }')"
+if [[ "$available_kib" =~ ^[0-9]+$ ]]; then
+  if [[ "$runtime_flag" == "--runtime" && "$available_kib" -lt 1048576 ]]; then
+    disk_message="Runtime validation requires at least 1 GiB of free disk space; $((available_kib / 1024)) MiB is available. Remove safe project caches first; Enmanner will not alter Docker data."
+    if [[ "$json" == true ]]; then
+      printf '{"valid":false,"error":{"code":"diskSpaceCritical","path":null,"message":"%s"}}\n' \
+        "$disk_message"
+    elif [[ "$json_lines" == true ]]; then
+      printf '{"event":"error","report":{"valid":false,"error":{"code":"diskSpaceCritical","path":null,"message":"%s"}}}\n' \
+        "$disk_message"
+    else
+      echo "Error: runtime validation requires at least 1 GiB of free disk space." >&2
+      echo "  Available: $((available_kib / 1024)) MiB on the project filesystem." >&2
+      echo "  Remove safe project caches first; Enmanner will not alter Docker data." >&2
+    fi
+    exit 1
+  elif [[ "$available_kib" -lt 5242880 ]]; then
+    echo "Warning: only $((available_kib / 1024)) MiB is free on the project filesystem." >&2
+    echo "  Enmanner cache cleanup: ./.enmanner/scripts/clean" >&2
+  fi
+fi
+
+[[ "$json" == true || "$json_lines" == true || "$next_flag" == true ]] ||
+  echo "Validating Enmanner configuration…"
+build_log="$(mktemp "${TMPDIR:-/tmp}/enmanner-framework-build.XXXXXX")"
+cleanup_build_log() {
+  rm -f "$build_log"
+}
+trap cleanup_build_log EXIT
+if ! bin_dir="$("$script_dir/prepare-framework" 2>"$build_log")"; then
+  build_details="$(/usr/bin/tail -n 30 "$build_log")"
+  if [[ "$json" == true ]]; then
+    escaped_details="${build_details//\\/\\\\}"
+    escaped_details="${escaped_details//\"/\\\"}"
+    escaped_details="${escaped_details//$'\n'/\\n}"
+    printf '{"schemaVersion":1,"valid":false,"error":{"stage":"frameworkBuild","code":"frameworkBuildFailed","message":"The Enmanner launcher framework could not be compiled.","stderrTail":"%s"}}\n' "$escaped_details"
+  elif [[ "$json_lines" == true ]]; then
+    escaped_details="${build_details//\\/\\\\}"
+    escaped_details="${escaped_details//\"/\\\"}"
+    escaped_details="${escaped_details//$'\n'/\\n}"
+    printf '{"event":"error","report":{"schemaVersion":1,"valid":false,"error":{"stage":"frameworkBuild","code":"frameworkBuildFailed","message":"The Enmanner launcher framework could not be compiled.","stderrTail":"%s"}}}\n' "$escaped_details"
+  else
+    echo "Error: the Enmanner launcher framework could not be compiled." >&2
+    printf '%s\n' "$build_details" >&2
+  fi
+  exit 1
+fi
+if [[ "$json" != true && "$json_lines" != true && "$next_flag" != true && -s "$build_log" ]]; then
+  /bin/cat "$build_log" >&2
+fi
+
+manifest="$project_dir/enmanner/enmanner.json"
+modern_icon="$(
+  /usr/bin/plutil -extract icon.modern raw "$manifest" 2>/dev/null || true
+)"
+legacy_icon="$(
+  /usr/bin/plutil -extract icon.legacy raw "$manifest" 2>/dev/null || true
+)"
+single_icon="$(
+  /usr/bin/plutil -extract icon raw "$manifest" 2>/dev/null || true
+)"
+icon_path="$single_icon"
+if command -v xcrun >/dev/null 2>&1 &&
+  xcrun --find actool >/dev/null 2>&1; then
+  [[ -n "$modern_icon" ]] && icon_path="$modern_icon"
+  [[ -z "$icon_path" && -n "$legacy_icon" ]] && icon_path="$legacy_icon"
+else
+  [[ -n "$legacy_icon" ]] && icon_path="$legacy_icon"
+  [[ -z "$icon_path" && -n "$modern_icon" ]] && icon_path="$modern_icon"
+fi
+if [[ "$icon_path" == *.icns && "$development" != true ]]; then
+  if command -v xcrun >/dev/null 2>&1 &&
+    xcrun --find actool >/dev/null 2>&1; then
+    if [[ "$allow_legacy_icon" != true ]]; then
+      echo "Error: $icon_path is a legacy .icns while modern icon tooling is available." >&2
+      echo "  A standalone .icns can trigger the Tahoe compatibility enclosure (icon jail)." >&2
+      echo "  Configure an Icon Composer .icon package, or rerun with" >&2
+      echo "  --allow-legacy-icon only for an intentional compatibility fallback." >&2
+      exit 1
+    fi
+    echo "Warning: allowing legacy .icns packaging by explicit request." >&2
+    echo "  The app may appear inside the Tahoe compatibility enclosure (icon jail)." >&2
+  else
+    echo "Warning: using legacy .icns because Xcode actool is unavailable." >&2
+    echo "  This is a compatibility fallback, not a native modern icon." >&2
+  fi
+fi
+
+validator_args=(--project "$project_dir")
+[[ -n "$runtime_flag" ]] && validator_args+=("$runtime_flag")
+[[ -n "$soak_seconds" ]] &&
+  validator_args+=(--runtime-soak-seconds "$soak_seconds")
+[[ "$doctor_flag" == true ]] && validator_args+=(--doctor)
+[[ "$next_flag" == true ]] && validator_args+=(--next)
+[[ "$json" == true ]] && validator_args+=(--json)
+[[ "$json_lines" == true ]] && validator_args+=(--json-lines)
+"$bin_dir/enmanner-validator" "${validator_args[@]}"
+[[ "$json" == true || "$json_lines" == true || "$next_flag" == true ]] ||
+  echo "✓ validator compiles with the active Apple toolchain"

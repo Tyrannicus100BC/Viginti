@@ -1,0 +1,28 @@
+#!/bin/bash
+set -euo pipefail
+
+if [[ "${1:-}" != "--unversioned" || $# -ne 1 ]]; then
+  echo "Usage: $0 --unversioned" >&2
+  exit 64
+fi
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+installation_record="$(cd "$script_dir/.." && pwd)/INSTALLATION.json"
+if [[ ! -f "$installation_record" ]]; then
+  echo "Error: Enmanner installation provenance is missing." >&2
+  exit 1
+fi
+
+temporary="$(mktemp "${TMPDIR:-/tmp}/enmanner-durability.XXXXXX")"
+cleanup() {
+  rm -f "$temporary"
+}
+trap cleanup EXIT
+/bin/cp "$installation_record" "$temporary"
+original_mode="$(/usr/bin/stat -f '%Lp' "$installation_record")"
+/bin/chmod "$original_mode" "$temporary"
+/usr/bin/plutil -replace unversionedAcknowledged -bool true "$temporary"
+/usr/bin/plutil -convert json "$temporary"
+/bin/mv "$temporary" "$installation_record"
+trap - EXIT
+echo "✓ Recorded this project as an intentionally unversioned workspace"
