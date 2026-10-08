@@ -31,6 +31,8 @@ export interface EventPlayerConfig {
     getSpeed: () => number;
     /** If true, skip all timing (for tests / headless) */
     headless?: boolean;
+    /** Hold the ante interstitial until the player dismisses it. */
+    waitForAnteContinue?: () => Promise<void>;
 }
 
 /** Async handler for a single event */
@@ -389,6 +391,7 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
         
         // 1. Reveal the row (frame + label)
         config.updateUI({
+            ...(event.newComps !== undefined ? { comps: event.newComps } : {}),
             scoringCriteria: (prev: any) => {
                 const current = prev[handIndex] || [];
                 return { ...prev, [handIndex]: [...current, criterion] };
@@ -540,7 +543,7 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
             handsUntilAnteIncrease: event.handsUntilAnteIncrease,
             anteIncrease: { previousAnte: event.previousAnte, ante: event.ante },
         });
-        await wait(1600, config);
+        if (!config.headless) await config.waitForAnteContinue?.();
         config.updateUI({ anteIncrease: null });
     },
 
@@ -713,6 +716,8 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
     async comps_earned(event, config) {
         if (event.type !== 'comps_earned') return;
         config.updateUI({ comps: event.newTotal });
+        // Winning tickets already appear, with sound, as their scoring row opens.
+        if (event.reason === 'winning_hands') return;
         config.sfx?.play('click');
         await wait(200, config);
     },

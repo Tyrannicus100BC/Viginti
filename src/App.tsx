@@ -15,7 +15,7 @@ import { GamblerSelect } from './components/GamblerSelect';
 import { CitySelect } from './components/CitySelect';
 
 import { CompsWindow } from './components/CompsWindow';
-import { RaisePackChoice } from './components/RaisePackChoice';
+import { RaisePackChoice, type PackSourceRect } from './components/RaisePackChoice';
 import { RelicInventory } from './components/RelicInventory';
 
 import { RelicStore } from './components/RelicStore';
@@ -140,7 +140,9 @@ export default function App() {
         comps,
         ante,
         handsUntilAnteIncrease,
+        shopHasNewStock,
         anteIncrease,
+        continueAnteIncrease,
 
         isShaking,
 
@@ -798,6 +800,7 @@ export default function App() {
 
     const [showSelectionUI, setShowSelectionUI] = useState(false);
     const [giftShopEnterComplete, setGiftShopEnterComplete] = useState(false);
+    const [raisePackSource, setRaisePackSource] = useState<PackSourceRect | null>(null);
     const [isGiftShopExiting, setIsGiftShopExiting] = useState(false);
     const [hasSettledFirstOverlay, setHasSettledFirstOverlay] = useState(false);
     const [, setProgressionRevision] = useState(0);
@@ -832,6 +835,7 @@ export default function App() {
         }
         setGiftShopEnterComplete(false);
         setIsGiftShopExiting(false);
+        setRaisePackSource(null);
         if (giftShopExitTimeoutRef.current !== null) {
             window.clearTimeout(giftShopExitTimeoutRef.current);
             giftShopExitTimeoutRef.current = null;
@@ -1446,7 +1450,7 @@ export default function App() {
     }, [isGiftShopExiting, leaveShop, phase]);
 
     const startGiftShopExit = React.useCallback(() => {
-        if (phase !== 'gift_shop' || isGiftShopExiting || !giftShopEnterComplete || pendingRaiseChoices.length) return;
+        if (phase !== 'gift_shop' || isGiftShopExiting || !giftShopEnterComplete || pendingRaiseChoices.length || raisePackSource) return;
         setIsGiftShopExiting(true);
         if (giftShopExitTimeoutRef.current !== null) {
             window.clearTimeout(giftShopExitTimeoutRef.current);
@@ -1455,7 +1459,7 @@ export default function App() {
             giftShopExitTimeoutRef.current = null;
             finalizeGiftShopExit();
         }, GIFT_SHOP_EXIT_DURATION_MS + 60);
-    }, [finalizeGiftShopExit, giftShopEnterComplete, isGiftShopExiting, phase, pendingRaiseChoices.length]);
+    }, [finalizeGiftShopExit, giftShopEnterComplete, isGiftShopExiting, phase, pendingRaiseChoices.length, raisePackSource]);
 
     if (phase === 'init') {
         // const canStartRun = isCityUnlocked(selectedCityId) && isGamblerUnlocked(selectedGamblerId);
@@ -1861,7 +1865,7 @@ export default function App() {
 
                 <div className={styles.board}>
                     <div className={styles.topContent}>
-                        <div id="dealer-hand-zone" className={styles.dealerZone}>
+                        <div id="dealer-hand-zone" className={`${styles.dealerZone} ${!areHandsVisible || !dealerVisible ? styles.dealerZoneHidden : ''}`}>
                             <div style={{ display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'center', gap: 20, marginBottom: 10 }}>
                                 {debugEnabled && (
                                     <button 
@@ -1883,7 +1887,7 @@ export default function App() {
                                     </button>
                                 )}
                             </div>
-                            <div className={`${styles.dealerHandWrapper} ${!dealerVisible ? styles.dealerZoneHidden : ''}`} style={{ pointerEvents: dealerSelectableCardIds && dealerSelectableCardIds.length > 0 ? 'auto' : 'none', position: 'relative' }}>
+                            <div className={styles.dealerHandWrapper} style={{ pointerEvents: areHandsVisible && dealerVisible && dealerSelectableCardIds && dealerSelectableCardIds.length > 0 ? 'auto' : 'none', position: 'relative' }}>
                                 <Hand
                                     key={`dealer-${dealerHandProps.id}-${deal}-${dealsTaken}`}
                                     hand={dealerHandProps}
@@ -2300,6 +2304,7 @@ export default function App() {
                                     <button
                                         id="gift-shop-button"
                                         className={styles.nextDealButton}
+                                        aria-label={shopHasNewStock ? 'Gift Shop, new stock' : 'Gift Shop'}
                                         disabled={isInitialDeal}
                                         onClick={(e) => {
                                             e.stopPropagation();
@@ -2307,10 +2312,11 @@ export default function App() {
                                         }}
                                     >
                                         Gift Shop
+                                        {shopHasNewStock && <span className={styles.giftShopNewBadge} aria-hidden="true">NEW</span>}
                                     </button>
                                 </div>
                             ) : (phase === 'gift_shop') ? (
-                                giftShopEnterComplete && !isGiftShopExiting && !pendingRaiseChoices.length ? (
+                                giftShopEnterComplete && !isGiftShopExiting && !pendingRaiseChoices.length && !raisePackSource ? (
                                     isSellingMode ? (
                                         <button
                                             className={styles.nextDealButton}
@@ -2380,11 +2386,13 @@ export default function App() {
                 )
             )}
 
-            {phase === 'gift_shop' && <RaisePackChoice onOpenHandScores={() => { playClick(); setShowHandScores(true); }} />}
+            {phase === 'gift_shop' && <RaisePackChoice sourceRect={raisePackSource} onComplete={() => setRaisePackSource(null)} />}
             {showHandScores && <HandScores upgrades={handUpgrades} onClose={() => { playClickDown(); setShowHandScores(false); }} />}
 
             {phase === 'gift_shop' && (
                 <GiftShop
+                    isOpeningPack={!!raisePackSource}
+                    onRaisePackPurchased={setRaisePackSource}
                     isExiting={isGiftShopExiting}
                     onEnterAnimationComplete={() => {
                         setGiftShopEnterComplete(true);
@@ -2512,11 +2520,14 @@ export default function App() {
                 </div>
             )}
 
-            {anteIncrease && <div className={styles.anteIncreaseOverlay} role="status" aria-live="polite">
-                <div className={styles.anteIncreasePopup}>
-                    <h2>Ante Increase</h2>
-                    <p>${anteIncrease.previousAnte} → ${anteIncrease.ante}</p>
-                </div>
+            {anteIncrease && <div className={styles.anteIncreaseOverlay} role="dialog" aria-modal="true" aria-labelledby="ante-increase-title"
+                onClick={event => { event.stopPropagation(); continueAnteIncrease(); }}
+                onKeyDown={event => { event.stopPropagation(); if (event.key === 'Tab') event.preventDefault(); }}>
+                <button type="button" autoFocus className={styles.anteIncreasePopup} aria-label="Continue after ante increase">
+                    <span id="ante-increase-title" className={styles.anteIncreaseTitle}>Ante Increase</span>
+                    <span className={styles.anteIncreaseAmount}>${anteIncrease.previousAnte} → ${anteIncrease.ante}</span>
+                    <span className={styles.anteIncreaseHint}>Click to continue</span>
+                </button>
             </div>}
 
             <TutorialOverlay />

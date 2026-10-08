@@ -8,8 +8,15 @@ import { RelicTooltip } from './RelicTooltip';
 import { useLayout } from './ResponsiveLayout';
 import styles from './GiftShop.module.css';
 import type { ShopItem } from '../engine/GameState';
+import { useGameBridge } from '../store/gameBridge';
+import type { PackSourceRect } from './RaisePackChoice';
+import { RaisePackArt } from './RaisePackArt';
+import { getPackDefinition } from '../logic/packs';
+import { getRelicRarityFrameColor, getRelicRarityTextColor } from '../logic/relics/rarity';
 
 interface GiftShopProps {
+    isOpeningPack?: boolean;
+    onRaisePackPurchased?: (sourceRect: PackSourceRect | null) => void;
     isExiting?: boolean;
     onEnterAnimationComplete?: () => void;
     onExitAnimationComplete?: () => void;
@@ -26,11 +33,14 @@ const SHELVES_ENTER_TOTAL_MS = 1200;
 const SHOP_EXIT_MS = 300;
 
 export const GiftShop: React.FC<GiftShopProps> = ({
+    isOpeningPack = false,
+    onRaisePackPurchased,
     isExiting = false,
     onEnterAnimationComplete,
     onExitAnimationComplete,
     onRelicPurchased
 }) => {
+    const isProcessingEvents = useGameBridge(state => state.isProcessingEvents);
     const { inventory, shopItems, buyShopItem, cash, restockGiftShop, giftShopRestockCost, relicSlots, buyRelicSlot, pendingRaiseChoices, isSellingMode, toggleSellingMode } = useGameStore();
     const disabledButtons: string[] = [];
 
@@ -269,21 +279,30 @@ export const GiftShop: React.FC<GiftShopProps> = ({
     const relics = (shopItems as ShopItem[]).filter(i => i.type !== 'Raise' && i.type !== 'RaisePack');
     const relicSlotsOnShelf = Array.from({ length: 4 }, (_, i) => relics[i] ?? null);
     const packs = (shopItems as ShopItem[]).filter(i => i.type === 'RaisePack' && !i.purchased);
-    const choosingRaise = pendingRaiseChoices.length > 0;
+    const choosingRaise = isOpeningPack || pendingRaiseChoices.length > 0;
     const canAffordRestock = cash >= giftShopRestockCost && !choosingRaise;
     const slotCost = getRelicSlotCost(relicSlots);
 
-    const renderPack = (item: typeof shopItems[number]) => (
-        <button className={styles.raiseCard}
-            disabled={cash < item.cost || item.purchased || choosingRaise}
-            onClick={() => buyShopItem(item.id)}
-            aria-label={'Buy raise pack for $' + item.cost}>
+    const renderPack = (item: typeof shopItems[number]) => {
+        const pack = getPackDefinition(item.packId);
+        return <button className={styles.raiseCard} style={{ '--pack-color': getRelicRarityFrameColor(pack.rarity) } as React.CSSProperties}
+            disabled={cash < item.cost || item.purchased || choosingRaise || isProcessingEvents}
+            onClick={event => {
+                const rect = event.currentTarget.getBoundingClientRect();
+                flushSync(() => onRaisePackPurchased?.({ left: rect.left, top: rect.top, width: rect.width, height: rect.height }));
+                void buyShopItem(item.id).then(() => {
+                    // A rejected buffered purchase must not leave an empty reveal on screen.
+                    if (!useGameBridge.getState().pendingRaiseChoices.length) onRaisePackPurchased?.(null);
+                }).catch(() => onRaisePackPurchased?.(null));
+            }}
+            aria-label={`Buy ${pack.name}, ${pack.rarity}, choose ${pack.pickCount} of ${pack.offerCount}, for $${item.cost}`}>
+            <span className={styles.packRarity} style={{ color: getRelicRarityTextColor(pack.rarity) }}>{pack.rarity}</span>
             <span className={styles.raisePrice}>{'$' + item.cost}</span>
-            <span className={styles.packIcon} aria-hidden="true">↗</span>
-            <span className={styles.raiseHand}>Raise Pack</span>
-            <span className={styles.raiseKind}>Choose 1 of 3</span>
-        </button>
-    );
+            <RaisePackArt />
+            <span className={styles.raiseHand}>{pack.name}</span>
+            <span className={styles.raiseKind}>Choose {pack.pickCount} of {pack.offerCount}</span>
+        </button>;
+    };
 
     const renderItem = (item: typeof shopItems[number]) => {
         const isSoldRelic = !!item.purchased;
@@ -356,6 +375,9 @@ export const GiftShop: React.FC<GiftShopProps> = ({
                             boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
                             pointerEvents: 'none',
                             animation: 'none',
+                            backdropFilter: 'none',
+                            position: 'relative',
+                            zIndex: 0,
                             width: '100%',
                             minWidth: 0,
                             maxWidth: 'none'
@@ -390,7 +412,8 @@ export const GiftShop: React.FC<GiftShopProps> = ({
     const effectiveExiting = isExiting || isSellingMode;
 
     return (
-        <div hidden={choosingRaise} className={`${styles.giftShopContainer} ${isExiting ? styles.giftShopContainerExiting : ''}`}>
+        <div inert={choosingRaise} aria-hidden={choosingRaise || undefined}
+            className={`${styles.giftShopContainer} ${choosingRaise ? styles.giftShopOpeningPack : ''} ${isExiting ? styles.giftShopContainerExiting : ''}`}>
             <svg className={`${styles.ropesLayer} ${effectiveExiting ? styles.ropesLayerExiting : ''}`}>
                 <polyline ref={rope1Ref} fill="none" stroke="#8d6e63" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
                 <polyline ref={rope2Ref} fill="none" stroke="#8d6e63" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
@@ -424,10 +447,14 @@ export const GiftShop: React.FC<GiftShopProps> = ({
                     </section>
                 </div>
                 <div className={styles.bottomActionRow}>
-                    <button id="gift-shop-slot-button"
-                        className={styles.bottomActionButton + ' ' + styles.slotActionButton}
-                        disabled={cash < slotCost || choosingRaise} onClick={buyRelicSlot}>
-                        + SLOT {'$' + slotCost}
+                    <button
+                        id="gift-shop-restock-button"
+                        className={`${styles.bottomActionButton} ${styles.restockActionButton} ${(!canAffordRestock || disabledButtons.includes('restock')) ? styles.actionButtonDisabled : ''}`}
+                        onClick={restockGiftShop}
+                        disabled={!canAffordRestock || disabledButtons.includes('restock')}
+                        title="Restock relics; packs refresh when the ante increases"
+                    >
+                        {disabledButtons.includes('restock') ? 'RESTOCK' : `RESTOCK $${giftShopRestockCost}`}
                     </button>
                     <button
                         id="gift-shop-sell-button"
@@ -437,13 +464,10 @@ export const GiftShop: React.FC<GiftShopProps> = ({
                     >
                         SELL
                     </button>
-                    <button
-                        id="gift-shop-restock-button"
-                        className={`${styles.bottomActionButton} ${styles.restockActionButton} ${(!canAffordRestock || disabledButtons.includes('restock')) ? styles.actionButtonDisabled : ''}`}
-                        onClick={restockGiftShop}
-                        disabled={!canAffordRestock || disabledButtons.includes('restock')}
-                    >
-                        {disabledButtons.includes('restock') ? 'RESTOCK' : `RESTOCK $${giftShopRestockCost}`}
+                    <button id="gift-shop-slot-button"
+                        className={styles.bottomActionButton + ' ' + styles.slotActionButton}
+                        disabled={cash < slotCost || choosingRaise} onClick={buyRelicSlot}>
+                        + SLOT {'$' + slotCost}
                     </button>
                 </div>
             </div>

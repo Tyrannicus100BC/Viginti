@@ -53,7 +53,7 @@ export type GameEvent =
     // === Scoring ===
     | { type: 'hand_outcome'; handIndex: number; outcome: 'win' | 'loss' | 'bust'; blackjackValue: number }
     | { type: 'scoring_hand_focus'; handIndex: number }
-    | { type: 'scoring_row_intro'; handIndex: number; criterion: ScoringDetail }
+    | { type: 'scoring_row_intro'; handIndex: number; criterion: ScoringDetail; newComps?: number }
     | { type: 'scoring_row_chips'; handIndex: number; criterionId: string; chips: number }
     | { type: 'scoring_row_mult'; handIndex: number; criterionId: string; multiplier: number }
     | { type: 'scoring_hand_complete'; handIndex: number }

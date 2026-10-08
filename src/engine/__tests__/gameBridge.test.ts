@@ -247,17 +247,17 @@ describe('GameBridge', () => {
     it('charges cash to deal, then one ticket to open a side hand', () => {
         startGame(42);
         dispatch({ type: 'deal' });
-        expect(getBridge().comps).toBe(10);
+        expect(getBridge().comps).toBe(5);
         expect(getBridge().cash).toBe(50);
         expect(getBridge().playerHands[0].isInactive).toBe(true);
         dispatch({ type: 'draw' });
         dispatch({ type: 'place_card', handIndex: 0 });
-        expect(getBridge().comps).toBe(9);
+        expect(getBridge().comps).toBe(4);
         expect(getBridge().playerHands[0].isInactive).toBe(false);
         expect(getBridge().playerHands[0].cards).toHaveLength(1);
         dispatch({ type: 'draw' });
         dispatch({ type: 'place_card', handIndex: 0 });
-        expect(getBridge().comps).toBe(9);
+        expect(getBridge().comps).toBe(4);
         expect(getBridge().playerHands[0].cards).toHaveLength(2);
         expect(getBridge().comps).toBe(getBridge().gameState.comps);
     });
@@ -267,10 +267,23 @@ describe('GameBridge', () => {
         const snapshot: Record<string, unknown> = { ...getBridge().gameState };
         delete snapshot.ante;
         delete snapshot.handsUntilAnteIncrease;
+        delete snapshot.shopHasNewStock;
         expect(getBridge().loadGameState(JSON.stringify(snapshot))).toBe(true);
         expect(getBridge().ante).toBe(50);
-        expect(getBridge().handsUntilAnteIncrease).toBe(5);
+        expect(getBridge().handsUntilAnteIncrease).toBe(4);
+        expect(getBridge().shopHasNewStock).toBe(false);
         expect(getBridge().anteIncrease).toBe(null);
+    });
+
+    it('preserves new stock badges in exported runs and clears both state views on the first visit', () => {
+        startGame(42);
+        const state = { ...getBridge().gameState, phase: 'deal_over', shopHasNewStock: true };
+        expect(getBridge().loadGameState(JSON.stringify(state))).toBe(true);
+        expect(getBridge().gameState.shopHasNewStock).toBe(true);
+        expect(getBridge().shopHasNewStock).toBe(true);
+        dispatch({ type: 'enter_gift_shop' });
+        expect(getBridge().gameState.shopHasNewStock).toBe(false);
+        expect(getBridge().shopHasNewStock).toBe(false);
     });
 
     describe('gift shop flow', () => {

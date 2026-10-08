@@ -2,6 +2,8 @@ import type { Card, ScoringDetail } from '../types';
 import { POKER_ORDER, RANK_VALUES } from './rules';
 import type { Relic, RelicRarity } from './relics/types';
 import type { SeededRNG } from '../engine/rng';
+import { RAISE_PACK_COST } from './packs';
+export { RAISE_PACK_COST } from './packs';
 
 export type HandTypeId = 'win' | 'loss' | 'pair' | 'straight' | 'flush';
 // Counts retain the history of every Raise without occupying relic slots.
@@ -16,14 +18,14 @@ interface HandTypeDefinition {
     description: string;
     chipCards: boolean;
     compTickets?: number;
-    variant?: { id: 'viginti' | 'bust'; name: string; chips: number };
+    variant?: { id: 'viginti' | 'bust'; name: string; chips: number; mult: number };
 }
 
 export const HAND_TYPES: readonly HandTypeDefinition[] = [
-    { id: 'win', name: 'Win', icon: '🏆', chips: 10, mult: 0, compTickets: 1, description: 'Beat the dealer. Exactly 21 has a higher base payout. Win or Viginti earns +1 comp ticket.', chipCards: false, variant: { id: 'viginti', name: '21', chips: 25 } },
-    { id: 'loss', name: 'Lose', icon: '💥', chips: -10, mult: 0, description: 'Lose to the dealer. Busts have a larger base penalty. A push has no outcome payout.', chipCards: false, variant: { id: 'bust', name: 'Bust', chips: -20 } },
-    { id: 'pair', name: 'Pair', icon: '🎴', chips: 0, mult: 0, description: 'Every two cards of the same rank. Three of a kind contains three pairs.', chipCards: true },
-    { id: 'straight', name: 'Straight', icon: '📈', chips: 0, mult: 0, description: 'Every separate run of two or more ranks. Aces can be high or low.', chipCards: true },
+    { id: 'win', name: 'Win', icon: '🏆', chips: 10, mult: 0, compTickets: 1, description: 'Beat the dealer. Exactly 21 has a higher base payout. Win or Viginti earns +1 comp ticket.', chipCards: false, variant: { id: 'viginti', name: '21', chips: 20, mult: 0.1 } },
+    { id: 'loss', name: 'Lose', icon: '💥', chips: -10, mult: 0, description: 'Lose to the dealer. Busts have a larger base penalty. A push has no outcome payout.', chipCards: false, variant: { id: 'bust', name: 'Bust', chips: -20, mult: -0.1 } },
+    { id: 'pair', name: 'Pair', icon: '🎴', chips: 0, mult: 0.1, description: 'Every two cards of the same rank. Three of a kind contains three pairs.', chipCards: true },
+    { id: 'straight', name: 'Straight', icon: '📈', chips: 10, mult: 0, description: 'Every separate run of two or more ranks. Aces can be high or low.', chipCards: true },
     { id: 'flush', name: 'Flush', icon: '♠', chips: 0, mult: 0, description: 'Every suit group of two or more cards.', chipCards: true },
 ] as const;
 
@@ -39,9 +41,80 @@ export interface Raise extends Relic {
     chips: number;
     mult: number;
     cost: number;
+    affixes?: readonly RaiseAffix[];
 }
 
-// Keep old IDs and payouts valid in imported runs. New packs use PACK_RAISES.
+export interface RaiseAffix {
+    readonly id: string;
+    readonly kind: 'simple' | 'tradeoff' | 'double';
+    readonly slotCost: 1 | 2;
+    readonly modifiers: readonly RaiseModifier[];
+}
+
+export const formatRaiseCash = (value: number) => `${value < 0 ? '−' : ''}$${Math.abs(value)}`;
+export const formatRaiseMult = (value: number) => `${value < 0 ? '−' : ''}x${Number(Math.abs(value).toFixed(2))}`;
+
+export const RAISE_AFFIX_SLOTS: Readonly<Record<RelicRarity, number>> = { Common: 1, Uncommon: 2, Rare: 3 };
+const AFFIX_KIND_WEIGHTS = { simple: 60, tradeoff: 25, double: 15 } as const;
+const RAISE_RARITIES = ['Common', 'Uncommon', 'Rare'] as const;
+const modifier = (handTypeId: HandTypeId, stat: 'cash' | 'mult', units: number): RaiseModifier => ({
+    handTypeId, chips: stat === 'cash' ? units * 5 : 0, mult: stat === 'mult' ? units / 10 : 0,
+});
+
+export const RAISE_AFFIXES: readonly RaiseAffix[] = HAND_TYPES.flatMap(hand => (['cash', 'mult'] as const).flatMap(stat => [
+    { id: `simple_${hand.id}_${stat}`, kind: 'simple' as const, slotCost: 1 as const, modifiers: [modifier(hand.id, stat, 1)] },
+    { id: `double_${hand.id}_${stat}`, kind: 'double' as const, slotCost: 2 as const, modifiers: [modifier(hand.id, stat, 3)] },
+    ...HAND_TYPES.filter(other => other.id !== hand.id).flatMap(other => (['cash', 'mult'] as const).map(penaltyStat => ({
+        id: `tradeoff_${hand.id}_${stat}_${other.id}_${penaltyStat}`,
+        kind: 'tradeoff' as const, slotCost: 1 as const,
+        modifiers: [modifier(hand.id, stat, 3), modifier(other.id, penaltyStat, -1)],
+    }))),
+]));
+const AFFIX_BY_ID = new Map(RAISE_AFFIXES.map(affix => [affix.id, affix]));
+
+function buildAffixRaise(rarity: RelicRarity, affixes: readonly RaiseAffix[]): Raise {
+    const modifiers = affixes.flatMap(affix => affix.modifiers);
+    const primary = modifiers[0];
+    const hand = HAND_TYPES.find(hand => hand.id === primary.handTypeId)!;
+    return {
+        // Versioned composition IDs keep rolled values intact across save/import.
+        id: `raise_v3_${RAISE_RARITIES.indexOf(rarity)}_${affixes.map(affix => affix.id).join('.')}`,
+        name: `${hand.name} Raise`, rarity, categories: ['Raise'], icon: hand.icon,
+        description: modifiers.map(effect => `[${HAND_TYPES.find(hand => hand.id === effect.handTypeId)!.name}] ${effect.chips ? formatRaiseCash(effect.chips) : formatRaiseMult(effect.mult)}`).join(' · '),
+        affixes, modifiers, handTypeId: primary.handTypeId, chips: primary.chips, mult: primary.mult, cost: RAISE_PACK_COST,
+    };
+}
+
+function decodeAffixRaise(id: string): Raise | undefined {
+    const match = /^raise_v3_([012])_(.+)$/.exec(id);
+    if (!match) return undefined;
+    const rarity = RAISE_RARITIES[Number(match[1])];
+    const affixes = match[2].split('.').map(id => AFFIX_BY_ID.get(id));
+    if (affixes.some(affix => !affix)) return undefined;
+    const valid = affixes as RaiseAffix[];
+    if (valid.reduce((slots, affix) => slots + affix.slotCost, 0) !== RAISE_AFFIX_SLOTS[rarity]
+        || valid.filter(affix => affix.kind === 'tradeoff').length > 1) return undefined;
+    return buildAffixRaise(rarity, valid);
+}
+
+export function generateRaise(rng: SeededRNG, rarity: RelicRarity): Raise {
+    const affixes: RaiseAffix[] = [];
+    let remaining = RAISE_AFFIX_SLOTS[rarity];
+    let hasPenalty = false;
+    while (remaining > 0) {
+        const kinds = (['simple', 'tradeoff', 'double'] as const)
+            .filter(kind => (kind !== 'double' || remaining >= 2) && (kind !== 'tradeoff' || !hasPenalty));
+        let roll = rng.next() * kinds.reduce((total, kind) => total + AFFIX_KIND_WEIGHTS[kind], 0);
+        const kind = kinds.find(kind => { roll -= AFFIX_KIND_WEIGHTS[kind]; return roll < 0; })!;
+        const affix = rng.pick(RAISE_AFFIXES.filter(affix => affix.kind === kind));
+        affixes.push(affix);
+        remaining -= affix.slotCost;
+        if (kind === 'tradeoff') hasPenalty = true;
+    }
+    return buildAffixRaise(rarity, affixes);
+}
+
+// Keep old IDs and payouts valid in imported runs. New packs roll affixes.
 const LEGACY_RAISES: readonly Raise[] = HAND_TYPES.flatMap(hand => [
     { suffix: 'cash', label: 'Cash', chips: 50, mult: 0, cost: 40 },
     { suffix: 'mult', label: 'Multiplier', chips: 0, mult: 0.5, cost: 60 },
@@ -52,7 +125,7 @@ const LEGACY_RAISES: readonly Raise[] = HAND_TYPES.flatMap(hand => [
     rarity: 'Uncommon' as const,
     categories: ['Raise'],
     icon: hand.icon,
-    description: `Permanently: [${hand.name}] ${[boost.chips ? `<+$${boost.chips}>` : '', boost.mult ? `{+x${boost.mult}}` : ''].filter(Boolean).join(' · ')}\nStacks for this run · No slot needed.`,
+    description: `Permanently: [${hand.name}] ${[boost.chips ? `<$${boost.chips}>` : '', boost.mult ? `{x${boost.mult}}` : ''].filter(Boolean).join(' · ')}\nStacks for this run · No slot needed.`,
     modifiers: [{ handTypeId: hand.id, chips: boost.chips, mult: boost.mult }],
     handTypeId: hand.id,
     chips: boost.chips,
@@ -60,12 +133,7 @@ const LEGACY_RAISES: readonly Raise[] = HAND_TYPES.flatMap(hand => [
     cost: boost.cost,
 })));
 
-export const RAISE_PACK_COST = 40;
-export const formatRaiseCash = (value: number) => `${value < 0 ? '−' : '+'}$${Math.abs(value)}`;
-export const formatRaiseMult = (value: number) => `${value < 0 ? '−' : '+'}${Number(Math.abs(value).toFixed(2))}×`;
-
-// Rarity sets the number of effects. Drawbacks trade a smaller penalty for a
-// stronger primary bonus; every offer has at least one positive modifier.
+// Version-two definitions stay available for already earned/pending Raises.
 export const PACK_RAISES: readonly Raise[] = (['Common', 'Uncommon', 'Rare'] as const).flatMap((rarity, tier) =>
     HAND_TYPES.flatMap((hand, handIndex) => (['cash', 'mult'] as const).flatMap(stat =>
         Array.from({ length: tier === 0 ? 1 : 4 }, (_, offset) => offset + 1).flatMap(offset =>
@@ -90,17 +158,44 @@ export const PACK_RAISES: readonly Raise[] = (['Common', 'Uncommon', 'Rare'] as 
 );
 
 export const RAISES: readonly Raise[] = [...LEGACY_RAISES, ...PACK_RAISES];
-export const getRaise = (id: string) => RAISES.find(raise => raise.id === id);
+const RAISE_BY_ID = new Map(RAISES.map(raise => [raise.id, raise]));
+export const getRaise = (id: string) => RAISE_BY_ID.get(id) ?? decodeAffixRaise(id);
 
-export function generateRaiseChoices(rng: SeededRNG): Raise[] {
+export interface HandRaiseChange {
+    raiseId: string;
+    occurrence: number;
+    stat: 'chips' | 'mult';
+    value: number;
+}
+
+// Show each earned effect separately, including repeated Raises and drawbacks.
+export function getHandRaiseChanges(id: HandTypeId, upgrades: HandUpgrades = {}): HandRaiseChange[] {
+    const changes: HandRaiseChange[] = [];
+    for (const [raiseId, owned] of Object.entries(upgrades)) {
+        const modifiers = getRaise(raiseId)?.modifiers.filter(effect => effect.handTypeId === id) ?? [];
+        for (let occurrence = 0; occurrence < owned; occurrence++) {
+            for (const modifier of modifiers) {
+                if (modifier.chips) changes.push({ raiseId, occurrence, stat: 'chips', value: modifier.chips });
+                if (modifier.mult) changes.push({ raiseId, occurrence, stat: 'mult', value: modifier.mult });
+            }
+        }
+    }
+    return changes;
+}
+
+export function generateRaiseChoices(rng: SeededRNG, count = 3): Raise[] {
     const choices: Raise[] = [];
-    for (let i = 0; i < 3; i++) {
+    const offeredEffects = new Set<string>();
+    while (choices.length < count) {
         const roll = rng.next();
         const rarity: RelicRarity = roll < 0.6 ? 'Common' : roll < 0.9 ? 'Uncommon' : 'Rare';
-        const candidates = PACK_RAISES.filter(raise => raise.rarity === rarity && !choices.some(choice => choice.id === raise.id));
-        const drawback = rng.next() < 1 / 3;
-        const pool = candidates.filter(raise => raise.modifiers.some(effect => effect.chips < 0 || effect.mult < 0) === drawback);
-        choices.push(rng.pick(pool.length ? pool : candidates));
+        const raise = generateRaise(rng, rarity);
+        // Different roll orders can produce the same displayed card.
+        const effects = `${rarity}:${raise.modifiers.map(effect => `${effect.handTypeId}:${effect.chips}:${effect.mult}`).sort().join('|')}`;
+        if (!offeredEffects.has(effects)) {
+            choices.push(raise);
+            offeredEffects.add(effects);
+        }
     }
     return choices;
 }
@@ -120,7 +215,11 @@ export function getHandPayout(id: HandTypeId, upgrades: HandUpgrades = {}) {
         if (modifiers.length) count += owned;
     }
     mult = Number(mult.toFixed(2));
-    return { ...hand, chips, mult, count, variant: hand.variant ? { ...hand.variant, chips: hand.variant.chips + chips - hand.chips } : undefined };
+    return { ...hand, chips, mult, count, variant: hand.variant ? {
+        ...hand.variant,
+        chips: hand.variant.chips + chips - hand.chips,
+        mult: Number((hand.variant.mult + mult - hand.mult).toFixed(2)),
+    } : undefined };
 }
 
 export function evaluateBaseHands(cards: Card[], isWin: boolean, blackjackValue: number, outcome?: 'win' | 'loss' | 'bust' | 'push' | null, upgrades: HandUpgrades = {}): ScoringDetail[] {
@@ -133,7 +232,7 @@ export function evaluateBaseHands(cards: Card[], isWin: boolean, blackjackValue:
             name: variant === 'viginti' ? 'Viginti' : variant === 'bust' ? 'Bust' : hand.name,
             count: 1,
             chips: (variant ? hand.variant!.chips : hand.chips) + (hand.chipCards ? group.reduce((sum, card) => sum + RANK_VALUES[card.rank], 0) : 0),
-            multiplier: hand.mult,
+            multiplier: variant ? hand.variant!.mult : hand.mult,
             ...(hand.compTickets ? { compTickets: hand.compTickets } : {}),
             cardIds: group.map(card => card.id),
         });

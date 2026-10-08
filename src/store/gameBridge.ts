@@ -1,4 +1,4 @@
-import { RAISE_PACK_COST } from '../logic/handScoring';
+import { getPackDefinition, type PendingPack } from '../logic/packs';
 import { RelicManager } from '../logic/relics/manager';
 /**
  * GameBridge — Zustand store that wraps the pure game engine.
@@ -155,6 +155,9 @@ interface GameBridgeState extends UIState {
     /** Set animation speed */
     setAnimationSpeed: (speed: number) => void;
 
+    /** Dismiss the ante interstitial without queuing another game action. */
+    continueAnteIncrease: () => void;
+
     /** Toggle selling mode */
     toggleSellingMode: (enabled?: boolean) => void;
 
@@ -196,10 +199,12 @@ interface GameBridgeState extends UIState {
     readonly inventory: readonly RelicInstance[];
     readonly relicSlots: number;
     readonly pendingRaiseChoices: readonly string[];
+    readonly pendingPack: PendingPack | null;
     readonly handUpgrades: import('../logic/handScoring').HandUpgrades;
     readonly tableActionCharges: Readonly<Record<string, number>>;
     readonly tableActionHeldCards: Readonly<Record<string, Card | null>>;
     readonly shopItems: readonly ShopItem[];
+    readonly shopHasNewStock: boolean;
     readonly giftShopRestockCost: number;
     readonly shopRewardSummary: RewardSummary | null;
     readonly runningSummary: { readonly chips: number; readonly mult: number } | null;
@@ -269,10 +274,12 @@ export const useGameBridge = create<GameBridgeState>((set, get) => {
         inventory: gs.inventory,
         relicSlots: gs.relicSlots,
         pendingRaiseChoices: gs.pendingRaiseChoices,
+        pendingPack: gs.pendingPack,
         handUpgrades: gs.handUpgrades ?? {},
         tableActionCharges: gs.tableActionCharges,
         tableActionHeldCards: gs.tableActionHeldCards,
         shopItems: gs.shopItems,
+        shopHasNewStock: gs.shopHasNewStock,
         giftShopRestockCost: gs.giftShopRestockCost,
         shopRewardSummary: gs.shopRewardSummary,
         runningSummary: gs.runningSummary,
@@ -413,6 +420,18 @@ export const useGameBridge = create<GameBridgeState>((set, get) => {
                         sfx,
                         getSpeed: () => get().animationSpeed,
                         headless: hl,
+                        waitForAnteContinue: () => new Promise<void>(resolve => {
+                            const unsubscribe = useGameBridge.subscribe(state => {
+                                if (state.anteIncrease === null) {
+                                    unsubscribe();
+                                    resolve();
+                                }
+                            });
+                            if (get().anteIncrease === null) {
+                                unsubscribe();
+                                resolve();
+                            }
+                        }),
                     };
 
                     await playEvents(events, config);
@@ -507,6 +526,7 @@ export const useGameBridge = create<GameBridgeState>((set, get) => {
         },
 
         setAnimationSpeed: (speed) => set({ animationSpeed: speed }),
+        continueAnteIncrease: () => set({ anteIncrease: null }),
 
         toggleSellingMode: (enabled) => set(state => ({ 
             isSellingMode: enabled !== undefined ? enabled : !state.isSellingMode 
@@ -580,13 +600,21 @@ export const useGameBridge = create<GameBridgeState>((set, get) => {
                     inventory,
                     relicSlots: Math.max(4, inventory.length, rawState.relicSlots ?? 4),
                     pendingRaiseChoices: rawState.pendingRaiseChoices ?? [],
+                    pendingPack: rawState.pendingRaiseChoices?.length ? {
+                        packId: getPackDefinition(rawState.pendingPack?.packId).id,
+                        picksRemaining: rawState.pendingPack?.picksRemaining ?? 1,
+                    } : null,
                     ante: rawState.ante ?? BASE_ANTE,
                     handsUntilAnteIncrease: rawState.handsUntilAnteIncrease ?? HANDS_PER_ANTE,
+                    shopHasNewStock: rawState.shopHasNewStock ?? false,
                     handUpgrades: rawState.handUpgrades ?? {},
                     // Imported shops use the same stock presentation as new runs.
                     shopItems: (rawState.shopItems ?? []).map((item: ShopItem) => {
                         if (item.type === 'Control' || item.type === 'Score') return { ...item, type: 'Relic' };
-                        if (item.type === 'Raise') return { ...item, type: 'RaisePack', cost: RAISE_PACK_COST, nameOverride: 'Raise Pack' };
+                        if (item.type === 'Raise' || item.type === 'RaisePack') {
+                            const pack = getPackDefinition(item.packId);
+                            return { ...item, type: 'RaisePack', packId: pack.id, cost: item.type === 'Raise' ? pack.cost : item.cost, nameOverride: pack.name };
+                        }
                         return item;
                     }),
                 };

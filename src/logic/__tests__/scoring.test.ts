@@ -29,7 +29,7 @@ describe('built-in straight scoring', () => {
 
         expect(scoredRanks).toEqual(expect.arrayContaining(runs.map(run => [...run].sort())));
         expect(straights).toHaveLength(runs.length);
-        expect(straights.reduce((sum, criterion) => sum + criterion.chips, 0)).toBe(chips);
+        expect(straights.reduce((sum, criterion) => sum + criterion.chips, 0)).toBe(chips + 10 * runs.length);
     });
 });
 
@@ -40,5 +40,5 @@ it('awards A–2–3 only once through the hand scoring pipeline', () => {
     const straights = score.criteria.filter(criterion => criterion.id === 'straight');
     expect(straights).toHaveLength(1);
     expect(straights[0].cardIds).toEqual(cards.map(card => card.id));
-    expect(straights[0].chips).toBe(16);
+    expect(straights[0].chips).toBe(26);
 });

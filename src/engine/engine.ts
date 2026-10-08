@@ -21,7 +21,7 @@ import { GAMBLER_DEFINITIONS } from '../logic/gamblers/definitions';
 import { CITY_DEFINITIONS } from '../logic/cities/definitions';
 // RelicManager access is now via relicEngine.ts
 import { drawCardFromProbabilities } from '../logic/deck';
-import { STARTING_COMP_TICKETS, STARTING_CASH, BASE_ANTE, ANTE_INCREASE_AMOUNT, HANDS_PER_ANTE, BASE_SHOP_RESTOCK_COST, getRemovalCashCost, canPlayHand } from './economy';
+import { STARTING_COMP_TICKETS, STARTING_CASH, BASE_ANTE, getNextAnte, HANDS_PER_ANTE, BASE_SHOP_RESTOCK_COST, getRemovalCashCost, canPlayHand } from './economy';
 import { getBlackjackScore, evaluateHandScore } from '../logic/scoring';
 import {
     executeValueHook,
@@ -443,6 +443,7 @@ export function createInitialState(): GameState {
         inventory: [],
         relicSlots: INITIAL_RELIC_SLOTS,
         pendingRaiseChoices: [],
+        pendingPack: null,
         handUpgrades: {},
         tableActionCharges: {},
         tableActionHeldCards: {},
@@ -454,6 +455,7 @@ export function createInitialState(): GameState {
         },
         modifiers: { drawCountMod: 0, placeCountMod: 0 },
         shopStockInitialized: false,
+        shopHasNewStock: false,
         shopItems: [],
         giftShopRestockCost: BASE_SHOP_RESTOCK_COST,
         shopRewardSummary: null,
@@ -532,11 +534,13 @@ function processStartGame(
         inventory,
         relicSlots: INITIAL_RELIC_SLOTS,
         pendingRaiseChoices: [],
+        pendingPack: null,
         handUpgrades: {},
         tableActionCharges,
         tableActionHeldCards,
         modifiers: { drawCountMod: 0, placeCountMod: 0 },
         shopStockInitialized: false,
+        shopHasNewStock: false,
         shopItems: [],
         giftShopRestockCost: BASE_SHOP_RESTOCK_COST,
         shopRewardSummary: null,
@@ -1060,10 +1064,7 @@ function processResolveHandOutcome(state: GameState): ActionResult {
     }
     
     // Transition to scoring
-    const hasWin = scoredHands.some(h => h.outcome === 'win');
-    if (hasWin) {
-        events.push({ type: 'dealer_fade_out' });
-    }
+    events.push({ type: 'dealer_fade_out' });
     events.push({ type: 'phase_changed', from: 'resolving_outcomes', to: 'scoring' });
 
     return {
@@ -1085,6 +1086,7 @@ function processScoreRound(state: GameState): ActionResult {
     let runningSummary = state.runningSummary || { chips: 0, mult: 1 };
     let currentInv = state.inventory as RelicInstance[];
     const scoredHands = state.playerHands;
+    let newComps = state.comps;
 
     // Pre-calculate to count category instances across all scored hands
     const categoryCounts: Record<string, number> = { flush: 0, rank: 0, straight: 0 };
@@ -1124,7 +1126,12 @@ function processScoreRound(state: GameState): ActionResult {
              if (criterion.id === 'win' || criterion.id === 'viginti') {
                  introCriterion.cardIds = [];
              }
-             events.push({ type: 'scoring_row_intro', handIndex: i, criterion: introCriterion });
+             const ticketReward = criterion.compTickets ?? 0;
+             newComps += ticketReward;
+             events.push({ type: 'scoring_row_intro', handIndex: i, criterion: introCriterion, newComps });
+             if (ticketReward > 0) {
+                 events.push({ type: 'comps_earned', amount: ticketReward, newTotal: newComps, reason: 'winning_hands' });
+             }
 
              if (criterion.matches && criterion.matches.length > 0) {
                  let rowChips = 0;
@@ -1222,13 +1229,8 @@ function processScoreRound(state: GameState): ActionResult {
     const newCash = Math.max(0, state.cash + finalScore);
     events.push({ type: 'chip_collection', amount: finalScore, newTotalScore, newCash });
 
-    const ticketRewards = finalHands.reduce((total, hand) => total + (hand.finalScore?.criteria.reduce((sum, row) => sum + (row.compTickets ?? 0), 0) ?? 0), 0);
-    let newComps = state.comps + ticketRewards;
-    if (ticketRewards > 0) {
-        events.push({ type: 'comps_earned', amount: ticketRewards, newTotal: newComps, reason: 'winning_hands' });
-    }
     const increaseDue = state.handsUntilAnteIncrease <= 1;
-    const ante = state.ante + (increaseDue ? ANTE_INCREASE_AMOUNT : 0);
+    const ante = increaseDue ? getNextAnte(state.ante) : state.ante;
     const handsUntilAnteIncrease = increaseDue ? HANDS_PER_ANTE : state.handsUntilAnteIncrease - 1;
     const rng = new SeededRNG(state.rngState);
     let shopItems = state.shopItems;
@@ -1254,7 +1256,6 @@ function processScoreRound(state: GameState): ActionResult {
 
     events.push({ type: 'phase_changed', from: 'scoring', to: nextPhase });
 
-    const hasWin = scoredHands.some(h => h.outcome === 'win');
     return {
         nextState: {
             ...state,
@@ -1266,6 +1267,7 @@ function processScoreRound(state: GameState): ActionResult {
             handsUntilAnteIncrease,
             shopItems,
             shopStockInitialized: state.shopStockInitialized || increaseDue,
+            shopHasNewStock: increaseDue || state.shopHasNewStock,
             shopDealsAtLastFreeRestock: increaseDue ? state.dealsTaken : state.shopDealsAtLastFreeRestock,
             giftShopRestockCost: increaseDue ? BASE_SHOP_RESTOCK_COST : state.giftShopRestockCost,
             tableActionCharges,
@@ -1273,7 +1275,7 @@ function processScoreRound(state: GameState): ActionResult {
             runningSummary,
             inventory: currentInv,
             rngState: rng.getState(),
-            ...(hasWin ? { dealer: { cards: [], isRevealed: false, blackjackValue: 0 } } : {}),
+            dealer: { cards: [], isRevealed: false, blackjackValue: 0 },
         },
         events,
     };

@@ -297,6 +297,36 @@ describe('Game Engine', () => {
             expect(outcomes).toHaveLength(1); // Only the center hand was opened
         });
 
+        it.each([
+            ['one losing hand', [null, 'loss', null]],
+            ['all losing hands', ['loss', 'loss', 'loss']],
+            ['all busts', ['bust', 'bust', 'bust']],
+            ['mixed results', ['loss', 'win', 'bust']],
+        ] as const)('fades the dealer before scoring and clears its cards after %s', (_name, outcomes) => {
+            const base = startGame();
+            const resolving: GameState = {
+                ...base, phase: 'resolving_outcomes', cash: 1000,
+                dealer: { cards: [testCard('dealer_k', 'K', 'clubs'), testCard('dealer_7', '7', 'diamonds')], blackjackValue: 17, isRevealed: true },
+                playerHands: base.playerHands.map((hand, index) => {
+                    const outcome = outcomes[index];
+                    const ranks: Card['rank'][] = outcome === 'bust' ? ['K', 'Q', '5'] : outcome === 'win' ? ['K', 'Q'] : ['7', '7'];
+                    return {
+                        ...hand, isInactive: outcome === null, isHeld: true, isBust: outcome === 'bust',
+                        cards: outcome === null ? [] : ranks.map((rank, i) => testCard(`hand_${index}_${i}`, rank, i % 2 ? 'hearts' : 'spades')),
+                        blackjackValue: outcome === null ? 0 : outcome === 'bust' ? 25 : outcome === 'win' ? 20 : 14,
+                    };
+                }),
+            };
+            const resolved = processAction(resolving, { type: 'resolve_hand_outcome' });
+            const types = resolved.events.map(event => event.type);
+            expect(resolved.nextState.playerHands.map(hand => hand.outcome)).toEqual(outcomes);
+            expect(types.filter(type => type === 'dealer_fade_out')).toHaveLength(1);
+            expect(types.indexOf('dealer_fade_out')).toBeGreaterThan(types.lastIndexOf('hand_outcome'));
+            expect(types.indexOf('dealer_fade_out')).toBeLessThan(types.indexOf('phase_changed'));
+            const scored = processAction(resolved.nextState, { type: 'score_round' });
+            expect(scored.nextState.dealer).toEqual({ cards: [], isRevealed: false, blackjackValue: 0 });
+        });
+
         it('produces scoring events for winning hands', () => {
             // Run many seeds to find one with a win
             for (let seed = 1; seed <= 20; seed++) {

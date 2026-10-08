@@ -1,4 +1,5 @@
 import { getRaise, generateRaiseChoices } from '../../logic/handScoring';
+import { getPackDefinition } from '../../logic/packs';
 /**
  * Pure shop action processing functions.
  * Handles: enter_gift_shop, buy_shop_item, restock_shop, sell_relic,
@@ -75,6 +76,7 @@ export function processEnterGiftShop(state: GameState): ActionResult {
             shopReturnPhase: state.phase,
             shopItems,
             shopStockInitialized: true,
+            shopHasNewStock: false,
             shopRewardSummary: null,
             rngState: needsStock ? rng.getState() : state.rngState,
         },
@@ -106,10 +108,12 @@ export function processBuyShopItem(state: GameState, itemId: string): ActionResu
 
     if (item.type === 'RaisePack') {
         const rng = new SeededRNG(state.rngState);
+        const pack = getPackDefinition(item.packId);
         return {
             nextState: {
                 ...state, cash: cash - cost,
-                pendingRaiseChoices: generateRaiseChoices(rng).map(raise => raise.id),
+                pendingRaiseChoices: generateRaiseChoices(rng, pack.offerCount).map(raise => raise.id),
+                pendingPack: { packId: pack.id, picksRemaining: pack.pickCount },
                 shopItems: shopItems.map(stock => stock.id === itemId ? { ...stock, purchased: true } : stock),
                 rngState: rng.getState(),
             },
@@ -164,11 +168,13 @@ export function processChooseRaise(state: GameState, raiseId: string): ActionRes
     if (state.phase !== 'gift_shop' || !state.pendingRaiseChoices.includes(raiseId) || !getRaise(raiseId)) {
         return { nextState: state, events: [] };
     }
+    const picksRemaining = (state.pendingPack?.picksRemaining ?? 1) - 1;
     return {
         nextState: {
             ...state,
             handUpgrades: { ...state.handUpgrades, [raiseId]: (state.handUpgrades[raiseId] ?? 0) + 1 },
-            pendingRaiseChoices: [],
+            pendingRaiseChoices: picksRemaining > 0 ? state.pendingRaiseChoices.filter(id => id !== raiseId) : [],
+            pendingPack: picksRemaining > 0 ? { packId: state.pendingPack!.packId, picksRemaining } : null,
         },
         events: [{ type: 'raise_chosen', raiseId }],
     };
@@ -192,7 +198,11 @@ export function processRestockShop(state: GameState): ActionResult {
         return { nextState: state, events: [] };
     }
     const rng = new SeededRNG(state.rngState);
-    const newItems = generateRunShopItems(state, rng);
+    // A paid restock only cycles relics. Sold packs remain sold until an ante refresh.
+    const packs = state.shopItems.filter(item => item.type === 'RaisePack');
+    const oldRelicIds = state.shopItems.filter(item => item.type !== 'RaisePack').map(item => item.id);
+    const newRelics = generateShopItems([{ type: 'Relic', count: 4 }], state.inventory as RelicInstance[], undefined, rng, oldRelicIds);
+    const newItems = [...newRelics, ...packs];
     const cost = state.giftShopRestockCost;
     const newCash = state.cash - cost;
     return {

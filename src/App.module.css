@@ -607,6 +607,7 @@
 }
 
 .nextDealButton {
+    position: relative;
     width: 100%;
     height: 100%;
     /* Fill container */
@@ -638,6 +639,22 @@
     opacity: 0.5;
     cursor: not-allowed;
     filter: grayscale(1);
+}
+
+.giftShopNewBadge {
+    position: absolute;
+    top: -9px;
+    right: 10px;
+    padding: 4px 8px;
+    border: 1px solid #fff0b5;
+    border-radius: 999px;
+    background: #ffd76a;
+    color: #192a3b;
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: 1px;
+    line-height: 1;
+    box-shadow: 0 2px 8px #0006;
 }
 
 .actionPlaceholder {
@@ -1085,6 +1102,8 @@
     transform: translateX(-50%);
     width: 100%;
     max-width: 800px;
+    /* Center 40px relic circles beneath the 60px header buttons. */
+    padding-inline: 10px;
     height: 100%;
     pointer-events: none;
     display: flex;
@@ -1375,6 +1394,7 @@
     backdrop-filter: blur(5px);
 }
 .anteIncreasePopup {
+    transform: translateY(-60px);
     padding: 32px 56px;
     border: 1px solid #d4af37;
     border-radius: 16px;
@@ -1383,5 +1403,9 @@
     text-align: center;
     box-shadow: 0 16px 70px #0009;
 }
-.anteIncreasePopup h2 { margin: 0 0 12px; font-size: 32px; }
-.anteIncreasePopup p { margin: 0; font-size: 26px; font-variant-numeric: tabular-nums; }
+.anteIncreasePopup:hover { border-color: #d4af37; }
+.anteIncreasePopup:focus { outline: none; }
+.anteIncreasePopup:focus-visible { outline: 2px solid #f9e6a3; outline-offset: 5px; }
+.anteIncreaseTitle { display: block; margin: 0 0 12px; font-size: 32px; font-weight: 700; }
+.anteIncreaseAmount { display: block; font-size: 26px; font-variant-numeric: tabular-nums; }
+.anteIncreaseHint { display: block; margin-top: 20px; color: #d2c5a0; font-size: 15px; }

@@ -11,13 +11,17 @@
     justify-content: space-between;
     z-index: 50;
     overflow: hidden;
+    opacity: 1;
+    transition: opacity 350ms ease;
 }
 
 .giftShopContainerExiting {
     pointer-events: none;
 }
 
-.giftShopContainer[hidden] { display: none; }
+.giftShopOpeningPack { opacity: 0; }
+.giftShopOpeningPack * { pointer-events: none !important; }
+@media (prefers-reduced-motion: reduce) { .giftShopContainer { transition-duration: 50ms; } }
 
 .ropesLayer {
     position: absolute;
@@ -254,6 +258,7 @@
 
 .expandedRelicCard {
     position: relative;
+    isolation: isolate;
     width: 100%;
     max-width: none;
     cursor: pointer;
@@ -560,7 +565,7 @@
     height: 100%;
     border: 2px solid #9a8054;
     border-radius: 12px;
-    background: #302924;
+    background: repeating-linear-gradient(120deg, transparent 0 10px, #ffffff04 10px 12px), linear-gradient(135deg, #3a5973, #172638 45%, #34576f);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     display: flex;
     flex-direction: column;
@@ -571,8 +576,12 @@
 }
 
 .raiseCard {
+    border-color: var(--pack-color, #9a8054);
     transition: transform 0.2s ease, border-color 0.2s ease;
 }
+
+.raiseCard > svg { width: 68px; height: 68px; }
+.packRarity { position: absolute; top: 13px; left: 10px; font-size: 11px; font-weight: 800; }
 
 .raiseCard:hover:not(:disabled) {
     transform: translateY(-4px);
@@ -603,7 +612,7 @@
 
 .raiseHand {
     color: #74b9ff;
-    font-size: 1.2rem;
+    font-size: 1rem;
     font-weight: 700;
 }
 
@@ -633,45 +642,3 @@
 
 .slotActionButton { background: #34526b; }
 .slotActionButton:disabled { opacity: 0.45; cursor: not-allowed; }
-.packIcon { font-size: 2.4rem; line-height: 1; color: #74b9ff; }
-.packOverlay {
-    position: absolute; inset: 0; z-index: 1500;
-    pointer-events: none;
-}
-.packDialog {
-    position: absolute; bottom: 150px; left: 50%; transform: translateX(-50%);
-    width: 800px; max-height: 610px; overflow: auto;
-    box-sizing: border-box; padding: 32px; pointer-events: auto;
-    border: 1px solid #485363; border-radius: 20px; background: #16222d;
-    box-shadow: 0 20px 80px #0008; color: #ecf0f1; text-align: center;
-}
-.packDialog h2 { margin: 0 0 10px; font-size: 2rem; color: #ffd700; }
-.packDialog p { color: #bac7d3; margin: 0 0 24px; }
-.packScoresButton {
-    background: #34526b; border: 1px solid #74b9ff; color: #ecf0f1;
-    padding: 10px 18px; border-radius: 8px; margin: 4px 0 18px;
-    font: inherit; font-weight: 700; cursor: pointer;
-}
-.packScoresButton:hover { background: #426c8e; }
-.packScoresButton:focus-visible { outline: 3px solid #74b9ff; outline-offset: 3px; }
-.raiseChoices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
-.raiseChoice {
-    display: flex; flex-direction: column; align-items: stretch; gap: 10px;
-    min-height: 285px; padding: 22px 18px; border: 2px solid; border-radius: 14px;
-    background: #223241; color: #ecf0f1; font-family: inherit; cursor: pointer;
-    transition: transform 0.18s, background 0.18s;
-}
-.raiseChoice:hover { transform: translateY(-5px); background: #2b4053; }
-.raiseChoice:focus-visible { outline: 3px solid #74b9ff; outline-offset: 4px; }
-.raiseRarity { font-size: 1.1rem; font-weight: 800; }
-.modifierCount { color: #a6b6c6; font-size: 0.8rem; }
-.raiseModifiers { display: flex; flex-direction: column; gap: 12px; margin: 16px 0; flex: 1; justify-content: center; }
-.raiseModifier { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid #ffffff12; }
-.modifierHand { color: #74b9ff; font-weight: 700; font-size: 1rem; }
-.raiseModifier strong { font-size: 1.2rem; white-space: nowrap; }
-.raiseNegative { color: #ff7c7c; }
-.chooseRaise { padding: 10px 0; border-radius: 7px; background: #ffffff0c; font-size: 0.8rem; letter-spacing: 1.5px; font-weight: 700; }
-.packDialog .packFootnote { margin: 22px 0 0; font-size: 0.85rem; color: #a6b6c6; }
-@media (max-width: 680px) {
-    .packDialog { padding: 26px 24px; }
-}

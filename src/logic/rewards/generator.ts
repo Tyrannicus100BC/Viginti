@@ -2,7 +2,8 @@ import type { RewardConfig, ShopPriceOverrides } from '../cities/types';
 import { RelicManager } from '../relics/manager';
 import type { RelicInstance, RelicRarity } from '../relics/types';
 import type { SeededRNG } from '../../engine/rng';
-import { RAISES, getRaise, RAISE_PACK_COST } from '../handScoring';
+import { RAISES, getRaise } from '../handScoring';
+import { rollPackDefinition, type PackId } from '../packs';
 
 export interface ShopItem {
     id: string;
@@ -10,6 +11,7 @@ export interface ShopItem {
     purchased?: boolean;
     cost: number;
     nameOverride?: string;
+    packId?: PackId;
 }
 
 const RELIC_CASH_COSTS: Record<RelicRarity, number> = {
@@ -35,10 +37,11 @@ export function generateShopItems(
     configList: RewardConfig[],
     currentInventory: RelicInstance[],
     priceOverrides?: ShopPriceOverrides,
-    rng?: SeededRNG
+    rng?: SeededRNG,
+    excludedRelicIds: readonly string[] = []
 ): ShopItem[] {
     const items: ShopItem[] = [];
-    const currentIds = currentInventory.map(i => i.id);
+    const currentIds = [...currentInventory.map(i => i.id), ...excludedRelicIds];
     const pickedRelicIds = new Set<string>();
 
     // Use seeded RNG if provided, otherwise fall back to Math.random()
@@ -47,7 +50,8 @@ export function generateShopItems(
     for (const config of configList) {
         for (let i = 0; i < config.count; i++) {
             if (config.type === 'RaisePack') {
-                items.push({ id: `raise_pack_${items.length}`, type: 'RaisePack', cost: RAISE_PACK_COST, nameOverride: 'Raise Pack' });
+                const pack = rollPackDefinition(nextRandom());
+                items.push({ id: `raise_pack_${items.length}`, type: 'RaisePack', packId: pack.id, cost: pack.cost, nameOverride: pack.name });
                 continue;
             }
             if (config.type === 'Raise') {

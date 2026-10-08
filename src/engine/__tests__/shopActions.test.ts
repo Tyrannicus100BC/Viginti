@@ -19,6 +19,7 @@ describe('Cash gift shop', () => {
         const state = start();
         const result = processAction(state, { type: 'enter_gift_shop' });
         expect(result.nextState.phase).toBe('gift_shop');
+        expect(result.nextState.shopHasNewStock).toBe(false);
         expect(result.nextState.shopItems).toHaveLength(6);
         expect(result.nextState.cash).toBe(state.cash);
         expect(result.nextState.comps).toBe(state.comps);
@@ -80,7 +81,7 @@ describe('Cash gift shop', () => {
         expect(back.comps).toBe(state.comps);
     });
 
-    it('doubles paid restock costs without moving the five-deal threshold', () => {
+    it('doubles paid restock costs without moving the four-round threshold or setting the new stock badge', () => {
         let state = shop();
         for (const fee of [30, 60, 120]) {
             const before = state;
@@ -89,19 +90,43 @@ describe('Cash gift shop', () => {
             expect(state.giftShopRestockCost).toBe(fee * 2);
             expect(state.shopDealsAtLastFreeRestock).toBe(0);
             expect(state.comps).toBe(before.comps);
+            expect(state.handsUntilAnteIncrease).toBe(before.handsUntilAnteIncrease);
+            expect(state.shopHasNewStock).toBe(false);
         }
     });
 
+    it('paid restocks replace relics while retaining purchased and available packs', () => {
+        const original = shop();
+        let state: GameState = { ...original, shopItems: original.shopItems.map(item => item.id === original.shopItems[4].id ? { ...item, purchased: true } : item) };
+        const packs = state.shopItems.filter(item => item.type === 'RaisePack');
+        for (let i = 0; i < 3; i++) {
+            const previousRelics = state.shopItems.filter(item => item.type === 'Relic').map(item => item.id);
+            state = act(state, { type: 'restock_shop' });
+            expect(state.shopItems.filter(item => item.type === 'RaisePack')).toEqual(packs);
+            const relics = state.shopItems.filter(item => item.type === 'Relic');
+            expect(relics).toHaveLength(4);
+            expect(relics.every(item => !previousRelics.includes(item.id))).toBe(true);
+        }
+        // Even an exhausted shelf gains no new packs until the next ante increase.
+        const soldOut = { ...state, cash: 1000, shopItems: state.shopItems.map(item => item.type === 'RaisePack' ? { ...item, purchased: true } : item) };
+        const restocked = act(soldOut, { type: 'restock_shop' });
+        expect(restocked.shopItems.filter(item => item.type === 'RaisePack' && !item.purchased)).toHaveLength(0);
+        const refreshed = act({ ...restocked, phase: 'scoring', handsUntilAnteIncrease: 1 }, { type: 'score_round' });
+        expect(refreshed.shopItems.filter(item => item.type === 'RaisePack' && !item.purchased)).toHaveLength(2);
+    });
+
     it('refreshes stock and resets fees at ante increase, before any shop visit', () => {
-        const state = { ...shop(), giftShopRestockCost: 240, dealsTaken: 5, handsUntilAnteIncrease: 1, phase: 'scoring' as const };
+        const state = { ...shop(), giftShopRestockCost: 240, dealsTaken: 4, handsUntilAnteIncrease: 1, phase: 'scoring' as const };
         const result = processAction(state, { type: 'score_round' });
         expect(result.events).toContainEqual(expect.objectContaining({ type: 'shop_restocked', cost: 0 }));
         expect(result.nextState.cash).toBe(state.cash);
-        expect(result.nextState.shopDealsAtLastFreeRestock).toBe(5);
+        expect(result.nextState.shopDealsAtLastFreeRestock).toBe(4);
+        expect(result.nextState.shopHasNewStock).toBe(true);
         expect(result.nextState.giftShopRestockCost).toBe(30);
         const reopened = act(act(act(result.nextState, { type: 'enter_gift_shop' }), { type: 'leave_shop' }), { type: 'enter_gift_shop' });
         expect(reopened.rngState).toBe(result.nextState.rngState);
         expect(reopened.shopItems).toEqual(result.nextState.shopItems);
+        expect(reopened.shopHasNewStock).toBe(false);
     });
 
     it('shop visits alone do not trigger a restock or move the ante countdown', () => {

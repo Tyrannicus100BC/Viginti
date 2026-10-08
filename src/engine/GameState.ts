@@ -6,6 +6,7 @@
 import type { Card, PlayerHand, DealerHand, HandScore } from '../types';
 import type { RelicInstance } from '../logic/relics/types';
 import type { HandUpgrades } from '../logic/handScoring';
+import type { PackId, PendingPack } from '../logic/packs';
 
 // ─── Phase ──────────────────────────────────────────────
 
@@ -66,6 +67,7 @@ export interface ShopItem {
     readonly cost: number;
     readonly purchased?: boolean;
     readonly nameOverride?: string;
+    readonly packId?: PackId;
 }
 
 // ─── Interaction Mode ───────────────────────────────────
@@ -137,6 +139,7 @@ export interface GameState {
     readonly inventory: readonly RelicInstance[];
     readonly relicSlots: number;
     readonly pendingRaiseChoices: readonly string[];
+    readonly pendingPack: PendingPack | null;
     readonly handUpgrades: HandUpgrades;
     readonly tableActionCharges: Readonly<Record<string, number>>;
     readonly tableActionHeldCards: Readonly<Record<string, Card | null>>;
@@ -144,6 +147,7 @@ export interface GameState {
 
     // === Gift Shop ===
     readonly shopStockInitialized: boolean;
+    readonly shopHasNewStock: boolean;
     readonly shopItems: readonly ShopItem[];
     readonly giftShopRestockCost: number;
     readonly shopRewardSummary: RewardSummary | null;

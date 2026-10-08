@@ -55,7 +55,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
         name: 'Redraw',
         rarity: 'Rare',
         categories: ['Relic', 'Action'],
-        description: 'Redraw a card from the draw area\nThree uses; refills every five deals',
+        description: 'Redraw a card from the draw area\nThree uses; refills every four deals',
         tableAction: {
             label: 'REDRAW',
             accentColor: '#36a2ff',
@@ -70,7 +70,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
         name: 'Hold',
         rarity: 'Rare',
         categories: ['Relic', 'Action'],
-        description: 'Hold a drawn card for later placement\nOne use; refills every five deals',
+        description: 'Hold a drawn card for later placement\nOne use; refills every four deals',
         tableAction: {
             label: 'HOLD',
             accentColor: '#35d49a',
@@ -86,7 +86,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
         name: 'Switch',
         rarity: 'Rare',
         categories: ['Relic', 'Action'],
-        description: 'Swap a player card with the dealer face-up card\nOne use; refills every five deals',
+        description: 'Swap a player card with the dealer face-up card\nOne use; refills every four deals',
         tableAction: {
             label: 'SWITCH',
             accentColor: '#ff5d7d',
@@ -329,7 +329,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
         name: 'Deft',
         rarity: 'Rare',
         categories: ['Relic', 'Meta', 'New'],
-        description: 'Gain {extra_draws} comp ticket every five deals',
+        description: 'Gain {extra_draws} comp ticket every four deals',
         properties: { extra_draws: 1 },
         hooks: Hooks.deft_extra_draw,
         icon: '🤹'
