@@ -16,8 +16,10 @@ import type { TutorialDisplayConfig, TutorialScope } from './tutorial/types';
 // ─── Event Type Union ───────────────────────────────────
 
 export type GameEvent =
+    | { type: 'raise_chosen'; raiseId: string }
+    | { type: 'relic_slot_purchased'; slots: number; newCash: number }
     // === Dealing ===
-    | { type: 'deal_started'; deal: number; handsRemaining: number }
+    | { type: 'deal_started'; deal: number; handsRemaining: number; activeHandIds: number[]; comps: number; cash: number; ante: number }
     | { type: 'cards_dealt'; playerCard: Card; playerHandIndex: number; dealerCards: [Card, Card] }
     | { type: 'initial_deal_complete' }
 
@@ -27,6 +29,7 @@ export type GameEvent =
     | { type: 'draw_complete'; drawnCards: Card[]; selectedIndex: number }
 
     // === Card Placement ===
+    | { type: 'side_hand_opened'; handIndex: number; cost: number; newComps: number }
     | { type: 'card_placed'; card: Card; handIndex: number; newBlackjackValue: number }
     | { type: 'hand_bust'; handIndex: number; blackjackValue: number }
     | { type: 'hand_modified'; handIndex: number; newCards: Card[]; newBlackjackValue: number; reason: string }
@@ -56,9 +59,10 @@ export type GameEvent =
     | { type: 'scoring_hand_complete'; handIndex: number }
     | { type: 'summary_update'; chips: number; mult: number }
     | { type: 'deal_scoring_complete'; totalChips: number; totalMult: number; finalScore: number }
+    | { type: 'ante_increased'; previousAnte: number; ante: number; handsUntilAnteIncrease: number }
     | { type: 'dealer_fade_out' }
 
-    | { type: 'chip_collection'; amount: number; newTotalScore: number }
+    | { type: 'chip_collection'; amount: number; newTotalScore: number; newCash: number }
 
     // === Charge Changes ===
     | { type: 'charge_gained'; relicId: string; newCharges: number; reason: 'bust' | 'loss' }
@@ -69,10 +73,10 @@ export type GameEvent =
     | { type: 'game_over'; won: boolean; finalScore: number }
 
     // === Gift Shop ===
-    | { type: 'shop_entered'; items: ShopItem[]; rewardSummary: RewardSummary }
-    | { type: 'item_purchased'; itemId: string; relic: RelicInstance; newComps: number }
-    | { type: 'shop_restocked'; newItems: ShopItem[]; cost: number; newComps: number }
-    | { type: 'relic_sold'; relicId: string; refund: number; newComps: number }
+    | { type: 'shop_entered'; items: ShopItem[]; rewardSummary: RewardSummary | null }
+    | { type: 'item_purchased'; itemId: string; relic?: RelicInstance; newCash: number }
+    | { type: 'shop_restocked'; newItems: ShopItem[]; cost: number; newCash: number }
+    | { type: 'relic_sold'; relicId: string; refund: number; newCash: number }
     | { type: 'shop_left' }
 
     // === Deck Management ===

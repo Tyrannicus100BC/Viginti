@@ -128,7 +128,7 @@ describe('CLI Simulator', () => {
             const state = startGame();
             const output = renderState(state);
             expect(output).toContain('Atlantic City');
-            expect(output).toContain('Score');
+            expect(output).toContain('Cash');
             expect(output).toContain('entering_casino');
         });
 
@@ -142,14 +142,14 @@ describe('CLI Simulator', () => {
 
         it('renders gift shop with items', () => {
             const state = startGame();
-            const casinoWin = {
+            const completedDeal = {
                 ...state,
-                phase: 'casino_payout' as const,
+                phase: 'deal_over' as const,
                 totalScore: 100,
                 targetScore: 20,
                 comps: 10,
             };
-            const shopResult = processAction(casinoWin, { type: 'enter_gift_shop' });
+            const shopResult = processAction(completedDeal, { type: 'enter_gift_shop' });
             const output = renderState(shopResult.nextState);
             expect(output).toContain('Gift Shop');
         });
@@ -170,14 +170,14 @@ describe('CLI Simulator', () => {
 
         it('describes buy_shop_item with state', () => {
             const state = startGame();
-            const casinoWin = {
+            const completedDeal = {
                 ...state,
-                phase: 'casino_payout' as const,
+                phase: 'deal_over' as const,
                 totalScore: 100,
                 targetScore: 20,
                 comps: 10,
             };
-            const shopResult = processAction(casinoWin, { type: 'enter_gift_shop' });
+            const shopResult = processAction(completedDeal, { type: 'enter_gift_shop' });
             const shopState = shopResult.nextState;
             const item = shopState.shopItems[0];
             if (item) {

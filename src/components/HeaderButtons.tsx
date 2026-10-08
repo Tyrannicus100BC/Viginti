@@ -40,6 +40,20 @@ export const DeckButton: React.FC<HeaderButtonProps> = ({ onClick, title, classN
         </button>
     );
 };
+export const HandScoresButton: React.FC<HeaderButtonProps> = ({ onClick }) => (
+    <button
+        id="hand-scores-button"
+        className={styles.headerIconButton}
+        onClick={onClick}
+        title="Hand Scores"
+        aria-label="Hand Scores"
+    >
+        <svg viewBox="0 0 24 24" className={styles.headerIconSvg} aria-hidden="true">
+            <path fill="currentColor" fillRule="evenodd" d="M6 2a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H6Zm1 4h2v2H7V6Zm4 0h6v2h-6V6ZM7 11h2v2H7v-2Zm4 0h6v2h-6v-2Zm-4 5h2v2H7v-2Zm4 0h6v2h-6v-2Z" />
+        </svg>
+    </button>
+);
+
 export const TrashButton: React.FC<HeaderButtonProps> = ({ onClick, title }) => {
     return (
         <button 

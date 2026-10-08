@@ -17,6 +17,8 @@
     pointer-events: none;
 }
 
+.giftShopContainer[hidden] { display: none; }
+
 .ropesLayer {
     position: absolute;
     top: 0;
@@ -65,7 +67,7 @@
     left: 50%;
     transform: translateX(-50%) translateY(200%);
     width: 800px;
-    height: 540px;
+    height: 670px;
     background: #3e2723;
     border-radius: 12px;
     box-shadow: 0 -10px 30px rgba(0,0,0,0.8);
@@ -74,7 +76,6 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
-    --relic-slot-height: 104px;
     animation: giftShopShelvesEnter 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
     animation-delay: 0.4s;
     pointer-events: auto;
@@ -140,22 +141,26 @@
     gap: 12px;
 }
 
-.charmsList {
-    flex: 0 0 auto;
-    display: grid;
-    grid-template-rows: repeat(3, var(--relic-slot-height));
-    gap: 14px;
+.relicsList {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
     position: relative;
 }
 
-.charmsList .itemSlot {
+.relicsList .itemSlot {
+    flex-shrink: 0;
+    min-height: 104px;
     justify-content: flex-start;
     align-items: flex-start;
     padding-left: 0;
     box-sizing: border-box;
 }
 
-.charmsList .relicRow {
+.relicsList .relicRow {
     justify-content: flex-start;
 }
 
@@ -167,55 +172,11 @@
     font-weight: bold;
     text-align: center;
     padding-bottom: 0;
-    margin-bottom: 6px;
-}
-
-.shopTrashButton {
-    width: 100%;
-    background: #c0392b;
-    color: #fff;
-    border: none;
-    border-radius: 8px;
-    padding: 15px;
-    font-size: 1rem;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    font-weight: bold;
-    cursor: pointer;
-    transition: all 0.2s;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-}
-
-.shopTrashButton:hover {
-    background: #e74c3c;
-    transform: translateY(-2px);
-    box-shadow: 0 6px 12px rgba(0,0,0,0.4);
-}
-
-.shopEnhanceButton {
-    width: 100%;
-    background: #2980b9;
-    color: #fff;
-    border: none;
-    border-radius: 8px;
-    padding: 15px;
-    font-size: 1rem;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    font-weight: bold;
-    cursor: pointer;
-    transition: all 0.2s;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-}
-
-.shopEnhanceButton:hover {
-    background: #3498db;
-    transform: translateY(-2px);
-    box-shadow: 0 6px 12px rgba(0,0,0,0.4);
+    margin: 0 0 6px;
 }
 
 .rightShelf {
-    flex: 1;
+    flex: 0 0 180px;
     min-height: 0;
     display: flex;
     flex-direction: column;
@@ -226,7 +187,7 @@
 .rightShelfRows {
     flex: 0 0 auto;
     display: grid;
-    grid-template-rows: repeat(3, var(--relic-slot-height));
+    grid-template-rows: repeat(2, var(--relic-slot-height));
     gap: 14px;
     position: relative;
 }
@@ -294,7 +255,7 @@
 .expandedRelicCard {
     position: relative;
     width: 100%;
-    max-width: 340px;
+    max-width: none;
     cursor: pointer;
     transition: transform 0.2s ease, filter 0.2s ease, opacity 0.2s ease;
     pointer-events: auto;
@@ -313,15 +274,19 @@
     filter: grayscale(0.45) brightness(0.7);
 }
 
-.expandedRelicCardAngle {
+.expandedRelicCardScore {
     margin-left: auto;
 }
 
 .expandedRelicTooltip {
+    padding: 10px !important;
+    gap: 4px !important;
     width: 100% !important;
     min-width: 0 !important;
     max-width: none !important;
 }
+
+.expandedRelicTooltip [data-relic-header="true"] { padding-bottom: 4px; }
 
 .expandedRelicPrice {
     position: absolute;
@@ -337,7 +302,7 @@
     z-index: 2;
 }
 
-.expandedRelicPriceAngle {
+.expandedRelicPriceScore {
     right: auto;
     left: 8px;
 }
@@ -378,7 +343,7 @@
     opacity: 0.85;
 }
 
-.itemButtonAngle {
+.itemButtonScore {
     flex-direction: row-reverse;
     padding-right: 0;
     padding-left: 8px;
@@ -482,10 +447,10 @@
 
 .bottomActionRow {
     flex: 0 0 auto;
-    margin-top: 34px;
+    margin-top: 4px;
     width: 100%;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 14px;
 }
 
@@ -506,22 +471,6 @@
 .bottomActionButton:hover:not(:disabled) {
     transform: translateY(-2px);
     box-shadow: 0 7px 13px rgba(0, 0, 0, 0.45);
-}
-
-.enhanceActionButton {
-    background: #2980b9;
-}
-
-.enhanceActionButton:hover:not(:disabled) {
-    background: #3498db;
-}
-
-.destroyActionButton {
-    background: #c0392b;
-}
-
-.destroyActionButton:hover:not(:disabled) {
-    background: #e74c3c;
 }
 
 .restockActionButton {
@@ -570,4 +519,159 @@
     15% { opacity: 1; transform: translate(-50%, 0); }
     80% { opacity: 1; transform: translate(-50%, -5px); }
     100% { opacity: 0; transform: translate(-50%, -15px); }
+}
+
+.restockStatus {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #d6c6a7;
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-align: center;
+}
+
+.restockStatus strong {
+    font-size: 15px;
+    color: #fff;
+}
+
+.raisesSection {
+    flex: 0 0 auto;
+}
+
+.raisesRow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 18px;
+}
+
+.raiseSlot {
+    width: 180px;
+    height: 200px;
+}
+
+.raiseCard,
+.emptyRaise {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    border: 2px solid #9a8054;
+    border-radius: 12px;
+    background: #302924;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 36px 12px 14px;
+}
+
+.raiseCard {
+    transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.raiseCard:hover:not(:disabled) {
+    transform: translateY(-4px);
+    border-color: #ffd700;
+}
+
+.raiseCard:disabled {
+    cursor: not-allowed;
+    opacity: 0.65;
+}
+
+.raiseCardSold {
+    filter: grayscale(0.6);
+}
+
+.raisePrice {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    padding: 2px 8px;
+    border: 1px solid rgba(255, 215, 0, 0.4);
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.75);
+    color: #ffd700;
+    font-size: 0.85rem;
+    font-weight: 700;
+}
+
+.raiseHand {
+    color: #74b9ff;
+    font-size: 1.2rem;
+    font-weight: 700;
+}
+
+.raiseKind {
+    color: #d6c6a7;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.raiseCash {
+    color: #44ff44;
+}
+
+.raiseMult {
+    color: #f1c40f;
+}
+
+.emptyRaise {
+    padding: 12px;
+    border-style: dashed;
+    color: #d6c6a7;
+    font-size: 0.85rem;
+}
+
+.expandedRelicTooltip [data-relic-description="true"] { white-space: normal; overflow-wrap: anywhere; }
+.expandedRelicTooltip { box-sizing: border-box; }
+
+.slotActionButton { background: #34526b; }
+.slotActionButton:disabled { opacity: 0.45; cursor: not-allowed; }
+.packIcon { font-size: 2.4rem; line-height: 1; color: #74b9ff; }
+.packOverlay {
+    position: absolute; inset: 0; z-index: 1500;
+    pointer-events: none;
+}
+.packDialog {
+    position: absolute; bottom: 150px; left: 50%; transform: translateX(-50%);
+    width: 800px; max-height: 610px; overflow: auto;
+    box-sizing: border-box; padding: 32px; pointer-events: auto;
+    border: 1px solid #485363; border-radius: 20px; background: #16222d;
+    box-shadow: 0 20px 80px #0008; color: #ecf0f1; text-align: center;
+}
+.packDialog h2 { margin: 0 0 10px; font-size: 2rem; color: #ffd700; }
+.packDialog p { color: #bac7d3; margin: 0 0 24px; }
+.packScoresButton {
+    background: #34526b; border: 1px solid #74b9ff; color: #ecf0f1;
+    padding: 10px 18px; border-radius: 8px; margin: 4px 0 18px;
+    font: inherit; font-weight: 700; cursor: pointer;
+}
+.packScoresButton:hover { background: #426c8e; }
+.packScoresButton:focus-visible { outline: 3px solid #74b9ff; outline-offset: 3px; }
+.raiseChoices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.raiseChoice {
+    display: flex; flex-direction: column; align-items: stretch; gap: 10px;
+    min-height: 285px; padding: 22px 18px; border: 2px solid; border-radius: 14px;
+    background: #223241; color: #ecf0f1; font-family: inherit; cursor: pointer;
+    transition: transform 0.18s, background 0.18s;
+}
+.raiseChoice:hover { transform: translateY(-5px); background: #2b4053; }
+.raiseChoice:focus-visible { outline: 3px solid #74b9ff; outline-offset: 4px; }
+.raiseRarity { font-size: 1.1rem; font-weight: 800; }
+.modifierCount { color: #a6b6c6; font-size: 0.8rem; }
+.raiseModifiers { display: flex; flex-direction: column; gap: 12px; margin: 16px 0; flex: 1; justify-content: center; }
+.raiseModifier { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid #ffffff12; }
+.modifierHand { color: #74b9ff; font-weight: 700; font-size: 1rem; }
+.raiseModifier strong { font-size: 1.2rem; white-space: nowrap; }
+.raiseNegative { color: #ff7c7c; }
+.chooseRaise { padding: 10px 0; border-radius: 7px; background: #ffffff0c; font-size: 0.8rem; letter-spacing: 1.5px; font-weight: 700; }
+.packDialog .packFootnote { margin: 22px 0 0; font-size: 0.85rem; color: #a6b6c6; }
+@media (max-width: 680px) {
+    .packDialog { padding: 26px 24px; }
 }

@@ -31,6 +31,8 @@ export type PlayerAction =
     // === Gift Shop ===
     | { type: 'enter_gift_shop' }
     | { type: 'buy_shop_item'; itemId: string }
+    | { type: 'buy_relic_slot' }
+    | { type: 'choose_raise'; raiseId: string }
     | { type: 'restock_shop' }
     | { type: 'sell_relic'; relicId: string; index: number }
     | { type: 'leave_shop' }

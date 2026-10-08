@@ -37,7 +37,7 @@ export const TutorialOverlay: React.FC = () => {
     const [totalWinningsRect, setTotalWinningsRect] = useState<DOMRect | null>(null);
     const [hudDrawsRect, setHudDrawsRect] = useState<DOMRect | null>(null);
     const [hudCompsRect, setHudCompsRect] = useState<DOMRect | null>(null);
-    const [charmsRect, setCharmsRect] = useState<DOMRect | null>(null);
+    const [scoreRelicsRect, setScoreRelicsRect] = useState<DOMRect | null>(null);
     const [messageBoxSize, setMessageBoxSize] = useState({ width: 0, height: 0 });
     
     // New Store Access
@@ -432,7 +432,7 @@ export const TutorialOverlay: React.FC = () => {
         }
 
         const updateRect = () => {
-            const draws = document.getElementById('hud-draws');
+            const draws = document.getElementById('hud-comps');
             const wrapper = document.getElementById('game-scale-wrapper');
             if (!draws || !wrapper) return;
 
@@ -491,12 +491,12 @@ export const TutorialOverlay: React.FC = () => {
 
     useEffect(() => {
         if (!activeStep || activeStep.id !== 'spend_comps') {
-            setCharmsRect(null);
+            setScoreRelicsRect(null);
             return;
         }
 
         const updateRect = () => {
-            const el = document.getElementById('gift-shop-charms');
+            const el = document.getElementById('gift-shop-score');
             const wrapper = document.getElementById('game-scale-wrapper');
             if (!el || !wrapper) return;
 
@@ -508,7 +508,7 @@ export const TutorialOverlay: React.FC = () => {
             const width = rect.width / scale;
             const height = rect.height / scale;
 
-            setCharmsRect(new DOMRect(left, top, width, height));
+            setScoreRelicsRect(new DOMRect(left, top, width, height));
         };
 
         updateRect();
@@ -853,17 +853,17 @@ export const TutorialOverlay: React.FC = () => {
             transform: 'translateX(-50%)',
             maxWidth: `${maxHudWidth}px`
         };
-    })() : activeStep.id === 'spend_comps' && charmsRect ? (() => {
+    })() : activeStep.id === 'spend_comps' && scoreRelicsRect ? (() => {
         const safeMargin = 18;
         const gapRight = 16;
         const halfHeight = messageBoxSize.height / 2;
 
-        const targetLeft = charmsRect.left + charmsRect.width + gapRight;
+        const targetLeft = scoreRelicsRect.left + scoreRelicsRect.width + gapRight;
         const minLeft = safeMargin;
         const maxLeft = viewportWidth - safeMargin - messageBoxSize.width;
         const left = Math.min(Math.max(targetLeft, minLeft), maxLeft);
 
-        const targetCenterY = charmsRect.top + charmsRect.height / 2;
+        const targetCenterY = scoreRelicsRect.top + scoreRelicsRect.height / 2;
         const minY = safeMargin + halfHeight;
         const maxY = viewportHeight - safeMargin - halfHeight;
         const centerY = Math.min(Math.max(targetCenterY, minY), maxY);

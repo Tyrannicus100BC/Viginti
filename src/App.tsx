@@ -1,29 +1,30 @@
+import { canPlayHand } from './engine/economy';
 import React, { useState, useRef, useEffect } from 'react';
 import styles from './App.module.css';
 import { useGameStore } from './store/gameStore';
 import { fireConfetti } from './utils/confetti';
 import { PlayingCard } from './components/PlayingCard';
 import { Hand } from './components/Hand';
+import { HandScores } from './components/HandScores';
 import { DeckView } from './components/DeckView';
 import { ChooseCardView } from './components/ChooseCardView';
 import { PhysicsPot } from './components/PhysicsPot';
 import { TitlePhysics } from './components/TitlePhysics';
 import titleStyles from './components/TitlePhysics.module.css';
-import { CasinoListingView } from './components/CasinoListingView';
 import { GamblerSelect } from './components/GamblerSelect';
 import { CitySelect } from './components/CitySelect';
 
 import { CompsWindow } from './components/CompsWindow';
+import { RaisePackChoice } from './components/RaisePackChoice';
 import { RelicInventory } from './components/RelicInventory';
 
 import { RelicStore } from './components/RelicStore';
 import { GiftShop } from './components/GiftShop';
-import { CasinoWinScreen } from './components/CasinoWinScreen';
 import { TableActionButton } from './components/TableActionButton';
 
 import type { PlayerHand, Card } from './types';
 import { useLayout } from './components/ResponsiveLayout';
-import { CasinosButton, DeckButton } from './components/HeaderButtons';
+import { DeckButton, HandScoresButton } from './components/HeaderButtons';
 import { CITY_DEFINITIONS } from './logic/cities/definitions';
 import { RelicManager } from './logic/relics/manager';
 import { getRelicRarityFrameColor } from './logic/relics/rarity';
@@ -42,7 +43,6 @@ import {
     getUnlockedCityIds,
     getUnlockedGamblerIds,
     isCityUnlocked,
-    isCityCleared,
     isGamblerUnlocked,
     resetPersistedState,
     setSelectedCityId as setPersistedCityId,
@@ -54,9 +54,7 @@ import {
     setMusicVolume as setPersistedMusicVolume,
     setSfxVolume as setPersistedSfxVolume,
     setMusicMuted as setPersistedMusicMuted,
-    setSfxMuted as setPersistedSfxMuted,
-    getSkipAtlanticTutorials as getPersistedSkipAtlanticTutorials,
-    setSkipAtlanticTutorials as setPersistedSkipAtlanticTutorials
+    setSfxMuted as setPersistedSfxMuted
 } from './store/persistence';
 import { ensureUnlocksUpToDate, unlockAllContent } from './logic/progression';
 import { NEXT_CASINO_TUTORIAL_ID, STAND_TUTORIAL_ID, TUTORIAL_STEPS, shouldPromptStandNow } from './logic/tutorials/definitions';
@@ -104,7 +102,7 @@ type HoldPickupAnimation = {
 
 type ShopRelicPurchaseLaunch = {
     relicId: string;
-    relicType: 'Charm' | 'Angle';
+    relicType: 'left' | 'right';
     icon: string | null;
     name: string;
     sourceRect: { left: number; top: number; width: number; height: number };
@@ -112,7 +110,7 @@ type ShopRelicPurchaseLaunch = {
 
 type ShopRelicFlight = {
     key: string;
-    relicType: 'Charm' | 'Angle';
+    relicType: 'left' | 'right';
     icon: string | null;
     name: string;
     rarityFrameColor: string;
@@ -138,9 +136,11 @@ export default function App() {
         runningSummary,
 
         totalScore,
-        targetScore,
+        cash,
         comps,
-        handsRemaining,
+        ante,
+        handsUntilAnteIncrease,
+        anteIncrease,
 
         isShaking,
 
@@ -160,6 +160,7 @@ export default function App() {
         holdReturns,
 
         setAnimationSpeed,
+        setSfx,
         animationSpeed,
         modifiers,
         inventory,
@@ -199,7 +200,6 @@ export default function App() {
         debugFillTableAction,
         isReshuffling,
         goToTitle,
-        winGame,
         selectedCityId: storeCityId,
 
         // Tutorial Actions
@@ -210,13 +210,13 @@ export default function App() {
 
         signalTotalWinningsAnimationComplete,
         drawTutorialReady,
-        getMaxCharms,
-        getMaxAngles,
         isSellingMode,
         toggleSellingMode,
         removalCount,
+        handUpgrades,
+        pendingRaiseChoices,
         deckProbabilities,
-        leaveCasino
+        enterGiftShop
     } = useGameStore();
 
     const { scale, viewportWidth, viewportHeight } = useLayout();
@@ -236,6 +236,7 @@ export default function App() {
         : null;
 
     const [showDeck, setShowDeck] = useState(false);
+    const [showHandScores, setShowHandScores] = useState(false);
     const [showDebugLog, setShowDebugLog] = useState(false);
     const [showDebugLoad, setShowDebugLoad] = useState(false);
     const [isRemovingCards, setIsRemovingCards] = useState(false);
@@ -245,22 +246,18 @@ export default function App() {
     const [holdPickupAnimation, setHoldPickupAnimation] = useState<HoldPickupAnimation | null>(null);
     const [shopRelicPurchaseLaunch, setShopRelicPurchaseLaunch] = useState<ShopRelicPurchaseLaunch | null>(null);
     const [shopRelicFlight, setShopRelicFlight] = useState<ShopRelicFlight | null>(null);
-    const [pendingInventoryHide, setPendingInventoryHide] = useState<{ kind: 'charm' | 'angle'; id: string } | null>(null);
-    const [hiddenInventoryEntry, setHiddenInventoryEntry] = useState<{ kind: 'charm' | 'angle'; id: string; index: number } | null>(null);
+    const [pendingInventoryHide, setPendingInventoryHide] = useState<{ kind: 'left' | 'right'; id: string } | null>(null);
+    const [hiddenInventoryEntry, setHiddenInventoryEntry] = useState<{ kind: 'left' | 'right'; id: string; index: number } | null>(null);
     const [hiddenDrawCardIds, setHiddenDrawCardIds] = useState<string[]>([]);
     const [entryAnimationOverrides, setEntryAnimationOverrides] = useState<Record<string, { xOffset: number; yOffset: number; scale: number }>>({});
     const [hiddenCardIds, setHiddenCardIds] = useState<string[]>([]);
     // showHandRankings removed
-    const [showCasinoListing, setShowCasinoListing] = useState(false);
     const [showCompsWindow, setShowCompsWindow] = useState(false);
     const [showRelicStore, setShowRelicStore] = useState(false);
-    const [relicStoreFilter, setRelicStoreFilter] = useState<string | undefined>(undefined);
     const [overlayComplete, setOverlayComplete] = useState(true);
     // scoreAnimate removed
 
     const [hasClickedWin, setHasClickedWin] = useState(false);
-    const [skipAtlanticTutorials, setSkipAtlanticTutorials] = useState(() => getPersistedSkipAtlanticTutorials());
-    const [skipTutorialToggleEnabled, setSkipTutorialToggleEnabled] = useState(false);
     const [standWarningMessage, setStandWarningMessage] = useState<string | null>(null);
     const [standWarningStyle, setStandWarningStyle] = useState<React.CSSProperties | null>(null);
     const standWarningTimeoutRef = useRef<number | null>(null);
@@ -298,10 +295,6 @@ export default function App() {
     useEffect(() => {
         setPersistedGamblerId(selectedGamblerId);
     }, [selectedGamblerId]);
-
-    useEffect(() => {
-        setPersistedSkipAtlanticTutorials(skipAtlanticTutorials);
-    }, [skipAtlanticTutorials]);
 
     const [selectedCityId, setSelectedCityId] = useState(() => getSelectedCityId());
 
@@ -575,6 +568,10 @@ export default function App() {
     }, [sfxVolume, sfxMuted]);
 
     useEffect(() => {
+        setSfx(sfxEngine);
+    }, [setSfx]);
+
+    useEffect(() => {
         setPersistedMusicVolume(musicVolume);
     }, [musicVolume]);
 
@@ -635,7 +632,7 @@ export default function App() {
     }, [playCardPlace]);
 
     const handleShopRelicPurchased = React.useCallback((payload: ShopRelicPurchaseLaunch) => {
-        const inventoryKind = payload.relicType === 'Charm' ? 'charm' : 'angle';
+        const inventoryKind = payload.relicType;
         setPendingInventoryHide({ kind: inventoryKind, id: payload.relicId });
         setShopRelicPurchaseLaunch(payload);
     }, []);
@@ -645,7 +642,7 @@ export default function App() {
         if (shopRelicFlight) return;
         let cancelled = false;
         let attempts = 0;
-        const inventoryKind = shopRelicPurchaseLaunch.relicType === 'Charm' ? 'charm' : 'angle';
+        const inventoryKind = shopRelicPurchaseLaunch.relicType;
 
         const tryResolveTarget = () => {
             if (cancelled) return;
@@ -686,7 +683,7 @@ export default function App() {
             const bottom = Math.max(targetIconRect.bottom, targetLabelRect.bottom);
             const targetRect = new DOMRect(left, top, right - left, bottom - top);
             const relicConfig = RelicManager.getRelicConfig(shopRelicPurchaseLaunch.relicId);
-            const rarityFrameColor = getRelicRarityFrameColor(relicConfig?.rarity ?? 'common');
+            const rarityFrameColor = getRelicRarityFrameColor(relicConfig?.rarity ?? 'Common');
 
             setHiddenInventoryEntry({
                 kind: inventoryKind,
@@ -795,23 +792,8 @@ export default function App() {
         };
     }, [shopRelicFlight]);
 
-    const hasClearedAtlanticCity = isCityCleared('atlantic_city');
-    const shouldShowSkipTutorial = selectedCityId === 'atlantic_city';
-
-
-    const [displayDeal, setDisplayDeal] = useState(deal);
-    const [displayTarget, setDisplayTarget] = useState(targetScore);
     const [displayComps, setDisplayComps] = useState(comps);
-    const [delayedRemainingTarget, setDelayedRemainingTarget] = useState(targetScore - totalScore); // New state for delayed visual update
-
-    const [handsAnimate, setHandsAnimate] = useState(false);
-    const prevHandsRemaining = React.useRef(handsRemaining);
-    const prevTotalScore = React.useRef(totalScore);
-
-    const [dealAnimate, setDealAnimate] = useState(false);
-    const [targetAnimate, setTargetAnimate] = useState(false);
     const [compsAnimate, setCompsAnimate] = useState(false);
-    const runInitializedRef = useRef(false);
     const confettiFiredRef = useRef(false);
 
     const [showSelectionUI, setShowSelectionUI] = useState(false);
@@ -1079,92 +1061,12 @@ export default function App() {
     }, [isCollectingChips, phase, !!runningSummary, dealSummary]);
 
     React.useEffect(() => {
-        // Target Reduction Animation
-        // When totalScore changes, valid remaining decreases.
-        const actualRemaining = Math.max(0, targetScore - totalScore);
-
-        if (actualRemaining !== delayedRemainingTarget) {
-            const isIncrease = actualRemaining > delayedRemainingTarget;
-            // Update value 
-            setDelayedRemainingTarget(actualRemaining);
-            
-            // Skip animation for the initial "increase" (debt refill) that happens when setup values are loaded 
-            // in 'entering_casino' phase. But allow animations for decreases (debt reduction) or any changes 
-            // outside of the interstitial setup.
-            if (!isIncrease || phase !== 'entering_casino') {
-                setTargetAnimate(true);
-
-                const timer = setTimeout(() => {
-                    setTargetAnimate(false);
-                }, 500); // Match dealDecrement animation duration (0.5s)
-
-                return () => {
-                    clearTimeout(timer);
-                    setTargetAnimate(false);
-                };
-            }
-        }
-    }, [totalScore, targetScore, phase]);
-
-    React.useEffect(() => {
-        if (handsRemaining !== prevHandsRemaining.current) {
-            const isIncrease = handsRemaining > prevHandsRemaining.current;
-            
-            // Skip animation for the initial "increase" (deal refill) during 'entering_casino'.
-            // Allow animations for decreases (spending deals) or any changes in other phases.
-            if (!isIncrease || phase !== 'entering_casino') {
-                setHandsAnimate(true);
-                const timer = setTimeout(() => setHandsAnimate(false), 500);
-                prevHandsRemaining.current = handsRemaining;
-                return () => clearTimeout(timer);
-            } else {
-                prevHandsRemaining.current = handsRemaining;
-            }
-        } else {
-            prevHandsRemaining.current = handsRemaining;
-        }
-    }, [handsRemaining, phase]);
-
-    // Handle value updates for Casino and Target
-    React.useEffect(() => {
-        if (phase === 'entering_casino') {
-            // Keep HUD in its final position for all runs (no overlay transition).
-            setOverlayComplete(true);
-            setDisplayDeal(deal);
-            setDisplayTarget(targetScore);
-            setDisplayComps(comps);
-            return;
-        }
-
-        // Sync values if they change while already in HUD mode
-        if (deal !== displayDeal) {
-            setDisplayDeal(deal);
-        }
-        if (targetScore !== displayTarget) {
-            setDisplayTarget(targetScore);
-        }
-        if (comps !== displayComps) {
-            setDisplayComps(comps);
-            // Trigger animation for Comps when they change (e.g. Gift Shop purchase)
-            setCompsAnimate(true);
-            const timer = setTimeout(() => setCompsAnimate(false), 500 / animationSpeed);
-            return () => clearTimeout(timer);
-        }
-    }, [phase, deal, targetScore, comps]);
-
-    // Synchronize display values immediately when starting a new run (Deal 1) 
-    // to avoid showing old run values or starting from the top of the screen.
-    if (phase === 'entering_casino' && deal === 1) {
-        if (!runInitializedRef.current) {
-            setOverlayComplete(true);
-            setDisplayDeal(1);
-            setDisplayTarget(targetScore);
-            setDisplayComps(5);
-            runInitializedRef.current = true;
-        }
-    } else {
-        runInitializedRef.current = false;
-    }
+        setOverlayComplete(true);
+        setDisplayComps(comps);
+        setCompsAnimate(true);
+        const timer = setTimeout(() => setCompsAnimate(false), 500 / animationSpeed);
+        return () => clearTimeout(timer);
+    }, [comps, animationSpeed]);
 
     const isOverlayMode = phase === 'entering_casino' && !overlayComplete;
 
@@ -1370,7 +1272,7 @@ export default function App() {
         selectTableActionCard({ target, handIndex, cardId });
     };
 
-    const areAllHandsUnplayable = Array.isArray(playerHands) && playerHands.every(h => h && (h.isBust || h.isHeld || h.blackjackValue === 21));
+    const areAllHandsUnplayable = Array.isArray(playerHands) && playerHands.every(h => h && !canPlayHand(h, comps));
     const hasDrawnCards = drawnCards.some(c => c !== null);
     const isDrawAreaClear = !hasDrawnCards;
     const canDraw = phase === 'playing' && isDrawAreaClear && !isDealerPlaying && !isInitialDeal && interactionMode === 'default' && !areAllHandsUnplayable && !isRedrawAnimating;
@@ -1383,7 +1285,7 @@ export default function App() {
     const hasSurrenderTarget = playerHands.some(h => !h.isBust && !h.isHeld && h.blackjackValue !== 21 && h.cards.length > 0);
     const hasDiscardPlayerTargets = playerHands.some(h => !h.isBust && h.blackjackValue !== 21 && h.cards.length > 0);
     const hasDiscardDealerTargets = hasDealerFaceUpCard && dealer.blackjackValue < 21;
-    const hasHoldPlacementTargets = playerHands.some(h => !h.isBust && !h.isHeld && h.blackjackValue !== 21);
+    const hasHoldPlacementTargets = playerHands.some(h => canPlayHand(h, comps));
     const hasSwitchTargets = hasDealerFaceUpCard && playerHands.some(h => !h.isBust && h.blackjackValue !== 21 && h.cards.length > 0);
     const dealerSelectableCardIds = (interactionMode === 'select_card' && activeTableActionId === 'discard' && hasDiscardDealerTargets)
         ? dealer.cards.filter(card => card.isFaceUp).map(card => card.id)
@@ -1429,22 +1331,6 @@ export default function App() {
             standWarningTimeoutRef.current = null;
         }, 1100);
     };
-
-    useEffect(() => {
-        if (phase !== 'init') {
-            setSkipTutorialToggleEnabled(false);
-            return;
-        }
-
-        setSkipTutorialToggleEnabled(false);
-        const timer = window.setTimeout(() => {
-            setSkipTutorialToggleEnabled(true);
-        }, 800);
-
-        return () => {
-            window.clearTimeout(timer);
-        };
-    }, [phase]);
 
     useEffect(() => {
         if (phase === 'deal_over' || phase === 'init' || phase === 'gift_shop' || phase === 'victory' || phase === 'game_over') {
@@ -1545,24 +1431,10 @@ export default function App() {
         signalTotalWinningsOnce();
     };
 
-    const currentCity = CITY_DEFINITIONS.find(c => c.id === selectedCityId) || CITY_DEFINITIONS[0];
-    const isLastCasino = deal >= currentCity.casinoTargets.length;
-
     const handleDealAdvanceAction = React.useCallback(() => {
-        const tutorialManager = TutorialManager.getInstance();
-        if (phase === 'deal_over' && deal === 1 && totalScore >= targetScore) {
-            tutorialManager.completeStep(NEXT_CASINO_TUTORIAL_ID);
-        }
-        if (totalScore >= targetScore && isLastCasino) {
-            winGame();
-        } else if (totalScore >= targetScore) {
-            leaveCasino();
-        } else if (phase === 'entering_casino') {
-            dealFirstHand();
-        } else {
-            nextDeal();
-        }
-    }, [phase, deal, totalScore, targetScore, isLastCasino, dealFirstHand, winGame, nextDeal, leaveCasino]);
+        if (phase === 'entering_casino') dealFirstHand();
+        else nextDeal();
+    }, [phase, dealFirstHand, nextDeal]);
 
     const finalizeGiftShopExit = React.useCallback(() => {
         if (giftShopExitTimeoutRef.current !== null) {
@@ -1570,15 +1442,11 @@ export default function App() {
             giftShopExitTimeoutRef.current = null;
         }
         if (phase !== 'gift_shop' || !isGiftShopExiting) return;
-        if (isLastCasino) {
-            winGame();
-        } else {
-            leaveShop();
-        }
-    }, [isGiftShopExiting, isLastCasino, leaveShop, phase, winGame]);
+        leaveShop();
+    }, [isGiftShopExiting, leaveShop, phase]);
 
     const startGiftShopExit = React.useCallback(() => {
-        if (phase !== 'gift_shop' || isGiftShopExiting || !giftShopEnterComplete) return;
+        if (phase !== 'gift_shop' || isGiftShopExiting || !giftShopEnterComplete || pendingRaiseChoices.length) return;
         setIsGiftShopExiting(true);
         if (giftShopExitTimeoutRef.current !== null) {
             window.clearTimeout(giftShopExitTimeoutRef.current);
@@ -1587,7 +1455,7 @@ export default function App() {
             giftShopExitTimeoutRef.current = null;
             finalizeGiftShopExit();
         }, GIFT_SHOP_EXIT_DURATION_MS + 60);
-    }, [finalizeGiftShopExit, giftShopEnterComplete, isGiftShopExiting, phase]);
+    }, [finalizeGiftShopExit, giftShopEnterComplete, isGiftShopExiting, phase, pendingRaiseChoices.length]);
 
     if (phase === 'init') {
         // const canStartRun = isCityUnlocked(selectedCityId) && isGamblerUnlocked(selectedGamblerId);
@@ -1622,9 +1490,7 @@ export default function App() {
                         style={{ zIndex: 1, marginBottom: 40 }}
                         onClick={() => {
                             playClick();
-                            const runGamblerId = !skipAtlanticTutorials ? 'newbie' : 'default';
-                            const runCityId = !skipAtlanticTutorials ? 'atlantic_city' : 'las_vegas';
-                            startGame(runGamblerId, runCityId, { skipAtlanticTutorials });
+                            startGame('default', 'las_vegas', { skipAtlanticTutorials: true });
                         }}
                         title={'Start Run'}
                     >
@@ -1641,19 +1507,6 @@ export default function App() {
                     )}
                 </div>
 
-                <div className={styles.skipTutorialContainer}>
-                    <input
-                        id="play-tutorial"
-                        type="checkbox"
-                        checked={!skipAtlanticTutorials}
-                        onChange={(e) => {
-                            playClick();
-                            setSkipAtlanticTutorials(!e.target.checked);
-                        }}
-                        disabled={!skipTutorialToggleEnabled}
-                    />
-                    <label htmlFor="play-tutorial">Play Tutorial</label>
-                </div>
                 <button
                     className={styles.debugToggle}
                     onClick={(e) => {
@@ -1738,10 +1591,10 @@ export default function App() {
             <div className={styles.container} style={{ justifyContent: 'center' }}>
                 <h1 style={{ fontSize: '3rem', color: '#ff4444', marginBottom: 20 }}>GAME OVER</h1>
                 <p style={{ fontSize: '1.5rem', color: '#fff', marginBottom: 10 }}>
-                    Failed to beat Casino {deal}
+                    You cannot afford the next cash ante.
                 </p>
                 <p style={{ fontSize: '1.2rem', color: '#aaa', marginBottom: 40 }}>
-                    Final Winnings: ${totalScore.toLocaleString()} / ${targetScore.toLocaleString()}
+                    Total Winnings: ${totalScore.toLocaleString()} · {dealsTaken} deals played
                 </p>
                 <button className={styles.button} onClick={goToTitle}>Back to Title</button>
                 {showDebugLog && <DebugLogOverlay onClose={() => setShowDebugLog(false)} />}
@@ -1778,7 +1631,7 @@ export default function App() {
 
     // Click anywhere to draw a card or advance to next deal
     const handleGlobalClick = (e: React.MouseEvent) => {
-        if (showDeck || showCasinoListing || showCompsWindow || showRelicStore) return;
+        if (showDeck || showHandScores || showCompsWindow || showRelicStore) return;
         if (isTutorialInputLocked()) return;
 
         // Ignore clicks on buttons or interactive elements
@@ -1800,13 +1653,7 @@ export default function App() {
         if (canDrawNow) {
             handleDraw();
         } else if (phase === 'deal_over') {
-            // Allow click-anywhere for Leave Casino, but keep Victory as button-only.
-            if (totalScore >= targetScore) {
-                if (isLastCasino) return;
-                handleDealAdvanceAction();
-                return;
-            }
-            nextDeal();
+            handleDealAdvanceAction();
         } else if (phase === 'entering_casino') {
             // Allow global click to start dealing 
             handleDealAdvanceAction();
@@ -1860,12 +1707,12 @@ export default function App() {
         >
             <div className={styles.topNavContainer}>
 
-                <CasinosButton onClick={() => {
-                    playClick();
-                    setShowCasinoListing(true);
-                }} />
+                {debugEnabled && <button className={styles.manageDebugBtn} onClick={() => setShowRelicStore(true)}>RELICS</button>}
+                <HandScoresButton onClick={() => {
+                        playClick();
+                        setShowHandScores(true);
+                    }} />
 
-                <div className={styles.headerPlaceholder} />
 
                 <header
                     id="hud-bar"
@@ -1889,27 +1736,25 @@ export default function App() {
                                 triggerDebugChips();
                             }}
                         >
-                            {phase === 'gift_shop' ? 'Comps' : 'CASH'}
+                            CASH
                         </button>
                     )}
-                    <div className={styles.stat}>
-                        <span className={styles.statLabel}>Casino</span>
-                        <span key={displayDeal} className={`${styles.statValue} ${dealAnimate ? styles.statValueAnimate : ''}`}>{displayDeal}</span>
+                    <div id="hud-increase" className={styles.stat}>
+                        <span className={styles.statLabel}>Increase</span>
+                        <span className={styles.statValue}>{handsUntilAnteIncrease}</span>
                     </div>
-                    <div id="hud-debt" className={styles.stat}>
-                        <span className={styles.statLabel}>Debt</span>
-                        <span key={displayTarget} className={`${styles.statValue} ${targetAnimate ? styles.statValueAnimate : ''}`}>
-                            {"$" + delayedRemainingTarget.toLocaleString()}
-                        </span>
+                    <div id="hud-ante" className={styles.stat}>
+                        <span className={styles.statLabel}>Ante</span>
+                        <span className={styles.statValue}>${ante.toLocaleString()}</span>
                     </div>
-                    <div id="hud-draws" className={`${styles.stat} ${isOverlayMode ? styles.statHidden : ''}`}>
-                        <span className={styles.statLabel}>Deals</span>
-                        <span key={handsRemaining} className={`${styles.statValue} ${handsAnimate ? styles.statValueAnimate : ''}`}>{handsRemaining}</span>
+                    <div id="hud-cash" className={styles.stat}>
+                        <span className={styles.statLabel}>Cash</span>
+                        <span className={styles.statValue}>${cash.toLocaleString()}</span>
                     </div>
                     <div id="hud-comps" className={styles.stat}>
-                        <span className={styles.statLabel}>Comps</span>
+                        <span className={styles.statLabel}>COMPS</span>
                         <span key={displayComps} className={`${styles.statValue} ${compsAnimate ? styles.statValueAnimate : ''}`}>
-                            ₵{displayComps}
+                            £{displayComps}
                         </span>
                     </div>
                 </header>
@@ -1990,64 +1835,15 @@ export default function App() {
             <div className={styles.gameWrapper} ref={gameWrapperRef}>
                 <div className={styles.sidebarsContainer}>
                     <div className={styles.leftSidebar}>
-                        <div
-                            className={`${styles.zoneLabel} ${debugEnabled ? styles.manageDebugBtn : ''}`}
-                            style={{
-                                alignSelf: 'flex-start',
-                                width: 'auto',
-                                marginBottom: 10,
-                                opacity: debugEnabled ? 1 : 0.5,
-                                padding: debugEnabled ? '4px 12px' : 0,
-                                cursor: debugEnabled ? 'pointer' : 'default',
-                                pointerEvents: 'auto'
-                            }}
-                            onClick={debugEnabled ? (e) => {
-                                e.stopPropagation();
-                                setRelicStoreFilter('Charm');
-                                setShowRelicStore(true);
-                            } : undefined}
-                        >
-                            {`Charms ${inventory.filter(inst => {
-                                const cfg = RelicManager.getRelicConfig(inst.id);
-                                return cfg?.categories.includes('Charm');
-                            }).length} of ${getMaxCharms()}`}
-                        </div>
-                        <RelicInventory
-                            enabledCategories={['Charm']}
-                            inventoryKind="charm"
-                            hiddenEntry={hiddenInventoryEntry?.kind === 'charm' ? { id: hiddenInventoryEntry.id, index: hiddenInventoryEntry.index } : null}
-                            pendingHiddenRelicId={pendingInventoryHide?.kind === 'charm' ? pendingInventoryHide.id : null}
+                        <RelicInventory inventoryKind="left"
+                            hiddenEntry={hiddenInventoryEntry?.kind === 'left' ? { id: hiddenInventoryEntry.id, index: hiddenInventoryEntry.index } : null}
+                            pendingHiddenRelicId={pendingInventoryHide?.kind === 'left' ? pendingInventoryHide.id : null}
                         />
                     </div>
                     <div className={styles.sidebar}>
-                        <div
-                            className={`${styles.zoneLabel} ${debugEnabled ? styles.manageDebugBtn : ''}`}
-                            style={{
-                                alignSelf: 'flex-end',
-                                width: 'auto',
-                                marginBottom: 10,
-                                opacity: debugEnabled ? 1 : 0.5,
-                                padding: debugEnabled ? '4px 12px' : 0,
-                                cursor: debugEnabled ? 'pointer' : 'default',
-                                pointerEvents: 'auto'
-                            }}
-                            onClick={debugEnabled ? (e) => {
-                                e.stopPropagation();
-                                setRelicStoreFilter('Angle');
-                                setShowRelicStore(true);
-                            } : undefined}
-                        >
-                            {`${inventory.filter(inst => {
-                                const cfg = RelicManager.getRelicConfig(inst.id);
-                                return cfg?.categories.includes('Angle');
-                            }).length} of ${getMaxAngles()} Angles`}
-                        </div>
-                        <RelicInventory
-                            enabledCategories={['Angle']}
-                            viewMode="table"
-                            inventoryKind="angle"
-                            hiddenEntry={hiddenInventoryEntry?.kind === 'angle' ? { id: hiddenInventoryEntry.id, index: hiddenInventoryEntry.index } : null}
-                            pendingHiddenRelicId={pendingInventoryHide?.kind === 'angle' ? pendingInventoryHide.id : null}
+                        <RelicInventory inventoryKind="right"
+                            hiddenEntry={hiddenInventoryEntry?.kind === 'right' ? { id: hiddenInventoryEntry.id, index: hiddenInventoryEntry.index } : null}
+                            pendingHiddenRelicId={pendingInventoryHide?.kind === 'right' ? pendingInventoryHide.id : null}
                         />
                     </div>
                 </div>
@@ -2414,11 +2210,11 @@ export default function App() {
                                             return !hand.isBust && !hand.isHeld && hand.blackjackValue !== 21 && hand.cards.length > 0;
                                         }
                                         if (activeTableActionId === 'hold') {
-                                            return !hand.isBust && !hand.isHeld && hand.blackjackValue !== 21;
+                                            return canPlayHand(hand, comps);
                                         }
                                         return false;
                                     })();
-                                    const canSelectHand = isAssignMode || canSelectForAction;
+                                    const canSelectHand = (isAssignMode && canPlayHand(hand, comps)) || canSelectForAction;
                                     const selectableCardIds = (interactionMode === 'select_card' && activeTableActionId && (activeTableActionId === 'discard' || activeTableActionId === 'switch') && !hand.isBust && hand.blackjackValue !== 21)
                                         ? hand.cards.map(card => card.id)
                                         : undefined;
@@ -2489,49 +2285,32 @@ export default function App() {
                                     Stand
                                 </button>
                             ) : (phase === 'deal_over' || phase === 'entering_casino' || (phase === 'playing' && isInitialDeal)) ? (
-                                <>
-                                    {(phase === 'deal_over' || phase === 'entering_casino') && totalScore >= targetScore && (
-                                        <button
-                                            id='next-casino-button'
-                                            className={`${styles.nextDealButton} ${styles.pulseGlow} ${isLastCasino ? styles.victoryButton : ''}`}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                const tutorialManager = TutorialManager.getInstance();
-                                                if (deal === 1) {
-                                                    tutorialManager.completeStep(NEXT_CASINO_TUTORIAL_ID);
-                                                }
-                                                if (isLastCasino) {
-                                                    winGame();
-                                                } else {
-                                                    leaveCasino();
-                                                }
-                                            }}
-                                        >
-                                            {isLastCasino ? 'Victory' : 'Leave Casino'}
-                                        </button>
-                                    )}
-                                    {!((phase === 'deal_over' || phase === 'entering_casino') && totalScore >= targetScore) && (
-                                        <button
-                                            className={styles.nextDealButton}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                if (phase === 'entering_casino') {
-                                                    dealFirstHand();
-                                                } else {
-                                                    nextDeal();
-                                                }
-                                            }}
-                                            disabled={isInitialDeal}
-                                            style={phase === 'deal_over' && totalScore < targetScore && handsRemaining <= 0 ? { color: '#ff4444', borderColor: '#ff4444' } : {}}
-                                        >
-                                            {phase === 'entering_casino' || (phase === 'playing' && isInitialDeal) ? 'Deal' : (
-                                                handsRemaining <= 0 ? 'Game Over' : 'Deal'
-                                            )}
-                                        </button>
-                                    )}
-                                </>
+                                <div className={styles.dealActions}>
+                                    <button
+                                        id="deal-button"
+                                        className={styles.nextDealButton}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleDealAdvanceAction();
+                                        }}
+                                        disabled={isInitialDeal || cash < ante}
+                                    >
+                                        Deal ${ante}
+                                    </button>
+                                    <button
+                                        id="gift-shop-button"
+                                        className={styles.nextDealButton}
+                                        disabled={isInitialDeal}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            enterGiftShop();
+                                        }}
+                                    >
+                                        Gift Shop
+                                    </button>
+                                </div>
                             ) : (phase === 'gift_shop') ? (
-                                giftShopEnterComplete && !isGiftShopExiting ? (
+                                giftShopEnterComplete && !isGiftShopExiting && !pendingRaiseChoices.length ? (
                                     isSellingMode ? (
                                         <button
                                             className={styles.nextDealButton}
@@ -2550,7 +2329,7 @@ export default function App() {
                                                 startGiftShopExit();
                                             }}
                                         >
-                                            {isLastCasino ? 'Victory' : 'Next Casino'}
+                                            Back to Table
                                         </button>
                                     )
                                 ) : (
@@ -2586,7 +2365,7 @@ export default function App() {
                         probabilities={deckProbabilities}
                         activeCards={activeCards}
                         removalCount={removalCount}
-                        comps={comps}
+                        cash={cash}
                         onClose={() => {
                             playClickDown();
                             setShowDeck(false);
@@ -2601,21 +2380,9 @@ export default function App() {
                 )
             )}
 
-            {/* showHandRankings block removed */}
+            {phase === 'gift_shop' && <RaisePackChoice onOpenHandScores={() => { playClick(); setShowHandScores(true); }} />}
+            {showHandScores && <HandScores upgrades={handUpgrades} onClose={() => { playClickDown(); setShowHandScores(false); }} />}
 
-            {showCasinoListing && (
-                <CasinoListingView
-                    currentDeal={deal}
-                    onClose={() => {
-                        playClickDown();
-                        setShowCasinoListing(false);
-                    }}
-                />
-            )}
-
-            {phase === 'casino_payout' && (
-                <CasinoWinScreen />
-            )}
             {phase === 'gift_shop' && (
                 <GiftShop
                     isExiting={isGiftShopExiting}
@@ -2624,20 +2391,6 @@ export default function App() {
                         TutorialManager.getInstance().signalEvent('gift_shop_animated_in');
                     }}
                     onExitAnimationComplete={finalizeGiftShopExit}
-                    onOpenDeckRemoval={() => {
-                        if (isGiftShopExiting || !giftShopEnterComplete) return;
-                        playClick();
-                        setIsEnhancingCards(false);
-                        setIsRemovingCards(true);
-                        setShowDeck(true);
-                    }}
-                    onOpenEnhanceCards={() => {
-                        if (isGiftShopExiting || !giftShopEnterComplete) return;
-                        playClick();
-                        setIsRemovingCards(false);
-                        setIsEnhancingCards(true);
-                        setShowDeck(true);
-                    }}
                     onRelicPurchased={handleShopRelicPurchased}
                 />
             )}
@@ -2650,7 +2403,6 @@ export default function App() {
             {showRelicStore && (
                 <RelicStore
                     onClose={() => setShowRelicStore(false)}
-                    filterCategory={relicStoreFilter}
                 />
             )}
 
@@ -2686,7 +2438,7 @@ export default function App() {
                     <div
                         ref={shopRelicFlyCardRef}
                         key={shopRelicFlight.key}
-                        className={`${styles.shopRelicFlyCard} ${shopRelicFlight.relicType === 'Angle' ? styles.shopRelicFlyCardAngle : ''}`}
+                        className={`${styles.shopRelicFlyCard} ${shopRelicFlight.relicType === 'right' ? styles.shopRelicFlyCardScore : ''}`}
                         style={{
                             left: shopRelicFlight.start.left,
                             top: shopRelicFlight.start.top,
@@ -2709,7 +2461,7 @@ export default function App() {
                             )}
                         </div>
                         <div
-                            className={`${styles.shopRelicFlyLabel} ${shopRelicFlight.relicType === 'Angle' ? styles.shopRelicFlyLabelAngle : styles.shopRelicFlyLabelCharm}`}
+                            className={`${styles.shopRelicFlyLabel} ${shopRelicFlight.relicType === 'right' ? styles.shopRelicFlyLabelScore : styles.shopRelicFlyLabelControl}`}
                         >
                             {shopRelicFlight.name}
                         </div>
@@ -2760,7 +2512,12 @@ export default function App() {
                 </div>
             )}
 
-            {/* FinalScoreOverlay removed */}
+            {anteIncrease && <div className={styles.anteIncreaseOverlay} role="status" aria-live="polite">
+                <div className={styles.anteIncreasePopup}>
+                    <h2>Ante Increase</h2>
+                    <p>${anteIncrease.previousAnte} → ${anteIncrease.ante}</p>
+                </div>
+            </div>}
 
             <TutorialOverlay />
             

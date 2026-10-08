@@ -17,6 +17,7 @@ import { RelicManager } from '../../logic/relics/manager';
 import { getBlackjackScore } from '../../logic/scoring';
 import { drawCardFromProbabilities } from '../../logic/deck';
 import { SeededRNG } from '../rng';
+import { canPlayHand } from '../economy';
 
 // ─── Helpers ────────────────────────────────────────────
 
@@ -55,8 +56,8 @@ function getDealerDisplayValue(dealer: DealerHand, inventory: readonly RelicInst
     return getBlackjackScore(visibleCards, inventory as RelicInstance[]);
 }
 
-function checkAutoStand(hands: readonly PlayerHand[], drawnCards: readonly (Card | null)[]): boolean {
-    const allUnplayable = hands.every(h => h.isBust || h.isHeld || h.blackjackValue === 21);
+function checkAutoStand(hands: readonly PlayerHand[], drawnCards: readonly (Card | null)[], comps: number): boolean {
+    const allUnplayable = hands.every(h => !canPlayHand(h, comps));
     const hasRemainingCards = drawnCards.some(c => c !== null);
     return allUnplayable && !hasRemainingCards;
 }
@@ -255,7 +256,7 @@ function processDoubleDown(state: GameState, handIndex: number): ActionResult {
     };
 
     // Auto-stand check
-    if (checkAutoStand(updatedHands, state.drawnCards)) {
+    if (checkAutoStand(updatedHands, state.drawnCards, state.comps)) {
         events.push({ type: 'auto_stand_triggered' });
     }
 
@@ -310,7 +311,7 @@ function processSurrender(state: GameState, handIndex: number): ActionResult {
         activeTableActionId: null,
     };
 
-    if (checkAutoStand(updatedHands, state.drawnCards)) {
+    if (checkAutoStand(updatedHands, state.drawnCards, state.comps)) {
         events.push({ type: 'auto_stand_triggered' });
     }
 
@@ -508,10 +509,11 @@ function processHoldPlace(state: GameState, handIndex: number): ActionResult {
     if (!heldCard) return { nextState: state, events: [] };
 
     const hand = state.playerHands[handIndex];
-    if (!hand || hand.isBust || hand.isHeld || hand.blackjackValue === 21) {
+    if (!hand || !canPlayHand(hand, state.comps)) {
         return { nextState: state, events: [] };
     }
 
+    const newComps = state.comps - (hand.isInactive ? 1 : 0);
     const invArr = state.inventory as RelicInstance[];
     const cardToPlace: Card = { ...heldCard, origin: 'draw_pile', animationOffset: 0 };
     const isSpecial = cardToPlace.type === 'chip' || cardToPlace.type === 'mult' || cardToPlace.type === 'score';
@@ -521,10 +523,11 @@ function processHoldPlace(state: GameState, handIndex: number): ActionResult {
 
     const updatedHands = state.playerHands.map((h, idx) => {
         if (idx !== handIndex) return h;
-        return { ...h, cards: newCards, blackjackValue: newVal, isBust };
+        return { ...h, isInactive: false, cards: newCards, blackjackValue: newVal, isBust };
     });
 
     const events: GameEvent[] = [];
+    if (hand.isInactive) events.push({ type: 'side_hand_opened', handIndex, cost: 1, newComps });
     events.push({
         type: 'table_action_resolved',
         relicId,
@@ -541,13 +544,14 @@ function processHoldPlace(state: GameState, handIndex: number): ActionResult {
     const nextState: GameState = {
         ...state,
         playerHands: updatedHands,
+        comps: newComps,
         tableActionHeldCards: { ...state.tableActionHeldCards, [relicId]: null },
         tableActionCharges: finalCharges,
         interactionMode: 'default',
         activeTableActionId: null,
     };
 
-    if (checkAutoStand(updatedHands, state.drawnCards)) {
+    if (checkAutoStand(updatedHands, state.drawnCards, newComps)) {
         events.push({ type: 'auto_stand_triggered' });
     }
 
@@ -624,7 +628,7 @@ function processSwitch(state: GameState, handIndex: number | undefined, cardId: 
         activeTableActionId: null,
     };
 
-    if (checkAutoStand(updatedHands, state.drawnCards)) {
+    if (checkAutoStand(updatedHands, state.drawnCards, state.comps)) {
         events.push({ type: 'auto_stand_triggered' });
     }
 

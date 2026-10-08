@@ -18,7 +18,7 @@ export const EVENT_DEFINITIONS: RouletteEvent[] = [
         id: 'shop_standard',
         type: 'Shop',
         label: 'Shop',
-        description: 'Allows the player to purchase as many charms as they can afford. 5 will be randomly selected',
+        description: 'Allows the player to purchase as many relics as they can afford. 5 will be randomly selected',
         casinoAvailability: [1, 2, 3, 4, 5],
         builderChipCost: 0,
         availableAtBuilder: true
@@ -27,7 +27,7 @@ export const EVENT_DEFINITIONS: RouletteEvent[] = [
         id: 'shop_advanced',
         type: 'Shop',
         label: 'Advanced Shop',
-        description: 'Allows the player to purchase any number of charms they can afford. Five charm options are offered, with an increased chance of rare charms appearing.',
+        description: 'Allows the player to purchase any number of relics they can afford. Five charm options are offered, with an increased chance of rare relics appearing.',
         casinoAvailability: [3, 4, 5],
         builderChipCost: 3,
         availableAtBuilder: true
@@ -45,7 +45,7 @@ export const EVENT_DEFINITIONS: RouletteEvent[] = [
     {
         id: 'blackjack_charm_bonus',
         type: 'Blackjack',
-        label: 'Charm Bonus',
+        label: 'Relic Bonus',
         description: 'Gain 1 charm if you win all 3 hands',
         casinoAvailability: [1, 2, 3, 4, 5],
         builderChipCost: 1,
@@ -75,7 +75,7 @@ export const EVENT_DEFINITIONS: RouletteEvent[] = [
     {
         id: 'blackjack_scaling_charm',
         type: 'Blackjack',
-        label: 'Scaling Charm',
+        label: 'Scaling Relic',
         description: 'Gain +1 charm currency each time you play against this opponent',
         casinoAvailability: [1, 2, 3, 4, 5], // Assuming avail for all if not specified, 0 cost in table
         builderChipCost: 0,
@@ -164,7 +164,7 @@ export const EVENT_DEFINITIONS: RouletteEvent[] = [
     {
         id: 'random_charm_modifier',
         type: 'Random',
-        label: 'Charm modifier',
+        label: 'Relic modifier',
         description: 'Add 2 charm spaces',
         casinoAvailability: [2, 4],
         builderChipCost: 3,

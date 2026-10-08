@@ -1,8 +1,6 @@
 
-import type { Card } from '../../types';
 import type { GamblerDefinition } from './types';
-import { createCard } from '../deck';
-import type { DeckProbabilities } from '../engine/GameState';
+import type { DeckProbabilities } from '../../engine/GameState';
 import { RelicManager } from '../relics/manager'; // We need this to get default properties
 import type { RelicInstance } from '../relics/types';
 
@@ -16,8 +14,6 @@ const getRelicInstance = (id: string, properties: Record<string, any> = {}): Rel
     };
 };
 
-const getRandomItem = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
-
 const BASE_PROBS: DeckProbabilities = {
     suits: { hearts: 25, diamonds: 25, clubs: 25, spades: 25 },
     ranks: { ace: 10, face: 30, upper: 30, lower: 30 },
@@ -29,30 +25,18 @@ export const GAMBLER_DEFINITIONS: GamblerDefinition[] = [
     {
         id: 'newbie',
         name: 'The Newbie',
-        description: 'Fresh off the bus. Starts with Victory, Failure, Pairs, Flush, and Straight angles.',
+        description: 'Fresh off the bus. All five hand types score from the start.',
         unlockCondition: { type: 'always' },
         getInitialProbabilities: () => ({ ...BASE_PROBS }),
-        getInitialRelics: () => [
-            getRelicInstance('victory'),
-            getRelicInstance('failure'),
-            getRelicInstance('pairs'),
-            getRelicInstance('flush'),
-            getRelicInstance('straight')
-        ]
+        getInitialRelics: () => []
     },
     {
         id: 'default',
         name: 'The Tourist',
-        description: 'Just here for a good time. Starts with Victory, Failure, Pairs, Flush, and Straight angles.',
+        description: 'Just here for a good time. All five hand types score from the start.',
         unlockCondition: { type: 'beat_city', cityId: 'atlantic_city' },
         getInitialProbabilities: () => ({ ...BASE_PROBS }),
-        getInitialRelics: () => [
-            getRelicInstance('victory'),
-            getRelicInstance('failure'),
-            getRelicInstance('pairs'),
-            getRelicInstance('flush'),
-            getRelicInstance('straight')
-        ]
+        getInitialRelics: () => []
     },
     {
         id: 'mathematician',
@@ -63,12 +47,7 @@ export const GAMBLER_DEFINITIONS: GamblerDefinition[] = [
             ...BASE_PROBS,
             ranks: { ace: 15, face: 5, upper: 40, lower: 40 } // Reduced face, boosted others
         }),
-        getInitialRelics: () => [
-            getRelicInstance('straight_pair_chips'),
-            getRelicInstance('straight_pair_mult'),
-            getRelicInstance('straight_triple_chips'),
-            getRelicInstance('straight_triple_mult'),
-        ]
+        getInitialRelics: () => [getRelicInstance('ruler'), getRelicInstance('protractor')]
     },
     {
         id: 'wild',
@@ -85,54 +64,17 @@ export const GAMBLER_DEFINITIONS: GamblerDefinition[] = [
                 { type: 'score', value: 5, chance: 0.03 }
             ]
         }),
-        getInitialRelics: () => {
-            const allRelics = RelicManager.getAllRelics();
-            const flushFilter = allRelics
-                .filter(r => r.categories.includes('Angle') && r.categories.includes('Flush'))
-                .map(r => r.id);
-
-            // Pick 3 unique
-            const shuffled = [...flushFilter].sort(() => Math.random() - 0.5);
-            const selected = shuffled.slice(0, 3);
-
-            return selected.map(id => getRelicInstance(id));
-        }
+        getInitialRelics: () => [getRelicInstance('flusher'), getRelicInstance('soap')]
     },
     {
         id: 'maniac',
         name: 'The Maniac',
-        description: 'Driven by high stakes and royalty. Starts with action-oriented charms and high Face Card probability.',
+        description: 'Driven by high stakes and royalty. Starts with relics and high Face Card probability.',
         unlockCondition: { type: 'beat_city', cityId: 'atlantic_city' },
         getInitialProbabilities: () => ({
             ...BASE_PROBS,
             ranks: { ace: 10, face: 50, upper: 20, lower: 20 }
         }),
-        getInitialRelics: () => {
-            const fixed = [
-                getRelicInstance('double_down'),
-                getRelicInstance('royalty'),
-
-                getRelicInstance('victory')
-            ];
-
-            const allRelics = RelicManager.getAllRelics();
-
-            const getRandomAngle = (category: string) => {
-                const pool = allRelics
-                    .filter(r => r.categories.includes('Angle') && r.categories.includes(category))
-                    .map(r => r.id);
-                return getRandomItem(pool);
-            };
-
-            const rankAngle = getRandomAngle('Rank');
-            const flushAngle = getRandomAngle('Flush');
-            const straightAngle = getRandomAngle('Straight');
-
-            if (rankAngle) fixed.push(getRelicInstance(rankAngle));
-            if (flushAngle) fixed.push(getRelicInstance(flushAngle));
-            if (straightAngle) fixed.push(getRelicInstance(straightAngle));
-
-            return fixed;
-        }
+        getInitialRelics: () => [getRelicInstance('double_down'), getRelicInstance('royalty')]
     }
 ];

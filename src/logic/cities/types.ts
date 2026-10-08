@@ -1,6 +1,6 @@
 
 export interface RewardConfig {
-    type: 'Charm' | 'Angle' | 'TableAction';
+    type: 'Relic' | 'RaisePack' | 'Control' | 'Score' | 'Raise' | 'TableAction';
     count: number;
     categories?: string[];
     excludeCategories?: string[];

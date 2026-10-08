@@ -1,3 +1,5 @@
+import { RAISE_PACK_COST } from '../logic/handScoring';
+import { RelicManager } from '../logic/relics/manager';
 /**
  * GameBridge — Zustand store that wraps the pure game engine.
  *
@@ -12,6 +14,7 @@
  */
 
 import { create } from 'zustand';
+import { BASE_ANTE, HANDS_PER_ANTE } from '../engine/economy';
 import type { GameState, GamePhase, ShopItem, RewardSummary, InteractionMode } from '../engine/GameState';
 import type { PlayerAction } from '../engine/PlayerAction';
 import type { GameEvent } from '../engine/GameEvent';
@@ -48,6 +51,8 @@ function isActionEquivalent(a: PlayerAction, b: PlayerAction): boolean {
             return a.drawIndex === b.drawIndex;
         case 'buy_shop_item':
             return a.itemId === b.itemId;
+        case 'choose_raise':
+            return (a as any).raiseId === (b as any).raiseId;
         case 'sell_relic':
             return a.relicId === b.relicId && a.index === b.index;
         case 'enhance_card':
@@ -84,6 +89,7 @@ interface UIState {
     isReshuffling: boolean;
     allWinnersEnlarged: boolean;
     dealerVisible: boolean;
+    anteIncrease: { previousAnte: number; ante: number } | null;
 
     // Dealer messages
     dealerMessage: string | null;
@@ -181,9 +187,16 @@ interface GameBridgeState extends UIState {
     readonly totalScore: number;
     readonly targetScore: number;
     readonly comps: number;
+    readonly cash: number;
+    readonly ante: number;
+    readonly handsUntilAnteIncrease: number;
+    readonly shopDealsAtLastFreeRestock: number;
     readonly dealsTaken: number;
     readonly handsRemaining: number;
     readonly inventory: readonly RelicInstance[];
+    readonly relicSlots: number;
+    readonly pendingRaiseChoices: readonly string[];
+    readonly handUpgrades: import('../logic/handScoring').HandUpgrades;
     readonly tableActionCharges: Readonly<Record<string, number>>;
     readonly tableActionHeldCards: Readonly<Record<string, Card | null>>;
     readonly shopItems: readonly ShopItem[];
@@ -207,6 +220,7 @@ const INITIAL_UI: UIState = {
     isReshuffling: false,
     allWinnersEnlarged: false,
     dealerVisible: false,
+    anteIncrease: null,
     dealerMessage: null,
     dealerMessageExiting: false,
     scoringHandIndex: -1,
@@ -246,9 +260,16 @@ export const useGameBridge = create<GameBridgeState>((set, get) => {
         totalScore: gs.totalScore,
         targetScore: gs.targetScore,
         comps: gs.comps,
+        cash: gs.cash,
+        ante: gs.ante,
+        handsUntilAnteIncrease: gs.handsUntilAnteIncrease,
+        shopDealsAtLastFreeRestock: gs.shopDealsAtLastFreeRestock,
         dealsTaken: gs.dealsTaken,
         handsRemaining: gs.handsRemaining,
         inventory: gs.inventory,
+        relicSlots: gs.relicSlots,
+        pendingRaiseChoices: gs.pendingRaiseChoices,
+        handUpgrades: gs.handUpgrades ?? {},
         tableActionCharges: gs.tableActionCharges,
         tableActionHeldCards: gs.tableActionHeldCards,
         shopItems: gs.shopItems,
@@ -280,6 +301,8 @@ export const useGameBridge = create<GameBridgeState>((set, get) => {
 
         // Flattened game state (init values)
         ...flattenGameState(initialState),
+
+        setSfx: (sfx) => set({ sfx }),
 
         dispatch: async (action) => {
             pendingActionCount++;
@@ -464,6 +487,9 @@ export const useGameBridge = create<GameBridgeState>((set, get) => {
                 return updates;
             }));
 
+            // Event handlers animate card additions; restore authoritative arrays after playback.
+            set({ gameState: nextState, ...flattenGameState(nextState) });
+
             // Check for auto-stand trigger
             if (events.some(e => e.type === 'auto_stand_triggered')) {
                 get().dispatchSync({ type: 'stand' });
@@ -547,7 +573,23 @@ export const useGameBridge = create<GameBridgeState>((set, get) => {
                 // we might want to extract just the gameState sub-property if it exists,
                 // or assume it's the pure GameState.
                 
-                const nextGameState = parsed.gameState || parsed;
+                const rawState = parsed.gameState || parsed;
+                const inventory = rawState.inventory.filter((instance: RelicInstance) => RelicManager.getRelicConfig(instance.id));
+                const nextGameState = {
+                    ...rawState,
+                    inventory,
+                    relicSlots: Math.max(4, inventory.length, rawState.relicSlots ?? 4),
+                    pendingRaiseChoices: rawState.pendingRaiseChoices ?? [],
+                    ante: rawState.ante ?? BASE_ANTE,
+                    handsUntilAnteIncrease: rawState.handsUntilAnteIncrease ?? HANDS_PER_ANTE,
+                    handUpgrades: rawState.handUpgrades ?? {},
+                    // Imported shops use the same stock presentation as new runs.
+                    shopItems: (rawState.shopItems ?? []).map((item: ShopItem) => {
+                        if (item.type === 'Control' || item.type === 'Score') return { ...item, type: 'Relic' };
+                        if (item.type === 'Raise') return { ...item, type: 'RaisePack', cost: RAISE_PACK_COST, nameOverride: 'Raise Pack' };
+                        return item;
+                    }),
+                };
 
                 const isScoring = nextGameState.phase === 'scoring';
                 const isDealerTurn = nextGameState.phase === 'dealer_turn';
@@ -559,6 +601,7 @@ export const useGameBridge = create<GameBridgeState>((set, get) => {
                     ...flattenGameState(nextGameState),
                     // Reset UI flags to sensible defaults for the new state
                     isInitialDeal: false,
+                    anteIncrease: null,
                     isShaking: false,
                     isDealerPlaying: isDealerTurn || isResolving,
                     isCollectingChips: false,

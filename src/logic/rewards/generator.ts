@@ -2,25 +2,33 @@ import type { RewardConfig, ShopPriceOverrides } from '../cities/types';
 import { RelicManager } from '../relics/manager';
 import type { RelicInstance, RelicRarity } from '../relics/types';
 import type { SeededRNG } from '../../engine/rng';
+import { RAISES, getRaise, RAISE_PACK_COST } from '../handScoring';
 
 export interface ShopItem {
     id: string;
-    type: 'Charm' | 'Angle' | 'TableAction';
+    type: 'Relic' | 'RaisePack' | 'Control' | 'Score' | 'Raise' | 'TableAction';
     purchased?: boolean;
     cost: number;
     nameOverride?: string;
 }
 
-const RELIC_COMP_COSTS: Record<RelicRarity, number> = {
-    Common: 4,
-    Uncommon: 7,
-    Rare: 10
+const RELIC_CASH_COSTS: Record<RelicRarity, number> = {
+    Common: 40,
+    Uncommon: 70,
+    Rare: 100
 };
 
-export const getRelicCompCost = (relicId: string): number => {
+export const getRelicCashCost = (relicId: string): number => {
+    const raise = getRaise(relicId);
+    if (raise) return raise.cost;
     const config = RelicManager.getRelicConfig(relicId);
-    if (!config) return RELIC_COMP_COSTS.Uncommon;
-    return RELIC_COMP_COSTS[config.rarity] ?? RELIC_COMP_COSTS.Uncommon;
+    if (!config) return RELIC_CASH_COSTS.Uncommon;
+    return RELIC_CASH_COSTS[config.rarity] ?? RELIC_CASH_COSTS.Uncommon;
+};
+
+export const getRelicSellCashValue = (relicId: string): number => {
+    const rarity = RelicManager.getRelicConfig(relicId)?.rarity ?? 'Common';
+    return { Common: 20, Uncommon: 40, Rare: 60 }[rarity];
 };
 
 export function generateShopItems(
@@ -38,14 +46,26 @@ export function generateShopItems(
 
     for (const config of configList) {
         for (let i = 0; i < config.count; i++) {
-            if (config.type !== 'Charm' && config.type !== 'Angle' && config.type !== 'TableAction') {
+            if (config.type === 'RaisePack') {
+                items.push({ id: `raise_pack_${items.length}`, type: 'RaisePack', cost: RAISE_PACK_COST, nameOverride: 'Raise Pack' });
+                continue;
+            }
+            if (config.type === 'Raise') {
+                const candidates = RAISES.filter(raise => !pickedRelicIds.has(raise.id) && (!config.specificIds?.length || config.specificIds.includes(raise.id)));
+                if (!candidates.length) continue;
+                const pick = candidates[Math.floor(nextRandom() * candidates.length)];
+                items.push({ id: pick.id, type: 'Raise', cost: pick.cost, nameOverride: pick.name });
+                pickedRelicIds.add(pick.id);
+                continue;
+            }
+            if (config.type !== 'Relic' && config.type !== 'Control' && config.type !== 'Score' && config.type !== 'TableAction') {
                 continue;
             }
 
             let candidates = RelicManager.getAllRelics().filter(r => {
                 const matchesType = config.type === 'TableAction'
                     ? !!r.tableAction
-                    : r.categories.includes(config.type);
+                    : config.type === 'Relic' || r.categories.includes(config.type);
 
                 return matchesType && !currentIds.includes(r.id) && !pickedRelicIds.has(r.id);
             });
@@ -62,9 +82,9 @@ export function generateShopItems(
                 candidates = RelicManager.getAllRelics().filter(r => {
                     const matchesType = config.type === 'TableAction'
                         ? !!r.tableAction
-                        : r.categories.includes(config.type);
+                        : config.type === 'Relic' || r.categories.includes(config.type);
 
-                    return matchesType && config.specificIds!.includes(r.id) && !pickedRelicIds.has(r.id);
+                    return matchesType && config.specificIds!.includes(r.id) && !currentIds.includes(r.id) && !pickedRelicIds.has(r.id);
                 });
             }
 
@@ -77,7 +97,7 @@ export function generateShopItems(
             items.push({
                 id: pick.id,
                 type: config.type,
-                cost: getRelicCompCost(pick.id),
+                cost: getRelicCashCost(pick.id),
                 nameOverride: pick.name
             });
             pickedRelicIds.add(pick.id);
@@ -92,4 +112,3 @@ export function generateShopItems(
         return { ...item, cost: Math.max(0, overrideCost) };
     });
 }
-

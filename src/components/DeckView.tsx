@@ -1,3 +1,4 @@
+import { ENHANCE_CASH_COSTS, getRemovalCashCost } from '../engine/economy';
 import React from 'react';
 import type { Card as CardType, Suit, Rank } from '../types';
 import type { DeckProbabilities } from '../engine/GameState';
@@ -12,7 +13,7 @@ interface DeckViewProps {
   onDeductRemovalCost?: () => void;
   onEnhanceCard?: (cardId: string, effect: { type: 'chip' | 'mult' | 'score', value: number }) => void;
   removalCount?: number;
-  comps?: number;
+  cash?: number;
 }
 
 const SUITS_MAP: Record<string, string> = {
@@ -33,7 +34,7 @@ export const DeckView: React.FC<DeckViewProps> = ({
     onDeductRemovalCost, 
     onEnhanceCard, 
     removalCount = 0, 
-    comps = 0 
+    cash = 0
 }) => {
     
     const [selectedEnhancement, setSelectedEnhancement] = React.useState<{ type: 'chip' | 'mult' | 'score', value: number } | null>(null);
@@ -55,14 +56,14 @@ export const DeckView: React.FC<DeckViewProps> = ({
 
     const currentCost = React.useMemo(() => {
         if (mode === 'remove') {
-            return 2 + (removalCount * 2);
+            return getRemovalCashCost(removalCount);
         }
         if (mode === 'enhance' && selectedEnhancement) {
             let level = 0;
             if (selectedEnhancement.type === 'score') level = [-1, -2, -3, -4].indexOf(-selectedEnhancement.value);
             if (selectedEnhancement.type === 'mult') level = [1, 2, 3, 4].indexOf(selectedEnhancement.value);
             if (selectedEnhancement.type === 'chip') level = [5, 10, 20, 50].indexOf(selectedEnhancement.value);
-            return [1, 3, 5, 7][level] || 0;
+            return ENHANCE_CASH_COSTS[level] || 0;
         }
         return 0;
     }, [mode, removalCount, selectedEnhancement]);
@@ -109,7 +110,7 @@ export const DeckView: React.FC<DeckViewProps> = ({
         }
 
         const isDestroying = destroyingIds.has(card.id);
-        const isSelectable = (mode === 'remove') || (mode === 'enhance' && selectedEnhancement && comps >= currentCost);
+        const isSelectable = (mode === 'remove') || (mode === 'enhance' && selectedEnhancement && cash >= currentCost);
 
         return (
             <div 
@@ -157,8 +158,8 @@ export const DeckView: React.FC<DeckViewProps> = ({
                     </span>
                     <div className={styles.titleSide}>
                         {mode !== 'view' && (mode === 'remove' || (mode === 'enhance' && selectedEnhancement)) && (
-                            <div className={styles.costIndicator} style={comps < currentCost ? { color: '#ff4d4d', borderColor: '#ff4d4d' } : {}}>
-                                Cost ₵{currentCost}
+                            <div className={styles.costIndicator} style={cash < currentCost ? { color: '#ff4d4d', borderColor: '#ff4d4d' } : {}}>
+                                Cost ${currentCost}
                             </div>
                         )}
                     </div>

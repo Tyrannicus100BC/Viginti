@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { canPlayHand } from './economy';
 /**
  * Viginti CLI Simulator
  *
@@ -71,7 +72,7 @@ export function renderState(state: GameState): string {
     lines.push('');
     lines.push(`═══════════════════════════════════════════════`);
     lines.push(`  ${cityName}  |  Deal ${state.deal}  |  Phase: ${state.phase}`);
-    lines.push(`  Score: ${state.totalScore ?? 0} / ${state.targetScore ?? 0}  |  Comps: ${state.comps ?? 0}  |  Deals: ${state.dealsTaken ?? 0}/${(state.handsRemaining ?? 0) + (state.dealsTaken ?? 0)}`);
+    lines.push(`  Cash: $${state.cash ?? 0}  |  Comp Tickets: ${state.comps ?? 0}  |  Ante: $${state.ante}  |  Increase: ${state.handsUntilAnteIncrease}  |  Deals: ${state.dealsTaken ?? 0}`);
     // Note: Deck/Discard are calculated from probabilities or currently not tracked as distinct piles in this engine version.
     lines.push(`═══════════════════════════════════════════════`);
 
@@ -163,6 +164,10 @@ export function describeAction(action: PlayerAction, state?: GameState): string 
             }
             return `Buy ${action.itemId}`;
         }
+        case 'choose_raise':
+            return 'Choose raise ' + action.raiseId;
+        case 'buy_relic_slot':
+            return 'Buy relic slot';
         case 'restock_shop':
             return `Restock shop ($${state?.giftShopRestockCost ?? '?'})`;
         case 'sell_relic': {
@@ -170,7 +175,7 @@ export function describeAction(action: PlayerAction, state?: GameState): string 
             return `Sell ${name}`;
         }
         case 'leave_shop':
-            return 'Leave shop → next casino';
+            return 'Leave shop → back to table';
         case 'enhance_card':
             return `Enhance card ${action.cardId} (+${action.enhancement.type})`;
         case 'destroy_card':
@@ -250,7 +255,7 @@ export const greedyStrategy: Strategy = (state, actions) => {
     // Priority order for remaining actions
     const priority = [
         'select_drawn_card', 'draw',
-        'deal', 'buy_shop_item', 'leave_shop', 'enter_gift_shop',
+        'deal', 'choose_raise', 'buy_shop_item', 'leave_shop', 'enter_gift_shop',
         'stand', 'deal', 'complete_deal_early',
     ];
 
@@ -275,7 +280,7 @@ export const greedyStrategy: Strategy = (state, actions) => {
 export function createLLMStrategy(model: string, profile: string): Strategy {
     return async (state, actions) => {
         const systemPrompt = `You are an expert card game player playing "Viginti", a blackjack-inspired rogue-like.
-Your goal is to win by reaching the target score.
+Your goal is to keep playing as long as possible and grow your winnings. Dealing costs the cash ante and starts the center hand. Opening either side hand costs one comp ticket; further placements in that hand are free. Each Win or Viginti earns one ticket. You lose when your settled cash cannot cover the next ante. The ante rises every five completed deals, refreshing shop stock and resetting paid refresh costs; paid refreshes double in price. Keep enough cash for the next ante when shopping.
 Current Play Profile: ${profile}
 
 You MUST follow the play profile strictly.
@@ -286,8 +291,10 @@ Respond ONLY in JSON format: {"reasoning": "...", "actionIndex": 0}`;
             phase: state.phase,
             deal: state.deal,
             totalScore: state.totalScore,
-            targetScore: state.targetScore,
             comps: state.comps,
+            cash: state.cash,
+            ante: state.ante,
+            handsUntilAnteIncrease: state.handsUntilAnteIncrease,
             dealsTaken: state.dealsTaken,
             handsRemaining: state.handsRemaining,
             inventory: state.inventory.map(r => {
@@ -304,7 +311,8 @@ Respond ONLY in JSON format: {"reasoning": "...", "actionIndex": 0}`;
                 value: h.blackjackValue,
                 isBust: h.isBust,
                 isHeld: h.isHeld,
-                canPlace: !h.isBust && !h.isHeld && h.blackjackValue < 21
+                canPlace: canPlayHand(h, state.comps),
+                openingTicketCost: h.isInactive ? 1 : 0
             })),
             dealer: {
                 cards: state.dealer.cards.map(renderCard),
@@ -370,7 +378,11 @@ export interface GameResult {
 export function formatEvent(event: GameEvent): string {
     switch (event.type) {
         case 'deal_started':
-            return `Deal ${event.deal} started (${event.handsRemaining} hands remaining)`;
+            return `Deal ${event.deal} started (ante $${event.ante}, cash $${event.cash})`;
+        case 'ante_increased':
+            return `Ante Increase: $${event.previousAnte} → $${event.ante}`;
+        case 'side_hand_opened':
+            return `Opened Hand ${event.handIndex + 1} for £${event.cost} (${event.newComps} tickets remaining)`;
         case 'cards_dealt':
             return `Dealing initial cards...`;
         case 'card_drawn':
@@ -611,8 +623,10 @@ async function runJsonMode(cityId: string) {
                 phase: state.phase,
                 deal: state.deal,
                 totalScore: state.totalScore,
-                targetScore: state.targetScore,
                 comps: state.comps,
+                cash: state.cash,
+                ante: state.ante,
+                handsUntilAnteIncrease: state.handsUntilAnteIncrease,
                 dealsTaken: state.dealsTaken,
                 handsRemaining: state.handsRemaining,
                 dealer: {
@@ -633,6 +647,8 @@ async function runJsonMode(cityId: string) {
                     id: r.id,
                     name: RELIC_REGISTRY[r.id]?.name ?? r.id,
                 })),
+                pendingRaiseChoices: state.pendingRaiseChoices,
+                relicSlots: state.relicSlots,
                 shopItems: state.phase === 'gift_shop' ? state.shopItems : undefined,
                 deckSize: (state as any).deck?.length ?? 0,
                 discardSize: (state as any).discardPile?.length ?? 0,
@@ -738,7 +754,7 @@ async function main() {
     } else {
         console.log('\nPlaying a single game with random strategy...\n');
         const result = await runGame(randomStrategy, { cityId, logActions: true });
-        console.log(`\n  Result: ${result.won ? 'WIN' : 'LOSS'}  Score: ${result.finalScore}  Casino: ${result.deal}  Actions: ${result.actionCount}\n`);
+        console.log(`\n  Result: ${result.won ? 'WIN' : 'LOSS'}  Score: ${result.finalScore}  Deals: ${result.deal}  Actions: ${result.actionCount}\n`);
     }
 }
 

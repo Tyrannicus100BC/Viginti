@@ -3,8 +3,8 @@ import type { CityDefinition, RewardConfig, ShopPriceOverrides } from './types';
 // Helper to generate standard rewards
 const STANDARD_REWARD_CONFIG: RewardConfig[] = [
     { type: 'TableAction', count: 1 },
-    { type: 'Angle', count: 1 },
-    { type: 'Charm', count: 3 }
+    { type: 'Raise', count: 1 },
+    { type: 'Relic', count: 2 }
 ];
 
 export const CITY_DEFINITIONS: CityDefinition[] = [
@@ -17,7 +17,7 @@ export const CITY_DEFINITIONS: CityDefinition[] = [
         getRewards: (index) => {
             if (index == 0) {// 1st Reward (after Casino 1)
                 return [
-                    { type: 'Charm', count: 3, categories: ['Suite', 'Global', 'Cards'] }
+                    { type: 'Relic', count: 2, categories: ['Suite', 'Global', 'Cards'] }
                 ];
             }
             if (index === 1) { // 2nd Reward (after Casino 2)
@@ -27,7 +27,7 @@ export const CITY_DEFINITIONS: CityDefinition[] = [
             }
             if (index === 2) { // 3rd Reward (after Casino 3)
                 return [
-                    { type: 'Angle', count: 1, specificIds: ['flush_pair_mult'] }
+                    { type: 'Raise', count: 1, specificIds: ['raise_flush_mult'] }
                 ];
             }
             return [];
@@ -40,7 +40,7 @@ export const CITY_DEFINITIONS: CityDefinition[] = [
             }
             if (index === 2) {
                 return {
-                    'flush_pair_mult': 0
+                    'raise_flush_mult': 0
                 };
             }
             return {};
@@ -58,12 +58,12 @@ export const CITY_DEFINITIONS: CityDefinition[] = [
         getRewards: (index) => {
             return [
                 { 
-                    type: 'Charm', 
+                    type: 'Relic',
                     count: 3, 
                     categories: ['New']
                 },
                 {
-                    type: 'Angle',
+                    type: 'Raise',
                     count: 0,
                     excludeCategories: ['Triple']
                 },
@@ -85,8 +85,8 @@ export const CITY_DEFINITIONS: CityDefinition[] = [
         ],
         getRewards: (index) => {
             return [
-                { type: 'Charm', count: 3 },
-                { type: 'Angle', count: 1 },
+                { type: 'Relic', count: 2 },
+                { type: 'Raise', count: 1 },
                 { type: 'TableAction', count: 1 }
             ];
         }

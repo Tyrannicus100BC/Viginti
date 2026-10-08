@@ -244,21 +244,50 @@ describe('GameBridge', () => {
         });
     });
 
+    it('charges cash to deal, then one ticket to open a side hand', () => {
+        startGame(42);
+        dispatch({ type: 'deal' });
+        expect(getBridge().comps).toBe(10);
+        expect(getBridge().cash).toBe(50);
+        expect(getBridge().playerHands[0].isInactive).toBe(true);
+        dispatch({ type: 'draw' });
+        dispatch({ type: 'place_card', handIndex: 0 });
+        expect(getBridge().comps).toBe(9);
+        expect(getBridge().playerHands[0].isInactive).toBe(false);
+        expect(getBridge().playerHands[0].cards).toHaveLength(1);
+        dispatch({ type: 'draw' });
+        dispatch({ type: 'place_card', handIndex: 0 });
+        expect(getBridge().comps).toBe(9);
+        expect(getBridge().playerHands[0].cards).toHaveLength(2);
+        expect(getBridge().comps).toBe(getBridge().gameState.comps);
+    });
+
+    it('loads older debug snapshots with safe defaults for the new ante fields', () => {
+        startGame(42);
+        const snapshot: Record<string, unknown> = { ...getBridge().gameState };
+        delete snapshot.ante;
+        delete snapshot.handsUntilAnteIncrease;
+        expect(getBridge().loadGameState(JSON.stringify(snapshot))).toBe(true);
+        expect(getBridge().ante).toBe(50);
+        expect(getBridge().handsUntilAnteIncrease).toBe(5);
+        expect(getBridge().anteIncrease).toBe(null);
+    });
+
     describe('gift shop flow', () => {
-        it('can enter shop from casino_payout', () => {
+        it('can enter shop from a completed deal', () => {
             startGame(42);
 
-            // Manually set to casino_payout
+            // Set up a completed deal
             const gs = getBridge().gameState;
-            const winState = {
+            const completedDeal = {
                 ...gs,
-                phase: 'casino_payout' as const,
+                phase: 'deal_over' as const,
                 totalScore: 100,
                 targetScore: 20,
                 comps: 10,
             };
             // Use dispatchSync which goes through processAction
-            useGameBridge.setState({ gameState: winState });
+            useGameBridge.setState({ gameState: completedDeal });
             dispatch({ type: 'enter_gift_shop' });
 
             expect(getBridge().phase).toBe('gift_shop');

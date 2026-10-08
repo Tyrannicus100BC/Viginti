@@ -3,6 +3,7 @@
   "version": 3,
   "name": "Viginti",
   "identifier": "local.enmanner.viginti",
+  "liveUpdates": { "adapter": "vite" },
   "application": {
     "command": ["npm", "run", "dev", "--", "--host", "127.0.0.1", "--port", "${self.endpoints.http.port}", "--strictPort"],
     "workingDirectory": ".",

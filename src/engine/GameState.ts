@@ -5,6 +5,7 @@
  */
 import type { Card, PlayerHand, DealerHand, HandScore } from '../types';
 import type { RelicInstance } from '../logic/relics/types';
+import type { HandUpgrades } from '../logic/handScoring';
 
 // ─── Phase ──────────────────────────────────────────────
 
@@ -61,7 +62,7 @@ export interface GameModifiers {
 
 export interface ShopItem {
     readonly id: string;
-    readonly type: 'Charm' | 'Angle' | 'TableAction';
+    readonly type: 'Relic' | 'RaisePack' | 'Control' | 'Score' | 'Raise' | 'TableAction';
     readonly cost: number;
     readonly purchased?: boolean;
     readonly nameOverride?: string;
@@ -106,13 +107,18 @@ export interface GameState {
     // === Tutorial ===
     readonly tutorial: TutorialState;
 
-    // === Casino Progression ===
+    // === Run Economy ===
     readonly deal: number;
     readonly dealsTaken: number;
     readonly handsRemaining: number;
     readonly totalScore: number;
     readonly targetScore: number;
-    readonly comps: number;
+    readonly comps: number; // Tickets used to open side hands
+    readonly cash: number; // Spendable bankroll
+    readonly ante: number;
+    readonly handsUntilAnteIncrease: number;
+    readonly shopDealsAtLastFreeRestock: number;
+    readonly shopReturnPhase: 'entering_casino' | 'deal_over';
 
     // === Table State ===
     readonly phase: GamePhase;
@@ -129,11 +135,15 @@ export interface GameState {
 
     // === Relics & Modifiers ===
     readonly inventory: readonly RelicInstance[];
+    readonly relicSlots: number;
+    readonly pendingRaiseChoices: readonly string[];
+    readonly handUpgrades: HandUpgrades;
     readonly tableActionCharges: Readonly<Record<string, number>>;
     readonly tableActionHeldCards: Readonly<Record<string, Card | null>>;
     readonly modifiers: Readonly<GameModifiers>;
 
     // === Gift Shop ===
+    readonly shopStockInitialized: boolean;
     readonly shopItems: readonly ShopItem[];
     readonly giftShopRestockCost: number;
     readonly shopRewardSummary: RewardSummary | null;

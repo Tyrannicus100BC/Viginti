@@ -344,7 +344,8 @@
     color: #ffd700;
 }
 
-.itemChips.isNegative {
+.itemChips.isNegative,
+.itemMult.isNegative {
     color: #ff4444;
 }
 
@@ -546,3 +547,16 @@
     perspective: 1000px;
     transform-style: preserve-3d;
 }
+
+.inactiveSeat {
+    white-space: nowrap;
+    color: #e5d7bb;
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 2.25rem;
+}
+
+.itemComps { flex: 1; color: #c084fc; text-align: right; font-weight: bold; white-space: nowrap; }
+.itemComps.isViginti { color: #ffd700; }
+
+.scoringItem:not(.hasComps) .itemName { flex: 3; }

@@ -23,9 +23,6 @@ export const useGameStore = <T>(selector?: (state: any) => T): any => {
         return placeCount;
     };
 
-    const getMaxCharms = () => executeValueHook('getMaxCharms', 5, { inventory: gameState.inventory as any, dryRun: true });
-    const getMaxAngles = () => executeValueHook('getMaxAngles', 5, { inventory: gameState.inventory as any, dryRun: true });
-
     // 3. Construct the full legacy state object
     const legacyState = {
         // ... Spread game state directly (engine GameState ~legacy GameState)
@@ -65,6 +62,8 @@ export const useGameStore = <T>(selector?: (state: any) => T): any => {
         // Shop Actions
         enterGiftShop: () => dispatch({ type: 'enter_gift_shop' }),
         buyShopItem: (itemId: string) => dispatch({ type: 'buy_shop_item', itemId }),
+        buyRelicSlot: () => dispatch({ type: 'buy_relic_slot' }),
+        chooseRaise: (raiseId: string) => dispatch({ type: 'choose_raise', raiseId }),
         restockGiftShop: () => dispatch({ type: 'restock_shop' }),
         sellRelic: (relicId: string, index: number) => dispatch({ type: 'sell_relic', relicId, index }), // Legacy might use (instanceId, index) -> new uses (relicId, index) or just index?
         // New Engine 'sell_relic' action expects { relicId, index }. 
@@ -80,14 +79,7 @@ export const useGameStore = <T>(selector?: (state: any) => T): any => {
 
         // Debug
         triggerDebugChips: () => {
-             // If in shop, give comps. Otherwise, give score/win.
-             if (gameState.phase === 'gift_shop') {
-                 dispatch({ type: 'debug_give_cash', amount: 50 });
-             } else {
-                 const targetNeeded = gameState.targetScore - gameState.totalScore;
-                 const amount = Math.max(0, Math.ceil(targetNeeded / 2));
-                 dispatch({ type: 'debug_give_cash', amount: amount || 100 });
-             }
+             dispatch({ type: 'debug_give_cash', amount: 100 });
         },
         debugWin: () => dispatch({ type: 'debug_win' }),
         debugUndo: () => dispatch({ type: 'debug_undo' }),
@@ -100,8 +92,6 @@ export const useGameStore = <T>(selector?: (state: any) => T): any => {
         // Selectors / Helpers
         getProjectedDrawCount,
         getProjectedPlaceCount,
-        getMaxCharms,
-        getMaxAngles,
         
         // Tutorial Bridge
         // App.tsx calls these:

@@ -78,11 +78,11 @@
 
 /* Add spacing between stats using margin instead of gap */
 .stat+.stat {
-    margin-left: 32px;
+    margin-left: 24px;
 }
 
 .headerCentered .stat+.stat {
-    margin-left: 60px;
+    margin-left: clamp(12px, 3vw, 40px);
 }
 
 .statHidden {
@@ -391,7 +391,7 @@
     transform-origin: top left;
 }
 
-.shopRelicFlyCardAngle {
+.shopRelicFlyCardScore {
     justify-content: flex-end;
     flex-direction: row-reverse;
 }
@@ -430,11 +430,11 @@
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 }
 
-.shopRelicFlyLabelCharm {
+.shopRelicFlyLabelControl {
     margin-left: calc(10px * var(--relic-fly-ui-scale, 1));
 }
 
-.shopRelicFlyLabelAngle {
+.shopRelicFlyLabelScore {
     margin-right: calc(10px * var(--relic-fly-ui-scale, 1));
 }
 
@@ -511,44 +511,6 @@
     background: #34495e;
     color: #7f8c8d;
     cursor: not-allowed;
-}
-
-.skipTutorialContainer {
-    position: absolute;
-    bottom: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 100;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    font-size: 0.95rem;
-    color: rgba(236, 240, 241, 0.85);
-    user-select: none;
-}
-
-.skipTutorialContainer input {
-    width: 18px;
-    height: 18px;
-    accent-color: #f1c40f;
-    cursor: pointer;
-}
-
-.skipTutorialContainer input:disabled {
-    accent-color: #34495e;
-    cursor: not-allowed;
-    opacity: 0.6;
-}
-
-.skipTutorialContainer label {
-    cursor: pointer;
-}
-
-.skipTutorialContainer input:disabled + label {
-    cursor: not-allowed;
-    opacity: 0.6;
 }
 
 .skipTutorialInline {
@@ -1393,3 +1355,33 @@
     animation: reshufflePulse 1s ease-in-out infinite;
     background: #2980b9 !important;
 }
+
+.dealActions {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    gap: 12px;
+    width: 100%;
+    height: 100%;
+}
+.dealActions > button { min-width: 0; }
+
+.anteIncreaseOverlay {
+    position: absolute;
+    inset: 0;
+    z-index: 6500;
+    display: grid;
+    place-items: center;
+    background: rgba(5, 12, 18, .65);
+    backdrop-filter: blur(5px);
+}
+.anteIncreasePopup {
+    padding: 32px 56px;
+    border: 1px solid #d4af37;
+    border-radius: 16px;
+    background: #1c2833;
+    color: #f9e6a3;
+    text-align: center;
+    box-shadow: 0 16px 70px #0009;
+}
+.anteIncreasePopup h2 { margin: 0 0 12px; font-size: 32px; }
+.anteIncreasePopup p { margin: 0; font-size: 26px; font-variant-numeric: tabular-nums; }

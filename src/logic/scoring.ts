@@ -3,9 +3,8 @@ import type { Card, HandScore } from '../types';
 import { RelicManager } from './relics/manager';
 import type { RelicInstance } from './relics/types';
 import { getBaseBlackjackScore } from './rules';
-export { POKER_ORDER, SCORING_RULES, findMatches, RANK_VALUES } from './rules';
-import type { ScoringRule } from './rules';
-export type { ScoringRule };
+import { evaluateBaseHands, type HandUpgrades } from './handScoring';
+export { POKER_ORDER, RANK_VALUES } from './rules';
 
 export function getBlackjackScore(cards: Card[], inventory: RelicInstance[] = [], ignoreSpecialEffects: boolean = false): number {
   let score = getBaseBlackjackScore(cards, ignoreSpecialEffects);
@@ -20,12 +19,12 @@ export function getBlackjackScore(cards: Card[], inventory: RelicInstance[] = []
   return score;
 }
 
-export function evaluateHandScore(cards: Card[], isWin: boolean, isDoubled: boolean = false, inventory: RelicInstance[] = [], handsRemaining: number = 0, categoryCounts?: Record<string, number>, outcome?: 'win' | 'loss' | 'push' | null): HandScore {
+export function evaluateHandScore(cards: Card[], isWin: boolean, isDoubled: boolean = false, inventory: RelicInstance[] = [], handsRemaining: number = 0, categoryCounts?: Record<string, number>, outcome?: 'win' | 'loss' | 'bust' | 'push' | null, handUpgrades: HandUpgrades = {}): HandScore {
   const blackjackScore = getBlackjackScore(cards, inventory);
 
   // Initial Empty Score
   const initialScore: HandScore = {
-    criteria: [],
+    criteria: evaluateBaseHands(cards, isWin, blackjackScore, outcome, handUpgrades),
     totalChips: 0,
     totalMultiplier: 0,
     finalScore: 0,
@@ -70,8 +69,9 @@ export function evaluateHandScore(cards: Card[], isWin: boolean, isDoubled: bool
     initialScore.totalChips += specialChips;
     initialScore.totalMultiplier += specialMult;
   }
-
-
+  initialScore.totalChips = initialScore.criteria.reduce((sum, criterion) => sum + criterion.chips, 0);
+  initialScore.totalMultiplier = initialScore.criteria.reduce((sum, criterion) => sum + criterion.multiplier, 0);
+  initialScore.finalScore = Math.floor(initialScore.totalChips * initialScore.totalMultiplier);
   return RelicManager.executeValueHook('onEvaluateHandScore', initialScore, {
     inventory,
     handCards: cards,

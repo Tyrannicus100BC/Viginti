@@ -341,6 +341,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
       } : undefined}
       style={{ 
         transformOrigin,
+        opacity: hand.isInactive ? 0.4 : 1,
         zIndex: hasAnimatingCard ? 100 : undefined // Boost z-index when animating
       }}
       id={id}
@@ -354,18 +355,19 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
           {scoringCriteria.map((item: any, idx: number) => (
             <div
               key={`${item.id}-${idx}`}
-              className={`${styles.scoringItem} ${visibleScoringRowIndices.includes(idx) ? styles.visible : ''}`}
+              className={`${styles.scoringItem} ${item.compTickets ? styles.hasComps : ''} ${visibleScoringRowIndices.includes(idx) ? styles.visible : ''}`}
             >
               <div className={`${styles.itemName} ${item.id === 'viginti' ? styles.isViginti : ''}`}>
                 {item.name}
                 {(scoringRowValues[idx]?.count ?? 0) > 1 && <span className={styles.itemCount}>x{scoringRowValues[idx].count}</span>}
               </div>
+              {(item.compTickets ?? 0) > 0 && <div className={`${styles.itemComps} ${item.id === 'viginti' ? styles.isViginti : ''}`} aria-label={`${item.compTickets} comp ticket earned`}>£{item.compTickets}</div>}
               <div className={`${styles.itemChips} ${item.id === 'viginti' ? styles.isViginti : ''} ${(scoringRowValues[idx]?.chips ?? 0) < 0 ? styles.isNegative : ''}`}>
                 <span className={(scoringRowValues[idx]?.chips !== undefined && visibleScoringRowIndices.length > idx) ? styles.visible : ''}>
                   {(scoringRowValues[idx]?.chips ?? 0) === 0 ? '-' : formatDollarValue(scoringRowValues[idx]?.chips ?? 0)}
                 </span>
               </div>
-              <div className={styles.itemMult}>
+              <div className={styles.itemMult + ((scoringRowValues[idx]?.mult ?? 0) < 0 ? ' ' + styles.isNegative : '')}>
                 <span className={(scoringRowValues[idx]?.mult !== undefined && visibleScoringRowIndices.length > idx) ? styles.visible : ''}>
                   {(scoringRowValues[idx]?.mult ?? 0) === 0 ? '-' : `x${(scoringRowValues[idx]?.mult ?? 0).toFixed(1)}`}
                 </span>
@@ -569,6 +571,11 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
         </div>
 
         <div className={styles.status}>
+          {hand.isInactive && (
+            <div className={styles.scoreContainer}>
+              <div className={`${styles.scoreValue} ${styles.inactiveSeat}`} aria-label="Open hand for one comp ticket">Open £1</div>
+            </div>
+          )}
           {hand.cards.length > 0 && isScoreVisible && displayScore > 0 && (
             <div className={`${styles.scoreContainer} ${hand.id === -1 ? styles.scoreFadeIn : ''}`}>
               <div

@@ -3,260 +3,12 @@ import type { RelicDefinition } from './types';
 import { Hooks } from './hooks';
 
 export const RELIC_DEFINITIONS: RelicDefinition[] = [
-    // Angles
-
-    {
-        id: 'victory',
-        name: 'Victory',
-        rarity: 'Uncommon',
-        categories: ['Angle', 'Win', 'HandType'],
-        description: 'Winning hands earn {win.score}\nExactly 21 earn {viginti.score}',
-        handType: { id: 'viginti', name: 'Victory', chips: 25, mult: 0, order: 0 },
-        extraHandTypes: {
-            'win': { id: 'win', name: 'Win', chips: 10, mult: 0, order: 1 },
-            'viginti': { id: 'viginti', name: 'Viginti', chips: 25, mult: 0, order: 0 }
-        },
-        hooks: Hooks.viginti_relic,
-        icon: '🏛️'
-    },
-    {
-        name: 'Failure',
-        rarity: 'Uncommon',
-        categories: ['Angle', 'Loss', 'HandType'],
-        description: '[Loss] earns <-$10>\n[Bust] earns <-$20>',
-        handType: { id: 'loss', name: 'Failure', chips: -10, mult: 0, order: 1.3 },
-        extraHandTypes: {
-            'loss': { id: 'loss', name: 'Loss', chips: -10, mult: 0, order: 1.3 },
-            'bust': { id: 'bust', name: 'Bust', chips: -20, mult: 0, order: 1.4 }
-        },
-        hooks: Hooks.failure_relic,
-        icon: '💥'
-    },
-    {
-        name: 'Pairs',
-        rarity: 'Uncommon',
-        categories: ['Angle', 'Rank', 'HandType'],
-        description: 'Each [Pair] earns <Cards>',
-        handType: { id: 'pair', name: 'Pairs', chips: 0, mult: 0, order: 1, chipCards: true },
-        extraHandTypes: {
-            'pair': { id: 'pair', name: 'Pair', chips: 0, mult: 0, order: 1, chipCards: true }
-        },
-        hooks: Hooks.standard_pairs_relic,
-        icon: '🎴'
-    },
-    {
-        name: 'Flush',
-        rarity: 'Uncommon',
-        categories: ['Angle', 'Flush', 'HandType'],
-        description: 'Each [Flush] earns <Cards>',
-        handType: { id: 'flush', name: 'Flush', chips: 0, mult: 0, order: 1.1, chipCards: true },
-        extraHandTypes: {
-            'flush': { id: 'flush', name: 'Flush', chips: 0, mult: 0, order: 1.1, chipCards: true }
-        },
-        hooks: Hooks.standard_flush_relic,
-        icon: '🎴'
-    },
-    {
-        name: 'Straight',
-        rarity: 'Uncommon',
-        categories: ['Angle', 'Straight', 'HandType'],
-        description: 'Each [Straight] earns <Cards>',
-        handType: { id: 'straight', name: 'Straight', chips: 0, mult: 0, order: 1.2, chipCards: true },
-        extraHandTypes: {
-            'straight': { id: 'straight', name: 'Straight', chips: 0, mult: 0, order: 1.2, chipCards: true }
-        },
-        hooks: Hooks.standard_straight_relic,
-        icon: '🎴'
-    },
-    // Rank Types
-    {
-        name: 'Rank Pair Chips',
-        rarity: 'Uncommon',
-        categories: ['Angle', 'Rank', 'HandType', 'Chips'],
-        description: 'Highest [Rank Pair] earns {hand.score}',
-        handType: { id: 'rank_pair_chips', name: 'Rank Pair', chips: 40, mult: 1, order: 2, chipCards: true },
-        hooks: Hooks.rank_pair,
-        icon: '/relics/angle_rank_pair_chips.png'
-
-    },
-    {
-        name: 'Rank Pair Mult',
-        rarity: 'Uncommon',
-        categories: ['Angle', 'Rank', 'HandType', 'Mult'],
-        description: 'Highest [Rank Pair] earns {hand.score}',
-        handType: { id: 'rank_pair_mult', name: 'Rank Pair', chips: 0, mult: 2, order: 2.1 },
-        hooks: Hooks.rank_pair,
-        icon: '/relics/angle_rank_pair_mult.png'
-
-    },
-    {
-        name: 'Rank Triple Chips',
-        rarity: 'Uncommon',
-        categories: ['Angle', 'Rank', 'HandType', 'Chips', 'Triple'],
-        description: 'Highest [Rank Triple] earns {hand.score}',
-        handType: { id: 'rank_triple_chips', name: 'Rank Triple', chips: 60, mult: 0, order: 3 },
-        hooks: Hooks.rank_triple,
-        icon: '/relics/angle_rank_triple_chips.png'
-
-    },
-    {
-        name: 'Rank Triple Mult',
-        rarity: 'Uncommon',
-        categories: ['Angle', 'Rank', 'HandType', 'Mult', 'Triple'],
-        description: 'Highest [Rank Triple] earns {hand.score}',
-        handType: { id: 'rank_triple_mult', name: 'Rank Triple', chips: 0, mult: 3, order: 3.1 },
-        hooks: Hooks.rank_triple,
-        icon: '/relics/angle_rank_triple_mult.png'
-
-    },
-    {
-        name: 'Rank Run Chips',
-        rarity: 'Uncommon',
-        categories: ['Angle', 'Rank', 'HandType', 'Chips'],
-        description: 'Longest [Rank Run] earns {hand.score}',
-        handType: { id: 'rank_run_chips', name: 'Rank Run', chips: 0, mult: 0, order: 4, chipCards: true, chipRun: 15 },
-        hooks: Hooks.rank_run,
-        icon: '/relics/angle_rank_run_chips.png'
-
-    },
-    {
-        name: 'Rank Run Mult',
-        rarity: 'Uncommon',
-        categories: ['Angle', 'Rank', 'HandType', 'Mult'],
-        description: 'Longest [Rank Run] earns {hand.score}',
-        handType: { id: 'rank_run_mult', name: 'Rank Run', chips: 0, mult: 0, order: 4.1, multRun: 0.5 },
-        hooks: Hooks.rank_run,
-        icon: '/relics/angle_rank_run_mult.png'
-
-    },
-    // Flush Types
-    {
-        name: 'Flush Pair Chips',
-        rarity: 'Uncommon',
-        categories: ['Angle', 'Flush', 'HandType', 'Chips'],
-        description: 'Highest [Flush Pair] earns {hand.score}',
-        handType: { id: 'flush_pair_chips', name: 'Flush Pair', chips: 40, mult: 0, order: 5, chipCards: true },
-        hooks: Hooks.flush_pair,
-        icon: '/relics/angle_flush_pair_chips.png'
-
-    },
-    {
-        name: 'Flush Pair Mult',
-        rarity: 'Uncommon',
-        categories: ['Angle', 'Flush', 'HandType', 'Mult'],
-        description: 'Highest [Flush Pair] earns {hand.score}',
-        handType: { id: 'flush_pair_mult', name: 'Flush Pair', chips: 0, mult: 2, order: 5.1 },
-        hooks: Hooks.flush_pair,
-        icon: '/relics/angle_flush_pair_mult.png'
-
-    },
-    {
-        name: 'Flush Triple Chips',
-        rarity: 'Uncommon',
-        categories: ['Angle', 'Flush', 'HandType', 'Chips', 'Triple'],
-        description: 'Highest [Flush Triple] earns {hand.score}',
-        handType: { id: 'flush_triple_chips', name: 'Flush Triple', chips: 60, mult: 0, order: 6, chipCards: true },
-        hooks: Hooks.flush_triple,
-        icon: '/relics/angle_flush_triple_chips.png'
-
-    },
-    {
-        name: 'Flush Triple Mult',
-        rarity: 'Uncommon',
-        categories: ['Angle', 'Flush', 'HandType', 'Mult', 'Triple'],
-        description: 'Highest [Flush Triple] earns {hand.score}',
-        handType: { id: 'flush_triple_mult', name: 'Flush Triple', chips: 0, mult: 3, order: 6.1 },
-        hooks: Hooks.flush_triple,
-        icon: '/relics/angle_flush_triple_mult.png'
-
-    },
-    {
-        name: 'Flush Run Chips',
-        rarity: 'Uncommon',
-        categories: ['Angle', 'Flush', 'HandType', 'Chips'],
-        description: 'Longest [Flush Run] earns {hand.score}',
-        handType: { id: 'flush_run_chips', name: 'Flush Run', chips: 0, mult: 0, order: 7, chipCards: true, chipRun: 15 },
-        hooks: Hooks.flush_run,
-        icon: '/relics/angle_flush_run_chips.png'
-
-    },
-    {
-        name: 'Flush Run Mult',
-        rarity: 'Uncommon',
-        categories: ['Angle', 'Flush', 'HandType', 'Mult'],
-        description: 'Longest [Flush Run] earns {hand.score}',
-        handType: { id: 'flush_run_mult', name: 'Flush Run', chips: 0, mult: 0, order: 7.1, multRun: 0.5 },
-        hooks: Hooks.flush_run,
-        icon: '/relics/angle_flush_run_mult.png'
-
-    },
-    // Straight Types
-    {
-        name: 'Straight Pair Chips',
-        rarity: 'Uncommon',
-        categories: ['Angle', 'Straight', 'HandType', 'Chips'],
-        description: 'Highest [Straight Pair] earns {hand.score}',
-        handType: { id: 'straight_pair_chips', name: 'Straight Pair', chips: 40, mult: 0, order: 8, chipCards: true },
-        hooks: Hooks.straight_pair,
-        icon: '/relics/angle_straight_pair_chips.png'
-
-    },
-    {
-        name: 'Straight Pair Mult',
-        rarity: 'Uncommon',
-        categories: ['Angle', 'Straight', 'HandType', 'Mult'],
-        description: 'Highest [Straight Pair] earns {hand.score}',
-        handType: { id: 'straight_pair_mult', name: 'Straight Pair', chips: 0, mult: 2, order: 8.1 },
-        hooks: Hooks.straight_pair,
-        icon: '/relics/angle_straight_pair_mult.png'
-
-    },
-    {
-        name: 'Straight Triple Chips',
-        rarity: 'Uncommon',
-        categories: ['Angle', 'Straight', 'HandType', 'Chips', 'Triple'],
-        description: 'Highest [Straight Triple] earns {hand.score}',
-        handType: { id: 'straight_triple_chips', name: 'Straight Triple', chips: 60, mult: 0, order: 9, chipCards: true },
-        hooks: Hooks.straight_triple,
-        icon: '/relics/angle_straight_triple_chips.png'
-
-    },
-    {
-        name: 'Straight Triple Mult',
-        rarity: 'Uncommon',
-        categories: ['Angle', 'Straight', 'HandType', 'Mult', 'Triple'],
-        description: 'Highest [Straight Triple] earns {hand.score}',
-        handType: { id: 'straight_triple_mult', name: 'Straight Triple', chips: 0, mult: 3, order: 9.1 },
-        hooks: Hooks.straight_triple,
-        icon: '/relics/angle_straight_triple_mult.png'
-
-    },
-    {
-        name: 'Straight Run Chips',
-        rarity: 'Uncommon',
-        categories: ['Angle', 'Straight', 'HandType', 'Chips'],
-        description: 'Longest [Straight Run] earns {hand.score}',
-        handType: { id: 'straight_run_chips', name: 'Straight Run', chips: 0, mult: 0, order: 10, chipCards: true, chipRun: 15 },
-        hooks: Hooks.straight_run,
-        icon: '/relics/angle_straight_run_chips.png'
-
-    },
-    {
-        name: 'Straight Run Mult',
-        rarity: 'Uncommon',
-        categories: ['Angle', 'Straight', 'HandType', 'Mult'],
-        description: 'Longest [Straight Run] earns {hand.score}',
-        handType: { id: 'straight_run_mult', name: 'Straight Run', chips: 0, mult: 0, order: 10.1, multRun: 0.5 },
-        hooks: Hooks.straight_run,
-        icon: '/relics/angle_straight_run_mult.png'
-
-    },
     // Actions
     {
         name: 'Double Down',
         rarity: 'Rare',
-        categories: ['Charm', 'Action'],
-        description: 'Double Down earns {hand.score}',
+        categories: ['Relic', 'Action'],
+        description: 'Draw one card and hold the hand.\nDouble Down earns {hand.score}',
         handType: { id: 'double_down', name: 'Double Down', chips: 0, mult: 1, order: 1.5 },
         tableAction: {
             label: 'DOUBLE\nDOWN',
@@ -272,7 +24,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Surrender',
         rarity: 'Rare',
-        categories: ['Charm', 'Action'],
+        categories: ['Relic', 'Action'],
         description: 'Surrender a hand to discard it',
         tableAction: {
             label: 'SURRENDER',
@@ -287,7 +39,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Discard',
         rarity: 'Rare',
-        categories: ['Charm', 'Action'],
+        categories: ['Relic', 'Action'],
         description: 'Discard a card from any live hand\nCharges on busts and losses. Costs 3 charges.',
         tableAction: {
             label: 'DISCARD',
@@ -302,8 +54,8 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Redraw',
         rarity: 'Rare',
-        categories: ['Charm', 'Action'],
-        description: 'Redraw a card from the draw area\nThree uses per casino',
+        categories: ['Relic', 'Action'],
+        description: 'Redraw a card from the draw area\nThree uses; refills every five deals',
         tableAction: {
             label: 'REDRAW',
             accentColor: '#36a2ff',
@@ -317,8 +69,8 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Hold',
         rarity: 'Rare',
-        categories: ['Charm', 'Action'],
-        description: 'Hold a drawn card for later placement\nOne use per casino',
+        categories: ['Relic', 'Action'],
+        description: 'Hold a drawn card for later placement\nOne use; refills every five deals',
         tableAction: {
             label: 'HOLD',
             accentColor: '#35d49a',
@@ -333,8 +85,8 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Switch',
         rarity: 'Rare',
-        categories: ['Charm', 'Action'],
-        description: 'Swap a player card with the dealer face-up card\nOne use per casino',
+        categories: ['Relic', 'Action'],
+        description: 'Swap a player card with the dealer face-up card\nOne use; refills every five deals',
         tableAction: {
             label: 'SWITCH',
             accentColor: '#ff5d7d',
@@ -346,13 +98,13 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
         icon: '🔀'
     },
 
-    // Charms
+    // Scoring effects
 
     // Flushes
     {
         name: 'Flusher',
         rarity: 'Uncommon',
-        categories: ['Charm', 'Flush', 'New'],
+        categories: ['Relic', 'Flush', 'New'],
         description: 'Having only one [Flush] earns an extra x${bonus_mult}',
         properties: { bonus_mult: 0.5 },
         hooks: Hooks.flusher_bonus,
@@ -361,7 +113,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Soap',
         rarity: 'Common',
-        categories: ['Charm', 'Flush', 'New'],
+        categories: ['Relic', 'Flush', 'New'],
         description: 'Each [Flush] earns an extra $${bonus_chips}',
         properties: { bonus_chips: 10 },
         hooks: Hooks.flusher_chips,
@@ -371,7 +123,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Badge',
         rarity: 'Uncommon',
-        categories: ['Charm', 'Rank', 'New'],
+        categories: ['Relic', 'Rank', 'New'],
         description: 'Having only one [Pair] earns an extra x${bonus_mult}',
         properties: { bonus_mult: 1 },
         hooks: Hooks.rank_mult,
@@ -380,7 +132,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Medal',
         rarity: 'Common',
-        categories: ['Charm', 'Rank', 'New'],
+        categories: ['Relic', 'Rank', 'New'],
         description: 'Each [Pair] earns an extra $${bonus_chips}',
         properties: { bonus_chips: 30 },
         hooks: Hooks.rank_chips,
@@ -390,7 +142,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Ruler',
         rarity: 'Uncommon',
-        categories: ['Charm', 'Straight', 'New'],
+        categories: ['Relic', 'Straight', 'New'],
         description: 'Having only one [Straight] earns an extra x${bonus_mult}',
         properties: { bonus_mult: 0.5 },
         hooks: Hooks.straight_mult,
@@ -400,7 +152,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Protractor',
         rarity: 'Common',
-        categories: ['Charm', 'Straight', 'New'],
+        categories: ['Relic', 'Straight', 'New'],
         description: 'Each [Straight] earns an extra $${bonus_chips}',
         properties: { bonus_chips: 15 },
         hooks: Hooks.straight_chips,
@@ -410,7 +162,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Old Receipt',
         rarity: 'Common',
-        categories: ['Charm', 'Suite', 'Diamonds', 'New'],
+        categories: ['Relic', 'Suite', 'Diamonds', 'New'],
         description: 'Each [Diamond] in winning hands earn $${bonus_chips}',
         properties: { bonus_chips: 5 },
         hooks: Hooks.old_receipt_diamonds,
@@ -419,7 +171,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Lucky Rock',
         rarity: 'Common',
-        categories: ['Charm', 'Suite', 'Hearts', 'New'],
+        categories: ['Relic', 'Suite', 'Hearts', 'New'],
         description: 'Each [Hearts] in winning hands earn $${bonus_chips}',
         properties: { bonus_chips: 5 },
         hooks: Hooks.lucky_rock_hearts,
@@ -428,7 +180,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Burnt Match',
         rarity: 'Common',
-        categories: ['Charm', 'Suite', 'Clubs', 'New'],
+        categories: ['Relic', 'Suite', 'Clubs', 'New'],
         description: 'Each [Club] in winning hands earn $${bonus_chips}',
         properties: { bonus_chips: 5 },
         hooks: Hooks.burnt_match_clubs,
@@ -437,7 +189,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Lost Key',
         rarity: 'Common',
-        categories: ['Charm', 'Suite', 'Spades', 'New'],
+        categories: ['Relic', 'Suite', 'Spades', 'New'],
         description: 'Each [Spade] in winning hands earn $${bonus_chips}',
         properties: { bonus_chips: 5 },
         hooks: Hooks.lost_key_spades,
@@ -447,7 +199,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Star Bead',
         rarity: 'Uncommon',
-        categories: ['Charm', 'Cards'],
+        categories: ['Relic', 'Cards'],
         description: 'Each [9] in winning hands earn x${bonus_mult}',
         properties: { bonus_mult: 1 },
         hooks: Hooks.star_bead_nines,
@@ -456,7 +208,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Heart Button',
         rarity: 'Uncommon',
-        categories: ['Charm', 'Cards'],
+        categories: ['Relic', 'Cards'],
         description: 'Each [10] and [4] in winning hands earn x${bonus_mult}',
         properties: { bonus_mult: 0.5 },
         hooks: Hooks.heart_button_ten_four,
@@ -465,7 +217,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Lucky Acorn',
         rarity: 'Uncommon',
-        categories: ['Charm', 'Cards'],
+        categories: ['Relic', 'Cards'],
         description: 'Each [King] in winning hands earn x${bonus_mult}',
         properties: { bonus_mult: 1},
         hooks: Hooks.lucky_acorn_kings,
@@ -474,7 +226,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Joker',
         rarity: 'Rare',
-        categories: ['Charm', 'Cards', 'New'],
+        categories: ['Relic', 'Cards', 'New'],
         description: '[Jacks] are worth 11, 10, 5, or 1',
         hooks: Hooks.joker_adjust_bj,
         icon: '🃏'
@@ -483,7 +235,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Feather',
         rarity: 'Common',
-        categories: ['charm', 'Hands', 'New'],
+        categories: ['Relic', 'Hands', 'New'],
         description: 'When all hands have the same number of cards, earn $${bonus_chips}',
         properties: { bonus_chips: 100 },
         hooks: Hooks.feather_same_hand_size,
@@ -492,7 +244,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Odd Sock',
         rarity: 'Common',
-        categories: ['Charm', 'Hands', 'New'],
+        categories: ['Relic', 'Hands', 'New'],
         description: 'When all hands have two cards, earn $${bonus_chips}',
         properties: { bonus_chips: 100 },
         hooks: Hooks.odd_sock_two_cards,
@@ -501,7 +253,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'High Roller',
         rarity: 'Common',
-        categories: ['Charm', 'Hands', 'New'],
+        categories: ['Relic', 'Hands', 'New'],
         description: 'Winning all three hands earns $${amount}',
         properties: { amount: 100 },
         hooks: Hooks.high_roller_win_all,
@@ -510,7 +262,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'One Armed',
         rarity: 'Uncommon',
-        categories: ['Charm', 'Hands', 'New'],
+        categories: ['Relic', 'Hands', 'New'],
         description: 'Winning a single hand earns x${factor}',
         properties: { factor: 2 },
         hooks: Hooks.one_armed_win_bonus,
@@ -519,7 +271,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Royalty',
         rarity: 'Common',
-        categories: ['Charm', 'Hands'],
+        categories: ['Relic', 'Hands'],
         description: 'Hands with two [Face] cards earn $${amount}',
         properties: { amount: 25 },
         hooks: Hooks.royalty_face_cards,
@@ -529,7 +281,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Idiot',
         rarity: 'Uncommon',
-        categories: ['Charm', 'Dealer', 'New'],
+        categories: ['Relic', 'Dealer', 'New'],
         description: 'Dealer hits on ${stop_value}',
         properties: { stop_value: 16 },
         hooks: Hooks.idiot_dealer_stop,
@@ -539,7 +291,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Faded Tag',
         rarity: 'Uncommon',
-        categories: ['Charm', 'Global'],
+        categories: ['Relic', 'Global'],
         description: 'Earn an extra x${amount}, but decreases by x${decay_amount} each round',
         properties: { amount: 4, decay_amount: 0.5 },
         hooks: Hooks.faded_tag_bonus,
@@ -548,7 +300,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Mini Shoe',
         rarity: 'Common',
-        categories: ['Charm', 'Global', 'New'],
+        categories: ['Relic', 'Global', 'New'],
         description: 'Earn an extra $${bonus_chips}',
         properties: { bonus_chips: 20 },
         hooks: Hooks.mini_shoe_bonus_chips,
@@ -557,7 +309,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Robe and Slippers Set',
         rarity: 'Uncommon',
-        categories: ['Charm', 'Global'],
+        categories: ['Relic', 'Global'],
         description: 'Earn an extra x${bonus_mult}',
         properties: { bonus_mult: 0.5 },
         hooks: Hooks.robe_slippers_bonus_mult,
@@ -566,8 +318,8 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Key Ring',
         rarity: 'Common',
-        categories: ['Charm', 'Global', 'New'],
-        description: 'On final deal, earn x${bonus_mult}',
+        categories: ['Relic', 'Global', 'New'],
+        description: 'With no tickets left, earn x${bonus_mult}',
         properties: { bonus_mult: 2 },
         hooks: Hooks.key_ring_final_draw,
         icon: '🗝️'
@@ -576,8 +328,8 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Deft',
         rarity: 'Rare',
-        categories: ['Charm', 'Meta', 'New'],
-        description: 'Extra draw per Casino',
+        categories: ['Relic', 'Meta', 'New'],
+        description: 'Gain {extra_draws} comp ticket every five deals',
         properties: { extra_draws: 1 },
         hooks: Hooks.deft_extra_draw,
         icon: '🤹'
@@ -585,7 +337,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Photocopier',
         rarity: 'Rare',
-        categories: ['Charm', 'Meta', 'New'],
+        categories: ['Relic', 'Meta', 'New'],
         description: 'Draw +{extra_draws} card each time you draw',
         properties: { extra_draws: 1 },
         hooks: Hooks.cloning_machine_draw,
@@ -594,7 +346,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Second Chance',
         rarity: 'Rare',
-        categories: ['Charm', 'Meta', 'New'],
+        categories: ['Relic', 'Meta', 'New'],
         description: 'If you Bust, next draw is +{extra_draw} cards and place {extra_place} card',
         properties: { extra_draw: 2, extra_place: 1, pending_bonus: false, active_bonus: false },
         hooks: Hooks.redemption_bust_bonus,
@@ -603,7 +355,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Safety Net',
         rarity: 'Uncommon',
-        categories: ['Charm', 'Meta', 'New'],
+        categories: ['Relic', 'Meta', 'New'],
         description: 'First hand of 20 is discarded and [Wins] earns $${bonus_chips}',
         properties: { bonus_chips: 20, armed: false },
         hooks: Hooks.safety_net_20,
@@ -612,7 +364,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Mulligan',
         rarity: 'Rare',
-        categories: ['Charm', 'Meta', 'New'],
+        categories: ['Relic', 'Meta', 'New'],
         description: 'Once per round, if you Bust, discard the last card',
         properties: { used_this_round: false },
         hooks: Hooks.mulligan_bust,
@@ -621,7 +373,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
     {
         name: 'Spyglass',
         rarity: 'Common',
-        categories: ['Charm', 'Meta'],
+        categories: ['Relic', 'Meta'],
         description: 'The Dealer\'s hidden card is always revealed',
         hooks: Hooks.spyglass_always,
         icon: '🔭'

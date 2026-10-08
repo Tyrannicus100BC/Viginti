@@ -68,9 +68,9 @@ describe('Game Engine', () => {
             expect(state.deckProbabilities.suits.hearts).toBe(25);
         });
 
-        it('sets target score', () => {
+        it('starts a run without a debt target', () => {
             const state = startGame();
-            expect(state.targetScore).toBeGreaterThan(0);
+            expect(state.targetScore).toBe(0);
         });
 
         it('emits phase_changed event', () => {
@@ -250,13 +250,7 @@ describe('Game Engine', () => {
             const { nextState } = processAction(drawn, { type: 'place_card', handIndex: 1 });
             return {
                 ...nextState,
-                inventory: [
-                    { id: 'victory', state: {} },
-                    { id: 'pairs', state: {} },
-                    { id: 'flush', state: {} },
-                    { id: 'straight', state: {} },
-                    { id: 'failure', state: {} }
-                ]
+                inventory: []
             };
         }
 
@@ -300,7 +294,7 @@ describe('Game Engine', () => {
             const { events } = completeRound(state);
 
             const outcomes = events.filter(e => e.type === 'hand_outcome');
-            expect(outcomes).toHaveLength(3); // 3 hands
+            expect(outcomes).toHaveLength(1); // Only the center hand was opened
         });
 
         it('produces scoring events for winning hands', () => {
@@ -353,12 +347,7 @@ describe('Game Engine', () => {
                 ...base,
                 phase: 'scoring',
                 runningSummary: { chips: 0, mult: 1 },
-                inventory: [
-                    { id: 'victory', state: {} },
-                    { id: 'pairs', state: {} },
-                    { id: 'flush', state: {} },
-                    { id: 'failure', state: {} }
-                ],
+                inventory: [],
                 dealer: {
                     cards: [testCard('dealer_10h', '10', 'hearts'), testCard('dealer_9c', '9', 'clubs')],
                     isRevealed: true,

@@ -1,3 +1,4 @@
+import { canAcquireRelic, getRelicSide, getRelicSlotCost } from '../logic/relics/inventory';
 import React, { useEffect, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import Matter from 'matter-js';
@@ -6,17 +7,15 @@ import { RelicManager } from '../logic/relics/manager';
 import { RelicTooltip } from './RelicTooltip';
 import { useLayout } from './ResponsiveLayout';
 import styles from './GiftShop.module.css';
-import { CITY_DEFINITIONS } from '../logic/cities/definitions';
+import type { ShopItem } from '../engine/GameState';
 
 interface GiftShopProps {
-    onOpenDeckRemoval: () => void;
-    onOpenEnhanceCards: () => void;
     isExiting?: boolean;
     onEnterAnimationComplete?: () => void;
     onExitAnimationComplete?: () => void;
     onRelicPurchased?: (payload: {
         relicId: string;
-        relicType: 'Charm' | 'Angle';
+        relicType: 'left' | 'right';
         icon: string | null;
         name: string;
         sourceRect: { left: number; top: number; width: number; height: number };
@@ -27,16 +26,13 @@ const SHELVES_ENTER_TOTAL_MS = 1200;
 const SHOP_EXIT_MS = 300;
 
 export const GiftShop: React.FC<GiftShopProps> = ({
-    onOpenDeckRemoval,
-    onOpenEnhanceCards,
     isExiting = false,
     onEnterAnimationComplete,
     onExitAnimationComplete,
     onRelicPurchased
 }) => {
-    const { inventory, shopItems, buyShopItem, comps, restockGiftShop, giftShopRestockCost, getMaxCharms, getMaxAngles, isSellingMode, toggleSellingMode, selectedCityId, round } = useGameStore();
-    const city = CITY_DEFINITIONS.find(c => c.id === selectedCityId);
-    const disabledButtons = city?.getGiftShopDisabledButtons?.(round - 1) || [];
+    const { inventory, shopItems, buyShopItem, cash, restockGiftShop, giftShopRestockCost, relicSlots, buyRelicSlot, pendingRaiseChoices, isSellingMode, toggleSellingMode } = useGameStore();
+    const disabledButtons: string[] = [];
 
     const [fullSlotErrorItemId, setFullSlotErrorItemId] = React.useState<string | null>(null);
 
@@ -138,8 +134,9 @@ export const GiftShop: React.FC<GiftShopProps> = ({
             return { bodies, constraints };
         };
 
-        const leftSegments = 15;
-        const rightSegments = 12;
+        // Shorten both ropes equally to raise the sign while preserving its tilt.
+        const leftSegments = 10;
+        const rightSegments = 7;
 
         const ropeL = createRopeChain(leftSegments, initialAnchors.left.x, startY);
         const ropeR = createRopeChain(rightSegments, initialAnchors.right.x, startY);
@@ -269,27 +266,35 @@ export const GiftShop: React.FC<GiftShopProps> = ({
         return () => window.clearTimeout(timeoutId);
     }, [isExiting, onExitAnimationComplete]);
 
-    const charms = shopItems.filter(i => i.type === 'Charm');
-    const angles = shopItems.filter(i => i.type === 'Angle');
-    const tableActions = shopItems.filter(i => i.type === 'TableAction');
-    const charmSlots = Array.from({ length: 3 }, (_, i) => charms[i] ?? null);
-    const angleSlot = angles[0] ?? null;
-    const tableActionSlot = tableActions[0] ?? null;
-    const canAffordRestock = comps >= giftShopRestockCost;
-    const hasNoCharms = charms.length === 0;
-    const hasNoAngles = !angleSlot;
-    const hasNoTableActions = !tableActionSlot;
+    const relics = (shopItems as ShopItem[]).filter(i => i.type !== 'Raise' && i.type !== 'RaisePack');
+    const relicSlotsOnShelf = Array.from({ length: 4 }, (_, i) => relics[i] ?? null);
+    const packs = (shopItems as ShopItem[]).filter(i => i.type === 'RaisePack' && !i.purchased);
+    const choosingRaise = pendingRaiseChoices.length > 0;
+    const canAffordRestock = cash >= giftShopRestockCost && !choosingRaise;
+    const slotCost = getRelicSlotCost(relicSlots);
+
+    const renderPack = (item: typeof shopItems[number]) => (
+        <button className={styles.raiseCard}
+            disabled={cash < item.cost || item.purchased || choosingRaise}
+            onClick={() => buyShopItem(item.id)}
+            aria-label={'Buy raise pack for $' + item.cost}>
+            <span className={styles.raisePrice}>{'$' + item.cost}</span>
+            <span className={styles.packIcon} aria-hidden="true">↗</span>
+            <span className={styles.raiseHand}>Raise Pack</span>
+            <span className={styles.raiseKind}>Choose 1 of 3</span>
+        </button>
+    );
 
     const renderItem = (item: typeof shopItems[number]) => {
-        const isSoldRelic = (item.type === 'Charm' || item.type === 'Angle' || item.type === 'TableAction') && !!item.purchased;
+        const isSoldRelic = !!item.purchased;
 
-        const canAfford = comps >= item.cost;
+        const canAfford = cash >= item.cost;
 
         const config = RelicManager.getRelicConfig(item.id);
         if (!config) return null;
 
-        const isAngle = item.type === 'Angle';
-        const isDisabled = !canAfford || isSoldRelic;
+        const isScore = false;
+        const isDisabled = !canAfford || isSoldRelic || choosingRaise;
 
         return (
             <div
@@ -319,39 +324,18 @@ export const GiftShop: React.FC<GiftShopProps> = ({
                             const bottom = Math.max(iconRect.bottom, titleRect.bottom);
                             return new DOMRect(left, top, right - left, bottom - top);
                         })();
-                        const isCharm = config.categories.includes('Charm');
-                        const isAngle = config.categories.includes('Angle');
-
-                        if (isCharm) {
-                            const currentCharms = inventory.filter(inst => {
-                                const cfg = RelicManager.getRelicConfig(inst.id);
-                                return cfg?.categories.includes('Charm');
-                            }).length;
-                            if (currentCharms >= getMaxCharms()) {
-                                setFullSlotErrorItemId(item.id);
-                                setTimeout(() => setFullSlotErrorItemId(null), 1500);
-                                return;
-                            }
-                        }
-
-                        if (isAngle) {
-                            const currentAngles = inventory.filter(inst => {
-                                const cfg = RelicManager.getRelicConfig(inst.id);
-                                return cfg?.categories.includes('Angle');
-                            }).length;
-                            if (currentAngles >= getMaxAngles()) {
-                                setFullSlotErrorItemId(item.id);
-                                setTimeout(() => setFullSlotErrorItemId(null), 1500);
-                                return;
-                            }
+                        if (!canAcquireRelic(item.id, inventory, relicSlots)) {
+                            setFullSlotErrorItemId(item.id);
+                            setTimeout(() => setFullSlotErrorItemId(null), 1500);
+                            return;
                         }
 
                         flushSync(() => {
                             onRelicPurchased?.({
                                 relicId: item.id,
-                                relicType: isAngle ? 'Angle' : 'Charm',
+                                relicType: getRelicSide(inventory.length),
                                 icon: config.icon ?? null,
-                                name: item.nameOverride || config.handType?.name || config.name,
+                                name: item.nameOverride || config.name,
                                 sourceRect: sourceRect
                                     ? { left: sourceRect.left, top: sourceRect.top, width: sourceRect.width, height: sourceRect.height }
                                     : { left: 0, top: 0, width: 0, height: 0 }
@@ -359,12 +343,12 @@ export const GiftShop: React.FC<GiftShopProps> = ({
                         });
                         buyShopItem(item.id);
                     }}
-                    className={`${styles.expandedRelicCard} ${isAngle ? styles.expandedRelicCardAngle : ''} ${isSoldRelic ? styles.expandedRelicCardSold : ''} ${isDisabled ? styles.expandedRelicCardDisabled : ''}`}
+                    className={`${styles.expandedRelicCard} ${isScore ? styles.expandedRelicCardScore : ''} ${isSoldRelic ? styles.expandedRelicCardSold : ''} ${isDisabled ? styles.expandedRelicCardDisabled : ''}`}
                 >
                     <RelicTooltip
                         relic={config}
-                        displayValues={config.properties || {}}
-                        isRightAligned={isAngle}
+                        displayValues={'properties' in config ? config.properties || {} : {}}
+                        isRightAligned={isScore}
                         className={styles.expandedRelicTooltip}
                         style={{
                             background: 'rgba(255, 255, 255, 0.03)',
@@ -378,9 +362,9 @@ export const GiftShop: React.FC<GiftShopProps> = ({
                         }}
                     />
                     <div
-                        className={`${styles.expandedRelicPrice} ${isAngle ? styles.expandedRelicPriceAngle : ''} ${isSoldRelic ? styles.expandedRelicPriceSold : ''} ${!canAfford && !isSoldRelic ? styles.expandedRelicPriceLocked : ''}`}
+                        className={`${styles.expandedRelicPrice} ${isScore ? styles.expandedRelicPriceScore : ''} ${isSoldRelic ? styles.expandedRelicPriceSold : ''} ${!canAfford && !isSoldRelic ? styles.expandedRelicPriceLocked : ''}`}
                     >
-                        {isSoldRelic ? 'SOLD' : `₵${item.cost}`}
+                        {isSoldRelic ? 'SOLD' : `$${item.cost}`}
                     </div>
                 </div>
             </div>
@@ -406,7 +390,7 @@ export const GiftShop: React.FC<GiftShopProps> = ({
     const effectiveExiting = isExiting || isSellingMode;
 
     return (
-        <div className={`${styles.giftShopContainer} ${isExiting ? styles.giftShopContainerExiting : ''}`}>
+        <div hidden={choosingRaise} className={`${styles.giftShopContainer} ${isExiting ? styles.giftShopContainerExiting : ''}`}>
             <svg className={`${styles.ropesLayer} ${effectiveExiting ? styles.ropesLayerExiting : ''}`}>
                 <polyline ref={rope1Ref} fill="none" stroke="#8d6e63" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
                 <polyline ref={rope2Ref} fill="none" stroke="#8d6e63" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
@@ -421,60 +405,37 @@ export const GiftShop: React.FC<GiftShopProps> = ({
                 onAnimationEnd={handleShelvesAnimationEnd}
             >
                 <div className={styles.shelvesContentRow}>
-                    <div className={styles.leftShelf}>
-                        <div className={styles.zoneHeader}>CHARMS</div>
-                        <div id="gift-shop-charms" className={styles.charmsList}>
-                            {charmSlots.map((item, index) => (
-                                <div key={item?.id ?? `empty_charm_${index}`} className={styles.itemSlot}>
-                                    {item ? renderItem(item) : <div className={styles.emptySlot} />}
-                                </div>
-                            ))}
-                            {hasNoCharms && <div className={styles.soldOutStamp}>NO STOCK</div>}
+                    <section className={styles.leftShelf} aria-labelledby="gift-shop-relics-heading">
+                        <h2 id="gift-shop-relics-heading" className={styles.zoneHeader}>RELICS</h2>
+                        <div id="gift-shop-control" className={styles.relicsList}>
+                            {relicSlotsOnShelf.map((item, index) =>
+                                <div key={item?.id ?? 'empty_' + index} className={styles.itemSlot}>
+                                    {item ? renderItem(item) : <div className={styles.emptySlot}>NO STOCK</div>}
+                                </div>)}
                         </div>
-                    </div>
-
-                    <div className={styles.rightShelf}>
-                        <div className={styles.zoneHeader}>ANGLES</div>
-                        <div className={styles.rightShelfRows}>
-                            <div id="gift-shop-angles" className={`${styles.itemSlot} ${styles.rightShelfRow}`}>
-                                {angleSlot ? renderItem(angleSlot) : <div className={styles.emptySlot} />}
-                                {hasNoAngles && <div className={styles.soldOutStamp}>NO STOCK</div>}
-                            </div>
-                            <div className={`${styles.itemSlot} ${styles.rightShelfSpacer}`}>
-                                <div className={styles.emptySlot} />
-                            </div>
-                            <div id="gift-shop-table-actions" className={`${styles.itemSlot} ${styles.rightShelfRow}`}>
-                                <div className={`${styles.zoneHeader} ${styles.tableActionHeader}`}>TABLE ACTION</div>
-                                {tableActionSlot ? renderItem(tableActionSlot) : <div className={styles.emptySlot} />}
-                                {hasNoTableActions && <div className={styles.soldOutStamp}>NO STOCK</div>}
-                            </div>
-                    </div>
+                    </section>
+                    <section className={styles.rightShelf} aria-labelledby="gift-shop-raises-heading">
+                        <h2 id="gift-shop-raises-heading" className={styles.zoneHeader}>RAISE PACKS</h2>
+                        <div id="gift-shop-raises" className={styles.raisesRow}>
+                            {packs.map(item => <div key={item.id} className={styles.raiseSlot}>
+                                {renderPack(item)}
+                            </div>)}
+                        </div>
+                    </section>
                 </div>
-            </div>
                 <div className={styles.bottomActionRow}>
+                    <button id="gift-shop-slot-button"
+                        className={styles.bottomActionButton + ' ' + styles.slotActionButton}
+                        disabled={cash < slotCost || choosingRaise} onClick={buyRelicSlot}>
+                        + SLOT {'$' + slotCost}
+                    </button>
                     <button
                         id="gift-shop-sell-button"
                         className={`${styles.bottomActionButton} ${styles.sellActionButton} ${disabledButtons.includes('sell') ? styles.actionButtonDisabled : ''}`}
                         onClick={() => !disabledButtons.includes('sell') && toggleSellingMode(true)}
-                        disabled={disabledButtons.includes('sell')}
+                        disabled={disabledButtons.includes('sell') || choosingRaise}
                     >
                         SELL
-                    </button>
-                    <button
-                        id="gift-shop-enhance-button"
-                        className={`${styles.bottomActionButton} ${styles.enhanceActionButton} ${disabledButtons.includes('enhance') ? styles.actionButtonDisabled : ''}`}
-                        onClick={() => !disabledButtons.includes('enhance') && onOpenEnhanceCards()}
-                        disabled={disabledButtons.includes('enhance')}
-                    >
-                        ENHANCE
-                    </button>
-                    <button
-                        id="gift-shop-destroy-button"
-                        className={`${styles.bottomActionButton} ${styles.destroyActionButton} ${disabledButtons.includes('destroy') ? styles.actionButtonDisabled : ''}`}
-                        onClick={() => !disabledButtons.includes('destroy') && onOpenDeckRemoval()}
-                        disabled={disabledButtons.includes('destroy')}
-                    >
-                        DESTROY
                     </button>
                     <button
                         id="gift-shop-restock-button"
@@ -482,7 +443,7 @@ export const GiftShop: React.FC<GiftShopProps> = ({
                         onClick={restockGiftShop}
                         disabled={!canAffordRestock || disabledButtons.includes('restock')}
                     >
-                        {disabledButtons.includes('restock') ? 'RESTOCK' : `RESTOCK ₵${giftShopRestockCost}`}
+                        {disabledButtons.includes('restock') ? 'RESTOCK' : `RESTOCK $${giftShopRestockCost}`}
                     </button>
                 </div>
             </div>

@@ -46,6 +46,7 @@ export const shouldPromptStandNow = (state: GameState): boolean => {
     if (isOutcomeTutorialPending(state)) return false;
 
     const allStandReady = hands.every(hand => {
+        if (hand.isInactive || hand.isHeld) return true;
         if (hand.isBust) return true;
         if (hand.blackjackValue === 21) return true;
         return hand.blackjackValue >= 17;
@@ -74,7 +75,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
         type: 'message',
         display: {
             id: 'welcome',
-            text: "Welcome to Viginti\n\nDeal Your First Hand",
+            text: "Welcome to Viginti\n\nPay the Cash Ante to Deal\nWin or Viginti Earns One Comp Ticket",
             completionType: 'click',
             scrim: 'none',
             blockInput: true,
@@ -114,7 +115,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
         type: 'message',
         display: {
             id: 'player_hands',
-            text: "You Have Three Hands to Play\n\nEach is a Chance to Beat the Dealer",
+            text: "Start in the Center Hand\n\nOpen Each Side Hand for One Comp Ticket",
             highlight: { elementId: 'player-hands-zone', type: 'rect', padding: 10 },
             completionType: 'click',
         },
@@ -198,7 +199,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
         type: 'message',
         display: {
             id: 'win_money_first',
-            text: "Winning Hands Earn You Money",
+            text: "Winning Hands Earn Cash\n\nWin or Viginti Also Earns One Comp Ticket",
             completionType: 'click',
             scrim: 'none',
         },
@@ -216,8 +217,8 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
         type: 'message',
         display: {
             id: 'hud_debt',
-            text: "Repay Your Debt to the Casino",
-            highlight: { elementId: 'hud-debt', type: 'rect', padding: 6 },
+            text: "Spend Your Winnings in the Gift Shop",
+            highlight: { elementId: 'hud-cash', type: 'rect', padding: 6 },
             scrim: 'none',
             completionType: 'click',
         },
@@ -230,8 +231,8 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
         type: 'message',
         display: {
             id: 'hud_draws',
-            text: "Your Time is Limited\n\nRepay Your Debt Quickly",
-            highlight: { elementId: 'hud-draws', type: 'rect', padding: 6 },
+            text: "Cash Keeps You Playing\n\nPay the Ante to Deal · It Increases Every Five Hands",
+            highlight: { elementId: 'hud-ante', type: 'rect', padding: 6 },
             scrim: 'none',
             completionType: 'custom',
         },
@@ -248,25 +249,25 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
         type: 'message',
         display: {
             id: 'next_casino_after_first_win',
-            text: "You Repaid Your Debt\n\nLet's Get Out of Here",
-            highlight: { elementId: 'next-casino-button', type: 'rect', padding: 8 },
+            text: "Visit the Gift Shop\n\nCome Back Whenever You Like",
+            highlight: { elementId: 'gift-shop-button', type: 'rect', padding: 8 },
             scrim: 'none',
             completionType: 'custom',
         },
         scope: 'global',
         triggerCondition: (state) => 
             isAtlanticCity(state) &&
-            state.phase === 'deal_over' && 
+            state.phase === 'deal_over' &&
             state.deal === 1 && 
-            state.totalScore >= state.targetScore,
-        completeCondition: (state, events) => events.some(e => e.type === 'casino_cleared'),
+            state.cash >= state.ante,
+        completeCondition: (state, events) => events.some(e => e.type === 'shop_entered' || e.type === 'deal_started'),
     },
     {
         id: 'comp_tickets',
         type: 'message',
         display: {
             id: 'comp_tickets',
-            text: "Play Well for Comp Tickets",
+            text: "Open Side Hands with Comp Tickets\n\nOne Ticket Opens Each Side · Further Cards Are Free",
             highlight: { elementId: 'hud-comps', type: 'rect', padding: 6 },
             scrim: 'dim',
             completionType: 'click',
@@ -274,25 +275,23 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
         scope: 'global',
         triggerCondition: (state, events) => 
             isAtlanticCity(state) &&
-            state.phase === 'casino_payout' && 
-            state.deal === 1 &&
-            events.some(e => e.type === 'payout_complete'), 
+            state.phase === 'deal_over' &&
+            events.some(e => e.type === 'comps_earned'),
     },
     {
         id: 'spend_comps',
         type: 'message',
         display: {
             id: 'spend_comps',
-            text: "Spend Comps for Charms\n\nTilt the Odds in your Favor",
-            highlight: { elementId: 'gift-shop-charms', type: 'rect', padding: 12 },
+            text: "Spend Cash for Upgrades\n\nShop Refreshes When the Ante Increases",
+            highlight: { elementId: 'gift-shop-score', type: 'rect', padding: 12 },
             scrim: 'none',
             completionType: 'click',
         },
         scope: 'global',
         triggerCondition: (state, events) => 
             isAtlanticCity(state) &&
-            state.phase === 'gift_shop' && 
-            state.deal === 1 &&
+            state.phase === 'gift_shop' &&
             events.some(e => e.type === 'shop_entered'),
     },
     {
@@ -306,7 +305,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
         },
         scope: 'global',
         triggerCondition: (state) => 
-            isAtlanticCity(state) && state.phase === 'entering_casino' && state.deal === 2,
+            isAtlanticCity(state) && state.phase === 'playing' && state.deal === 2,
         completeCondition: (state, events) => events.some(e => e.type === 'card_placed'),
     },
     {
@@ -314,11 +313,11 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
         type: 'message',
         display: {
             id: 'gift_shop_table_actions',
-            text: "Table Actions Change the Game\n\nThis one's on the House",
-            highlight: { elementId: 'gift-shop-table-actions', type: 'rect', padding: 12 },
+            text: "Relics Change the Rules\n\nBuy Them with Cash · Unlock More Slots",
+            highlight: { elementId: 'gift-shop-control', type: 'rect', padding: 12 },
             scrim: 'dim',
-            completionType: 'custom',
-            blockInput: true,
+            completionType: 'click',
+            blockInput: false,
             messagePosition: 'left',
         },
         scope: 'global',
@@ -331,15 +330,15 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
         allowedActions: ['buy_shop_item'],
     },
     {
-        id: 'gift_shop_angle_intro',
+        id: 'gift_shop_raise_intro',
         type: 'message',
         display: {
-            id: 'gift_shop_angle_intro',
-            text: "Angles Increase Winnings\n\nThis Earns on Flushes\n\nFirst One's Always Free",
-            highlight: { elementId: 'gift-shop-angles', type: 'rect', padding: 12 },
+            id: 'gift_shop_raise_intro',
+            text: "Buy a Raise Pack\n\nChoose 1 of 3 · Permanent Bonuses and Tradeoffs",
+            highlight: { elementId: 'gift-shop-raises', type: 'rect', padding: 12 },
             scrim: 'dim',
-            completionType: 'custom',
-            blockInput: true,
+            completionType: 'click',
+            blockInput: false,
             messagePosition: 'left',
         },
         scope: 'global',
@@ -356,7 +355,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
         type: 'message',
         display: {
             id: 'lost_all_hands',
-            text: "You Lost Every Hand\n\nYou'll Never Get Out of Debt",
+            text: "You Lost Every Hand\n\nNo Tickets Returned This Deal",
             completionType: 'click',
         },
         scope: 'global',

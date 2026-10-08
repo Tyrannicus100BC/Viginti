@@ -301,7 +301,7 @@ describe('RelicEngine', () => {
     describe('scoring pipeline integration', () => {
         it('stand produces relic events when relics are present', () => {
             // Start a game, deal, play to stand
-            let state = startGame(100);
+            let state = { ...startGame(100), cash: 1000 };
 
             // Deal
             const dealResult = processAction(state, { type: 'deal' });

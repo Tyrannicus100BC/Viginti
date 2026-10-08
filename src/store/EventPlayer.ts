@@ -75,6 +75,10 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
         config.updateUI({
             dealerMessage: null,
             handsRemaining: event.handsRemaining,
+            comps: event.comps,
+            cash: event.cash,
+            ante: event.ante,
+            anteIncrease: null,
             deal: event.deal,
             isInitialDeal: true,
             isDealerPlaying: false,
@@ -93,6 +97,7 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
                 id: i,
                 cards: [],
                 isHeld: false,
+                isInactive: !event.activeHandIds.includes(i),
                 isBust: false,
                 blackjackValue: 0,
             })),
@@ -161,6 +166,14 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
     },
 
     // === Card Placement ===
+
+    async side_hand_opened(event, config) {
+        if (event.type !== 'side_hand_opened') return;
+        config.updateUI({
+            comps: event.newComps,
+            playerHands: (prev: any[]) => prev.map(hand => hand.id === event.handIndex ? { ...hand, isInactive: false } : hand),
+        });
+    },
 
     async card_placed(event, config) {
         if (event.type !== 'card_placed') return;
@@ -511,11 +524,24 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
         config.sfx?.play('totalWinnings');
         config.updateUI({ 
             isCollectingChips: true,
-            totalScore: event.newTotalScore 
+            totalScore: event.newTotalScore,
+            cash: event.newCash,
         });
-        void wait(1000, config).then(() => {
-            config.updateUI({ isCollectingChips: false });
+        await wait(1000, config);
+        config.updateUI({ isCollectingChips: false });
+    },
+
+    async ante_increased(event, config) {
+        if (event.type !== 'ante_increased') return;
+        // Let the final score and cash collection finish before the interstitial.
+        await wait(200, config);
+        config.updateUI({
+            ante: event.ante,
+            handsUntilAnteIncrease: event.handsUntilAnteIncrease,
+            anteIncrease: { previousAnte: event.previousAnte, ante: event.ante },
         });
+        await wait(1600, config);
+        config.updateUI({ anteIncrease: null });
     },
 
     // === Charge Changes ===
@@ -590,8 +616,8 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
 
     async shop_entered(event, config) {
         if (event.type !== 'shop_entered') return;
+        config.updateUI({ shopItems: event.items, shopRewardSummary: event.rewardSummary });
         config.sfx?.play('click');
-        await wait(300, config);
     },
 
     async item_purchased(event, config) {
@@ -600,10 +626,18 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
         await wait(300, config);
     },
 
+    async raise_chosen(_event, config) {
+        config.sfx?.play('click');
+    },
+
+    async relic_slot_purchased(_event, config) {
+        config.sfx?.play('purchase');
+    },
+
     async shop_restocked(event, config) {
         if (event.type !== 'shop_restocked') return;
         config.sfx?.play('restock');
-        await wait(300, config);
+        if (event.cost > 0) await wait(300, config);
     },
 
     async relic_sold(event, config) {
@@ -678,6 +712,7 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
 
     async comps_earned(event, config) {
         if (event.type !== 'comps_earned') return;
+        config.updateUI({ comps: event.newTotal });
         config.sfx?.play('click');
         await wait(200, config);
     },

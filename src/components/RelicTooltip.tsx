@@ -16,6 +16,7 @@ interface RelicTooltipProps {
     direction?: 'ltr' | 'rtl';
     isFlexible?: boolean;
     sellPrice?: number;
+    subtitle?: string;
 }
 
 export const RelicTooltip: React.FC<RelicTooltipProps> = ({ 
@@ -28,7 +29,8 @@ export const RelicTooltip: React.FC<RelicTooltipProps> = ({
     layout = 'vertical',
     direction = 'ltr',
     isFlexible,
-    sellPrice
+    sellPrice,
+    subtitle
 }) => {
     const formatDescription = (text: string, values?: Record<string, any>) => {
         const hand = relic.handType;
@@ -43,26 +45,13 @@ export const RelicTooltip: React.FC<RelicTooltipProps> = ({
                 // But usually hand.mult is used inside {x${hand.mult}}? No, usually {hand.mult} is just the number.
                 // Actually formatHandMult returns string "xN".
                 // If I change formatHandMult behavior, existing usages might look different. I should be careful.
-                // But for the NEW Angle descriptions, we rely on {hand.score}.
+                // But for the relic descriptions, we rely on {hand.score}.
                 
                 score: hand.chips !== undefined && hand.mult !== undefined 
                     ? formatHandScore(hand.chips, hand.mult, hand.chipCards, undefined, true, hand.chipRun, hand.multRun) 
                     : undefined
             } : undefined
         };
-
-        if (relic.extraHandTypes) {
-            Object.entries(relic.extraHandTypes).forEach(([key, ht]) => {
-                context[key] = {
-                    ...ht,
-                    chips: ht.chips !== undefined ? formatHandChips(ht.chips, ht.chipCards, true, ht.chipRun) : undefined,
-                    mult: ht.mult !== undefined ? formatHandMult(ht.mult, ht.multRun, false) : undefined,
-                    score: ht.chips !== undefined && ht.mult !== undefined 
-                        ? formatHandScore(ht.chips, ht.mult, ht.chipCards, undefined, true, ht.chipRun, ht.multRun) 
-                        : undefined
-                };
-            });
-        }
 
         return text.replace(/\$\{([\w.]+)\}|\{([\w.]+)\}/g, (_, key1, key2) => {
             const key = key1 || key2;
@@ -177,7 +166,7 @@ export const RelicTooltip: React.FC<RelicTooltipProps> = ({
                                 right: isRightAligned ? 0 : 'auto',
                             }}
                         >
-                            Sell ₵{sellPrice}
+                            Sell ${sellPrice}
                         </div>
                     )}
                     <div className={styles.title} data-relic-title="true">
@@ -192,7 +181,7 @@ export const RelicTooltip: React.FC<RelicTooltipProps> = ({
                             textAlign: isRightAligned && !isHorizontal ? 'right' : 'left'
                         }}
                     >
-                        {relic.rarity}
+                        {subtitle ?? relic.rarity}
                     </div>
                 </div>
             </div>
@@ -203,6 +192,7 @@ export const RelicTooltip: React.FC<RelicTooltipProps> = ({
             {/* Content: Description */}
             <div className={`${styles.content} ${isHorizontal ? styles.contentHorizontal : ''}`}>
                 <div 
+                    data-relic-description="true"
                     className={styles.description}
                     style={{ 
                         textAlign: isHorizontal ? (isRtl ? 'right' : 'left') : ((isRightAligned) ? 'right' : 'left'),

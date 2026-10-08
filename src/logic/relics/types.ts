@@ -40,14 +40,6 @@ export type Relic = {
         chipRun?: number;
         multRun?: number;
     };
-    extraHandTypes?: Record<string, {
-        id: ScoringCriterionId;
-        name: string;
-        chips: number;
-        mult: number;
-        order: number;
-        chipCards?: boolean;
-    }>;
 }
 
 export type RelicDefinition = {
@@ -68,14 +60,6 @@ export type RelicDefinition = {
         chipRun?: number;
         multRun?: number;
     };
-    extraHandTypes?: Record<string, {
-        id: ScoringCriterionId;
-        name: string;
-        chips: number;
-        mult: number;
-        order: number;
-        chipCards?: boolean;
-    }>;
     // Optional overrides if strict control is needed
     id?: string;
     icon?: string;
@@ -95,14 +79,6 @@ export type RelicConfig = Relic & {
         chipRun?: number;
         multRun?: number;
     };
-    extraHandTypes?: Record<string, {
-        id: ScoringCriterionId;
-        name: string;
-        chips: number;
-        mult: number;
-        order: number;
-        chipCards?: boolean;
-    }>;
 }
 
 
@@ -135,8 +111,6 @@ export type RelicHooks = {
     getDrawCount?: ValueHook<(value: number, context: GameContext, relicState: any, config: RelicConfig) => number>;
     getPlaceCount?: ValueHook<(value: number, context: GameContext, relicState: any, config: RelicConfig) => number>;
     getCardValue?: ValueHook<(value: number, context: CardValueContext, relicState: any, config: RelicConfig) => number>;
-    getMaxCharms?: ValueHook<(value: number, context: GameContext, relicState: any, config: RelicConfig) => number>;
-    getMaxAngles?: ValueHook<(value: number, context: GameContext, relicState: any, config: RelicConfig) => number>;
     adjustBlackjackScore?: ValueHook<(value: number, context: { handCards: Card[] }, relicState: any, config: RelicConfig) => number>;
     onEvaluateHandScore?: ValueHook<(score: HandScore, context: HandContext, relicState: any, config: RelicConfig) => HandScore>;
     
@@ -177,7 +151,7 @@ export type HandContext = GameContext & {
     isDoubled: boolean;
     handsRemaining: number;
     blackjackValue: number;
-    outcome?: 'win' | 'loss' | 'push' | null;
+    outcome?: 'win' | 'loss' | 'bust' | 'push' | null;
     categoryCounts?: Record<string, number>;
 }
 

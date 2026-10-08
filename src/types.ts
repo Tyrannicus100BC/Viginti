@@ -36,15 +36,6 @@ export type ScoringCriterionId =
   | 'double_down_bonus'
   | 'three_kind'
   | 'safety_net'
-  | 'rank_pair_chips' | 'rank_pair_mult'
-  | 'rank_triple_chips' | 'rank_triple_mult'
-  | 'rank_run_chips' | 'rank_run_mult'
-  | 'flush_pair_chips' | 'flush_pair_mult'
-  | 'flush_triple_chips' | 'flush_triple_mult'
-  | 'flush_run_chips' | 'flush_run_mult'
-  | 'straight_pair_chips' | 'straight_pair_mult'
-  | 'straight_triple_chips' | 'straight_triple_mult'
-  | 'straight_run_chips' | 'straight_run_mult'
   | 'special_cards';
 
 export interface ScoringDetail {
@@ -53,6 +44,7 @@ export interface ScoringDetail {
   count: number; // specialized count (e.g. number of pairs)
   chips: number; // Total chips from this criterion
   multiplier: number; // Total multiplier from this criterion
+  compTickets?: number; // Awarded once by this scoring criterion
   cardIds?: string[]; // IDs of cards that contributed to this criterion
   sourceRelicId?: string; // ID of the relic that triggered this, used for UI highlights
   matches?: ScoringMatch[];
@@ -70,11 +62,12 @@ export interface PlayerHand {
   id: number;
   cards: Card[];
   isHeld: boolean;
+  isInactive?: boolean; // This side hand has not been opened with a ticket
   isBust: boolean;
   finalScore?: HandScore | null;
   blackjackValue: number;
   resultRevealed?: boolean;
-  outcome?: 'win' | 'loss' | 'push' | null;
+  outcome?: 'win' | 'loss' | 'bust' | 'push' | null;
   isDoubled?: boolean;
 }
 

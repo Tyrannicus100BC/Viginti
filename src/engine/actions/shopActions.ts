@@ -1,20 +1,20 @@
+import { getRaise, generateRaiseChoices } from '../../logic/handScoring';
 /**
  * Pure shop action processing functions.
  * Handles: enter_gift_shop, buy_shop_item, restock_shop, sell_relic,
  *          leave_shop, enhance_card, destroy_card
  */
 
-import type { Card, PlayerHand } from '../../types';
+import type { Card } from '../../types';
 import type { RelicInstance } from '../../logic/relics/types';
-import type { GameState, ShopItem } from '../GameState';
-import { INITIAL_HAND_COUNT, BASE_DEALS_PER_CASINO } from '../GameState';
+import type { GameState } from '../GameState';
+import { BASE_SHOP_RESTOCK_COST, ENHANCE_CASH_COSTS, getRemovalCashCost } from '../economy';
 import type { GameEvent } from '../GameEvent';
 import type { ActionResult } from '../engine';
 import { RelicManager } from '../../logic/relics/manager';
-import { generateShopItems, getRelicCompCost } from '../../logic/rewards/generator';
-import { CITY_DEFINITIONS } from '../../logic/cities/definitions';
+import { generateShopItems, getRelicCashCost, getRelicSellCashValue } from '../../logic/rewards/generator';
 import { SeededRNG } from '../rng';
-import { executeValueHook } from '../relicEngine';
+import { canAcquireRelic, getRelicSlotCost } from '../../logic/relics/inventory';
 
 // ─── Helpers ────────────────────────────────────────────
 
@@ -56,115 +56,85 @@ function buildTableActionHeldCards(
     return held;
 }
 
-function getMaxCharms(inventory: readonly RelicInstance[]): number {
-    return executeValueHook('getMaxCharms', 5, { inventory, dryRun: true });
-}
-
-function getMaxAngles(inventory: readonly RelicInstance[]): number {
-    return executeValueHook('getMaxAngles', 5, { inventory, dryRun: true });
-}
-
-// ─── Sell Price Table ───────────────────────────────────
-
-const SELL_PRICES: Record<string, number> = {
-    Common: 2,
-    Uncommon: 4,
-    Rare: 6,
-};
-
-function getRelicSellPrice(relicId: string): number {
-    const config = RelicManager.getRelicConfig(relicId);
-    if (!config) return 2;
-    return SELL_PRICES[config.rarity] ?? 2;
-}
-
 // ─── Enter Gift Shop ───────────────────────────────────
 
 export function processEnterGiftShop(state: GameState): ActionResult {
-    if (state.phase !== 'casino_payout') return { nextState: state, events: [] };
-
-    const { inventory, tableActionCharges, handsRemaining, comps, selectedCityId, deal, rngState } = state;
-
-    // Calculate Rewards
-    const dealsBonus = handsRemaining * 2;
-    const hasDoubleDownRelic = inventory.some(r => r.id === 'double_down');
-    const doubleDownBonus = hasDoubleDownRelic ? ((tableActionCharges['double_down'] ?? 0) * 1) : 0;
-    const hasSurrenderRelic = inventory.some(r => r.id === 'surrender');
-    const surrenderBonus = hasSurrenderRelic ? ((tableActionCharges['surrender'] ?? 0) * 1) : 0;
-    const interestedBonus = Math.min(5, Math.floor(comps / 5));
-    const winBonus = 2;
-    const totalBonus = dealsBonus + doubleDownBonus + surrenderBonus + interestedBonus + winBonus;
-
-    // Generate shop items via seeded RNG
-    const city = CITY_DEFINITIONS.find(c => c.id === selectedCityId) || CITY_DEFINITIONS[0];
-    const casinoIndex = deal - 1;
-    const rewardConfig = city.getRewards(casinoIndex);
-    const shopPriceOverrides = city.getShopPriceOverrides?.(casinoIndex);
-
-    const rng = new SeededRNG(rngState);
-    const shopItems = generateShopItems(rewardConfig, inventory as RelicInstance[], shopPriceOverrides, rng);
-
-    const rewardSummary = { dealsBonus, doubleDownBonus, surrenderBonus, interestedBonus, winBonus, total: totalBonus };
-
+    if (state.phase !== 'deal_over' && state.phase !== 'entering_casino') {
+        return { nextState: state, events: [] };
+    }
+    const needsStock = !state.shopStockInitialized;
+    const rng = new SeededRNG(state.rngState);
+    const shopItems = needsStock ? generateRunShopItems(state, rng) : [...state.shopItems];
     const events: GameEvent[] = [];
     events.push({ type: 'phase_changed', from: state.phase, to: 'gift_shop' });
-    events.push({ type: 'shop_entered', items: shopItems, rewardSummary });
-    events.push({ type: 'comps_earned', amount: totalBonus, newTotal: comps + totalBonus, reason: 'casino_rewards' });
-
-    const nextState: GameState = {
-        ...state,
-        phase: 'gift_shop',
-        shopItems,
-        shopRewardSummary: rewardSummary,
-        comps: comps + totalBonus,
-        giftShopRestockCost: 3,
-        removalCount: 0,
-        rngState: rng.getState(),
+    events.push({ type: 'shop_entered', items: shopItems, rewardSummary: null });
+    return {
+        nextState: {
+            ...state,
+            phase: 'gift_shop',
+            shopReturnPhase: state.phase,
+            shopItems,
+            shopStockInitialized: true,
+            shopRewardSummary: null,
+            rngState: needsStock ? rng.getState() : state.rngState,
+        },
+        events,
     };
+}
 
-    return { nextState, events };
+/** Shop stock is independent of the former city/casino reward schedules. */
+export function generateRunShopItems(state: GameState, rng: SeededRNG) {
+    return generateShopItems([
+        { type: 'Relic', count: 4 },
+        { type: 'RaisePack', count: 2 },
+    ], state.inventory as RelicInstance[], undefined, rng);
 }
 
 // ─── Buy Shop Item ──────────────────────────────────────
 
 export function processBuyShopItem(state: GameState, itemId: string): ActionResult {
-    if (state.phase !== 'gift_shop') return { nextState: state, events: [] };
+    if (state.phase !== 'gift_shop' || state.pendingRaiseChoices.length) return { nextState: state, events: [] };
 
-    const { comps, inventory, shopItems } = state;
+    const { cash, inventory, shopItems } = state;
     const item = shopItems.find(i => i.id === itemId);
     if (!item || item.purchased) return { nextState: state, events: [] };
 
-    const fallbackCost = getRelicCompCost(item.id);
+    const fallbackCost = getRelicCashCost(item.id);
     const cost = item.cost ?? fallbackCost;
 
-    if (comps < cost) return { nextState: state, events: [] };
+    if (cash < cost) return { nextState: state, events: [] };
+
+    if (item.type === 'RaisePack') {
+        const rng = new SeededRNG(state.rngState);
+        return {
+            nextState: {
+                ...state, cash: cash - cost,
+                pendingRaiseChoices: generateRaiseChoices(rng).map(raise => raise.id),
+                shopItems: shopItems.map(stock => stock.id === itemId ? { ...stock, purchased: true } : stock),
+                rngState: rng.getState(),
+            },
+            events: [{ type: 'item_purchased', itemId, newCash: cash - cost }],
+        };
+    }
+    const raise = getRaise(item.id);
+    if (raise) {
+        if (item.type !== 'Raise') return { nextState: state, events: [] };
+        return {
+            nextState: {
+                ...state,
+                cash: cash - cost,
+                handUpgrades: { ...state.handUpgrades, [raise.id]: (state.handUpgrades?.[raise.id] ?? 0) + 1 },
+                shopItems: shopItems.map(stock => stock.id === itemId ? { ...stock, purchased: true } : stock),
+            },
+            events: [{ type: 'item_purchased', itemId, newCash: cash - cost }],
+        };
+    }
 
     // Check slots
     const baseRelic = RelicManager.getRelicConfig(item.id);
-    if (!baseRelic) return { nextState: state, events: [] };
+    if (!baseRelic || inventory.some(instance => instance.id === item.id)) return { nextState: state, events: [] };
 
-    const isCharm = baseRelic.categories.includes('Charm');
-    const isAngle = baseRelic.categories.includes('Angle');
-
-    if (isCharm) {
-        const currentCharms = inventory.filter(inst => {
-            const config = RelicManager.getRelicConfig(inst.id);
-            return config?.categories.includes('Charm');
-        }).length;
-        if (currentCharms >= getMaxCharms(inventory)) {
-            return { nextState: state, events: [] };
-        }
-    }
-
-    if (isAngle) {
-        const currentAngles = inventory.filter(inst => {
-            const config = RelicManager.getRelicConfig(inst.id);
-            return config?.categories.includes('Angle');
-        }).length;
-        if (currentAngles >= getMaxAngles(inventory)) {
-            return { nextState: state, events: [] };
-        }
-    }
+    if (!canAcquireRelic(item.id, inventory, state.relicSlots)) return { nextState: state, events: [] };
 
     // Create relic instance
     const newInstance: RelicInstance = {
@@ -173,19 +143,15 @@ export function processBuyShopItem(state: GameState, itemId: string): ActionResu
     };
 
     const newInventory = [...inventory, newInstance];
-    const newComps = comps - cost;
-
-    // Recalculate deals
-    const dealsPerCasino = executeValueHook('getDealsPerCasino', BASE_DEALS_PER_CASINO, { inventory: newInventory });
+    const newCash = cash - cost;
 
     const events: GameEvent[] = [];
-    events.push({ type: 'item_purchased', itemId, relic: newInstance, newComps });
+    events.push({ type: 'item_purchased', itemId, relic: newInstance, newCash });
 
     const nextState: GameState = {
         ...state,
-        comps: newComps,
+        cash: newCash,
         inventory: newInventory,
-        handsRemaining: dealsPerCasino - state.dealsTaken,
         shopItems: shopItems.map(i => i.id === itemId ? { ...i, purchased: true } : i),
         tableActionCharges: buildTableActionCharges(newInventory, state.tableActionCharges),
         tableActionHeldCards: buildTableActionHeldCards(newInventory, state.tableActionHeldCards),
@@ -194,58 +160,74 @@ export function processBuyShopItem(state: GameState, itemId: string): ActionResu
     return { nextState, events };
 }
 
+export function processChooseRaise(state: GameState, raiseId: string): ActionResult {
+    if (state.phase !== 'gift_shop' || !state.pendingRaiseChoices.includes(raiseId) || !getRaise(raiseId)) {
+        return { nextState: state, events: [] };
+    }
+    return {
+        nextState: {
+            ...state,
+            handUpgrades: { ...state.handUpgrades, [raiseId]: (state.handUpgrades[raiseId] ?? 0) + 1 },
+            pendingRaiseChoices: [],
+        },
+        events: [{ type: 'raise_chosen', raiseId }],
+    };
+}
+
+export function processBuyRelicSlot(state: GameState): ActionResult {
+    const cost = getRelicSlotCost(state.relicSlots);
+    if (state.phase !== 'gift_shop' || state.pendingRaiseChoices.length || state.cash < cost) {
+        return { nextState: state, events: [] };
+    }
+    return {
+        nextState: { ...state, cash: state.cash - cost, relicSlots: state.relicSlots + 1 },
+        events: [{ type: 'relic_slot_purchased', slots: state.relicSlots + 1, newCash: state.cash - cost }],
+    };
+}
+
 // ─── Restock Shop ───────────────────────────────────────
 
 export function processRestockShop(state: GameState): ActionResult {
-    if (state.phase !== 'gift_shop') return { nextState: state, events: [] };
-
-    const { comps, giftShopRestockCost, inventory, selectedCityId, deal, rngState } = state;
-    if (comps < giftShopRestockCost) return { nextState: state, events: [] };
-
-    const city = CITY_DEFINITIONS.find(c => c.id === selectedCityId) || CITY_DEFINITIONS[0];
-    const casinoIndex = deal - 1;
-    const rewardConfig = city.getRewards(casinoIndex);
-    const shopPriceOverrides = city.getShopPriceOverrides?.(casinoIndex);
-
-    const rng = new SeededRNG(rngState);
-    const newItems = generateShopItems(rewardConfig, inventory as RelicInstance[], shopPriceOverrides, rng);
-    const newComps = comps - giftShopRestockCost;
-
-    const events: GameEvent[] = [];
-    events.push({ type: 'shop_restocked', newItems, cost: giftShopRestockCost, newComps });
-
-    const nextState: GameState = {
-        ...state,
-        comps: newComps,
-        shopItems: newItems,
-        giftShopRestockCost: giftShopRestockCost + 3,
-        rngState: rng.getState(),
+    if (state.phase !== 'gift_shop' || state.pendingRaiseChoices.length || state.cash < state.giftShopRestockCost) {
+        return { nextState: state, events: [] };
+    }
+    const rng = new SeededRNG(state.rngState);
+    const newItems = generateRunShopItems(state, rng);
+    const cost = state.giftShopRestockCost;
+    const newCash = state.cash - cost;
+    return {
+        nextState: {
+            ...state,
+            cash: newCash,
+            shopItems: newItems,
+            giftShopRestockCost: cost === 0 ? BASE_SHOP_RESTOCK_COST : cost * 2,
+            rngState: rng.getState(),
+        },
+        events: [{ type: 'shop_restocked', newItems, cost, newCash }],
     };
-
-    return { nextState, events };
 }
 
 // ─── Sell Relic ─────────────────────────────────────────
 
 export function processSellRelic(state: GameState, relicId: string, index: number): ActionResult {
-    if (state.phase !== 'gift_shop') return { nextState: state, events: [] };
+    if (state.phase !== 'gift_shop' || state.pendingRaiseChoices.length) return { nextState: state, events: [] };
 
-    const { inventory, comps } = state;
+    const { inventory, cash } = state;
     const instance = inventory[index];
     if (!instance || instance.id !== relicId) return { nextState: state, events: [] };
 
-    const refund = getRelicSellPrice(relicId);
-    const newComps = comps + refund;
+    const refund = getRelicSellCashValue(relicId);
+    const newCash = cash + refund;
     const newInventory = [...inventory];
     newInventory.splice(index, 1);
 
     const events: GameEvent[] = [];
-    events.push({ type: 'relic_sold', relicId, refund, newComps });
+    events.push({ type: 'relic_sold', relicId, refund, newCash });
 
     const nextState: GameState = {
         ...state,
         inventory: newInventory,
-        comps: newComps,
+        cash: newCash,
         tableActionCharges: buildTableActionCharges(newInventory, state.tableActionCharges),
         tableActionHeldCards: buildTableActionHeldCards(newInventory, state.tableActionHeldCards),
     };
@@ -256,79 +238,17 @@ export function processSellRelic(state: GameState, relicId: string, index: numbe
 // ─── Leave Shop ─────────────────────────────────────────
 
 export function processLeaveShop(state: GameState): ActionResult {
-    if (state.phase !== 'gift_shop') return { nextState: state, events: [] };
-
-    const { inventory, deal, totalScore, selectedCityId, rngState, tableActionCharges, tableActionHeldCards } = state;
-
-    // Get city definition
-    const city = CITY_DEFINITIONS.find(c => c.id === selectedCityId) || CITY_DEFINITIONS[0];
-    const nextDealValue = deal + 1;
-
-    // Check victory — if we've cleared all casinos
-    if (deal >= city.casinoTargets.length) {
-        const events: GameEvent[] = [];
-        events.push({ type: 'game_over', won: true, finalScore: totalScore });
-        events.push({ type: 'phase_changed', from: state.phase, to: 'victory' });
-        return {
-            nextState: { ...state, phase: 'victory' },
-            events,
-        };
-    }
-
-    // Calculate next target score
-    const targetIdx = nextDealValue - 1;
-    const cityTarget = city.casinoTargets[targetIdx] !== undefined
-        ? city.casinoTargets[targetIdx]
-        : (city.casinoTargets[city.casinoTargets.length - 1] + (targetIdx - city.casinoTargets.length + 1) * 1000);
-    const newTargetScore = totalScore + cityTarget;
-
-    const emptyHands: PlayerHand[] = Array.from({ length: 3 }, (_, i) => ({
-        id: i,
-        cards: [],
-        isHeld: false,
-        isBust: false,
-        blackjackValue: 0,
-    }));
-
-    const dealsPerCasino = executeValueHook('getDealsPerCasino', BASE_DEALS_PER_CASINO, { inventory });
-
-    const events: GameEvent[] = [];
-    events.push({ type: 'phase_changed', from: state.phase, to: 'entering_casino' });
-    events.push({ type: 'shop_left' });
-    events.push({ type: 'next_casino_setup', deal: nextDealValue, targetScore: newTargetScore });
-
-    const nextState: GameState = {
-        ...state,
-        playerHands: emptyHands,
-        dealer: { cards: [], isRevealed: false, blackjackValue: 0 },
-        phase: 'entering_casino',
-        deal: nextDealValue,
-        targetScore: newTargetScore,
-        totalScore,
-        dealsTaken: 0,
-        handsRemaining: dealsPerCasino,
-        drawnCards: [],
-        selectedDrawIndex: null,
-        cardsPlacedThisTurn: 0,
-        redrawDiscard: null,
-        interactionMode: 'default',
-        activeTableActionId: null,
-        tableActionCharges: buildTableActionCharges(inventory, tableActionCharges, { resetPerCasino: true }),
-        tableActionHeldCards: buildTableActionHeldCards(inventory, {}, { resetPerCasino: true }),
-        runningSummary: null,
-        shopItems: [],
-        giftShopRestockCost: 3,
-        shopRewardSummary: null,
-        modifiers: { drawCountMod: 0, placeCountMod: 0 },
-        rngState: rngState, // No need to shuffle deck, keep RNG state or advance it if needed
-    };
-
-    return { nextState, events };
+    if (state.phase !== 'gift_shop' || state.pendingRaiseChoices.length) return { nextState: state, events: [] };
+    const nextPhase = state.cash >= state.ante ? state.shopReturnPhase : 'game_over';
+    const events: GameEvent[] = [{ type: 'shop_left' }];
+    if (nextPhase === 'game_over') events.push({ type: 'game_over', won: false, finalScore: state.totalScore });
+    events.push({ type: 'phase_changed', from: 'gift_shop', to: nextPhase });
+    return { nextState: { ...state, phase: nextPhase }, events };
 }
 
 // ─── Enhance Card ───────────────────────────────────────
 
-const ENHANCE_COSTS = [1, 3, 5, 7];
+const ENHANCE_COSTS = ENHANCE_CASH_COSTS;
 
 function getEnhanceCost(effect: { type: 'chip' | 'mult' | 'score'; value: number }): number {
     let level = 0;
@@ -343,11 +263,11 @@ export function processEnhanceCard(
     cardId: string, // In the new system, cardId might be a "Group ID" or we shift to a different action
     enhancement: { type: 'chip' | 'mult' | 'score'; value: number }
 ): ActionResult {
-    if (state.phase !== 'gift_shop') return { nextState: state, events: [] };
+    if (state.phase !== 'gift_shop' || state.pendingRaiseChoices.length) return { nextState: state, events: [] };
 
-    const { comps, deckProbabilities } = state;
+    const { cash, deckProbabilities } = state;
     const cost = getEnhanceCost(enhancement);
-    if (comps < cost) return { nextState: state, events: [] };
+    if (cash < cost) return { nextState: state, events: [] };
 
     // Adds or increases a specific special card weight
     const existingWeight = deckProbabilities.specialWeights.find(
@@ -379,7 +299,7 @@ export function processEnhanceCard(
     const nextState: GameState = {
         ...state,
         deckProbabilities: nextProbs,
-        comps: comps - cost,
+        cash: cash - cost,
     };
 
     return { nextState, events };
@@ -388,11 +308,11 @@ export function processEnhanceCard(
 // ─── Destroy Card ───────────────────────────────────────
 
 export function processDestroyCard(state: GameState, cardId: string): ActionResult {
-    if (state.phase !== 'gift_shop') return { nextState: state, events: [] };
+    if (state.phase !== 'gift_shop' || state.pendingRaiseChoices.length) return { nextState: state, events: [] };
 
-    const { comps, deckProbabilities, removalCount } = state;
-    const cost = 2 + (removalCount * 2);
-    if (comps < cost) return { nextState: state, events: [] };
+    const { cash, removalCount } = state;
+    const cost = getRemovalCashCost(removalCount);
+    if (cash < cost) return { nextState: state, events: [] };
 
     // "Destroy" could mean "Shift weight away from a random group"
     // For simplicity, let's just decrease specialChance or something
@@ -408,7 +328,7 @@ export function processDestroyCard(state: GameState, cardId: string): ActionResu
 
     const nextState: GameState = {
         ...state,
-        comps: comps - cost,
+        cash: cash - cost,
         removalCount: removalCount + 1,
     };
 

@@ -22,12 +22,8 @@ export const RelicStore: React.FC<RelicStoreProps> = ({ onClose, filterCategory 
     const groupedRelics = displayRelics.reduce((acc, relic) => {
         let category = 'Uncategorized';
         
-        if (relic.categories[0] === 'Angle' && relic.categories[1]) {
-            category = relic.categories[1];
-        } else {
-            const specificCategories = relic.categories.filter(c => c.toLowerCase() !== 'charm');
-            category = specificCategories.length > 0 ? specificCategories[0] : (relic.categories[0] || 'Uncategorized');
-        }
+        const specificCategories = relic.categories.filter(c => c !== 'Relic');
+        category = specificCategories[0] || 'Relics';
 
         if (!acc[category]) acc[category] = [];
         acc[category].push(relic);
@@ -80,7 +76,7 @@ export const RelicStore: React.FC<RelicStoreProps> = ({ onClose, filterCategory 
                 >
                     <div style={{ padding: '24px 24px 10px 24px' }}>
                         <h2 style={{ marginTop: 0, marginBottom: 10, color: '#ffd700', textTransform: 'uppercase', fontSize: '1.5rem' }}>
-                            {filterCategory === 'Angle' ? 'Angles Manage (Debug)' : 'Charms Manage (Debug)'}
+                            Relics (Debug)
                         </h2>
                     </div>
                     
@@ -113,7 +109,7 @@ export const RelicStore: React.FC<RelicStoreProps> = ({ onClose, filterCategory 
                                 }}>
                                     {groupedRelics[category].map(relic => {
                                         const isOwned = inventory.some(i => i.id === relic.id);
-                                        const isAngle = relic.categories.includes('Angle');
+                                        const isScore = false;
                                         return (
                                             <div 
                                                 key={relic.id}
@@ -129,13 +125,13 @@ export const RelicStore: React.FC<RelicStoreProps> = ({ onClose, filterCategory 
                                                     transform: isOwned ? 'scale(0.95)' : 'scale(1)',
                                                     width: '100%',
                                                     display: 'flex',
-                                                    justifyContent: isAngle ? 'flex-end' : 'center'
+                                                    justifyContent: isScore ? 'flex-end' : 'center'
                                                 }}
                                             >
                                                 <RelicTooltip 
                                                     relic={relic} 
                                                     displayValues={relic.properties}
-                                                    isRightAligned={isAngle}
+                                                    isRightAligned={isScore}
                                                     style={{
                                                         background: 'rgba(255, 255, 255, 0.03)',
                                                         border: isOwned ? '2px solid #27ae60' : '2px solid #444',

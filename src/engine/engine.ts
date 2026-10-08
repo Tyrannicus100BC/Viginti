@@ -1,3 +1,5 @@
+import { canAcquireRelic, INITIAL_RELIC_SLOTS, getRelicSlotCost } from '../logic/relics/inventory';
+import { getRaise } from '../logic/handScoring';
 /**
  * Game Engine — the main entry point for processing player actions.
  * 
@@ -19,7 +21,7 @@ import { GAMBLER_DEFINITIONS } from '../logic/gamblers/definitions';
 import { CITY_DEFINITIONS } from '../logic/cities/definitions';
 // RelicManager access is now via relicEngine.ts
 import { drawCardFromProbabilities } from '../logic/deck';
-import { generateShopItems } from '../logic/rewards/generator';
+import { STARTING_COMP_TICKETS, STARTING_CASH, BASE_ANTE, ANTE_INCREASE_AMOUNT, HANDS_PER_ANTE, BASE_SHOP_RESTOCK_COST, getRemovalCashCost, canPlayHand } from './economy';
 import { getBlackjackScore, evaluateHandScore } from '../logic/scoring';
 import {
     executeValueHook,
@@ -39,8 +41,11 @@ import {
     processSelectTableActionDrawCard,
 } from './actions/tableActions';
 import {
+    generateRunShopItems,
     processEnterGiftShop,
     processBuyShopItem,
+    processChooseRaise,
+    processBuyRelicSlot,
     processRestockShop,
     processSellRelic,
     processLeaveShop,
@@ -130,6 +135,10 @@ function processCoreAction(state: GameState, action: PlayerAction): ActionResult
         // Shop actions
         case 'enter_gift_shop':
             return processEnterGiftShop(state);
+        case 'choose_raise':
+            return processChooseRaise(state, action.raiseId);
+        case 'buy_relic_slot':
+            return processBuyRelicSlot(state);
         case 'buy_shop_item':
             return processBuyShopItem(state, action.itemId);
         case 'restock_shop':
@@ -186,22 +195,21 @@ export function getValidActions(state: GameState): PlayerAction[] {
             break;
 
         case 'entering_casino':
-            if (state.totalScore >= state.targetScore) {
-                actions.push({ type: 'leave_casino' });
-            } else {
+            if (state.cash >= state.ante) {
                 actions.push({ type: 'deal' });
+                actions.push({ type: 'enter_gift_shop' });
             }
             break;
 
         case 'playing': {
             const hasDrawn = state.drawnCards.some(c => c !== null);
             const anyPlayable = state.playerHands.some(
-                h => !h.isBust && !h.isHeld && h.blackjackValue !== 21
+                h => canPlayHand(h, state.comps)
             );
 
             if (!hasDrawn) {
                 // Can draw
-                actions.push({ type: 'draw' });
+                if (anyPlayable) actions.push({ type: 'draw' });
                 // Can stand
                 actions.push({ type: 'stand' });
             } else {
@@ -218,7 +226,7 @@ export function getValidActions(state: GameState): PlayerAction[] {
                 // Can place into any non-bust, non-held hand
                 if (state.selectedDrawIndex !== null && anyPlayable) {
                     for (const hand of state.playerHands) {
-                        if (!hand.isBust && !hand.isHeld && hand.blackjackValue !== 21) {
+                        if (canPlayHand(hand, state.comps)) {
                             actions.push({ type: 'place_card', handIndex: hand.id });
                         }
                     }
@@ -233,7 +241,7 @@ export function getValidActions(state: GameState): PlayerAction[] {
                 if (state.interactionMode === 'select_hand') {
                     // Hand targeting: double_down, surrender, hold (place)
                     for (const hand of state.playerHands) {
-                        if (!hand.isBust && !hand.isHeld && hand.blackjackValue !== 21 && hand.cards.length > 0) {
+                        if (canPlayHand(hand, state.comps) && (hand.cards.length > 0 || state.activeTableActionId === 'hold')) {
                             actions.push({ type: 'select_table_action_target', handIndex: hand.id });
                         }
                     }
@@ -309,35 +317,32 @@ export function getValidActions(state: GameState): PlayerAction[] {
         }
 
         case 'deal_over':
-            if (state.totalScore >= state.targetScore) {
-                actions.push({ type: 'leave_casino' });
-            } else {
+            if (state.cash >= state.ante) {
                 actions.push({ type: 'deal' });
+                actions.push({ type: 'enter_gift_shop' });
             }
             break;
 
-        case 'casino_payout':
-            actions.push({ type: 'enter_gift_shop' });
-            break;
-
         case 'gift_shop': {
+            if (state.pendingRaiseChoices.length) {
+                state.pendingRaiseChoices.forEach(raiseId => actions.push({ type: 'choose_raise', raiseId }));
+                break;
+            }
+            if (state.cash >= getRelicSlotCost(state.relicSlots)) actions.push({ type: 'buy_relic_slot' });
             // Can always leave
             actions.push({ type: 'leave_shop' });
 
-            // Get city config for disabled buttons
-            const city = CITY_DEFINITIONS.find(c => c.id === state.selectedCityId) || CITY_DEFINITIONS[0];
-            const casinoIdx = state.deal - 1;
-            const disabledButtons = city.getGiftShopDisabledButtons?.(casinoIdx) ?? [];
+            const disabledButtons: string[] = [];
 
             // Buyable items
             for (const item of state.shopItems) {
-                if (!item.purchased && state.comps >= item.cost && canAddShopItem(state, item.id)) {
+                if (!item.purchased && state.cash >= item.cost && canAddShopItem(state, item.id)) {
                     actions.push({ type: 'buy_shop_item', itemId: item.id });
                 }
             }
 
             // Restock
-            if (!disabledButtons.includes('restock') && state.comps >= state.giftShopRestockCost) {
+            if (!disabledButtons.includes('restock') && state.cash >= state.giftShopRestockCost) {
                 actions.push({ type: 'restock_shop' });
             }
 
@@ -361,8 +366,8 @@ export function getValidActions(state: GameState): PlayerAction[] {
 
             // Destroy cards
             if (!disabledButtons.includes('destroy')) {
-                const destroyCost = 2 + (state.removalCount * 2);
-                if (state.comps >= destroyCost) {
+                const destroyCost = getRemovalCashCost(state.removalCount);
+                if (state.cash >= destroyCost) {
                     const deck = (state as any).deck || [];
                     for (const card of deck) {
                         actions.push({ type: 'destroy_card', cardId: card.id });
@@ -413,6 +418,7 @@ export function getValidActions(state: GameState): PlayerAction[] {
 
 export function createInitialState(): GameState {
     return {
+        tutorial: initialTutorialState(),
         selectedCityId: null,
         selectedGamblerId: null,
         deal: 1,
@@ -420,7 +426,12 @@ export function createInitialState(): GameState {
         handsRemaining: BASE_DEALS_PER_CASINO,
         totalScore: 0,
         targetScore: 0,
-        comps: 5,
+        comps: STARTING_COMP_TICKETS,
+        cash: STARTING_CASH,
+        ante: BASE_ANTE,
+        handsUntilAnteIncrease: HANDS_PER_ANTE,
+        shopDealsAtLastFreeRestock: 0,
+        shopReturnPhase: 'entering_casino',
         phase: 'init',
         dealer: { cards: [], isRevealed: false, blackjackValue: 0 },
         playerHands: [],
@@ -430,6 +441,9 @@ export function createInitialState(): GameState {
         interactionMode: 'default',
         activeTableActionId: null,
         inventory: [],
+        relicSlots: INITIAL_RELIC_SLOTS,
+        pendingRaiseChoices: [],
+        handUpgrades: {},
         tableActionCharges: {},
         tableActionHeldCards: {},
         deckProbabilities: {
@@ -439,8 +453,9 @@ export function createInitialState(): GameState {
             specialWeights: []
         },
         modifiers: { drawCountMod: 0, placeCountMod: 0 },
+        shopStockInitialized: false,
         shopItems: [],
-        giftShopRestockCost: 3,
+        giftShopRestockCost: BASE_SHOP_RESTOCK_COST,
         shopRewardSummary: null,
         runningSummary: null,
         rngState: SeededRNG.random().getState(),
@@ -463,15 +478,13 @@ function processStartGame(
     const events: GameEvent[] = [];
 
     // Find city and gambler definitions
-    const city = CITY_DEFINITIONS.find(c => c.id === cityId) || CITY_DEFINITIONS[0];
     const gambler = GAMBLER_DEFINITIONS.find(g => g.id === gamblerId) || GAMBLER_DEFINITIONS[0];
 
     // Create initial deck probabilities from gambler
     const deckProbabilities = gambler.getInitialProbabilities();
     const inventory = gambler.getInitialRelics();
 
-    // Calculate target score for round 1
-    const targetScore = city.casinoTargets[0] ?? 100;
+    const targetScore = 0; // Legacy field; cash targets no longer govern the run.
 
     // Build table action charges for initial relics
     const tableActionCharges: Record<string, number> = {};
@@ -483,12 +496,6 @@ function processStartGame(
             tableActionHeldCards[relic.id] = null;
         }
     }
-
-    const handsRemaining = executeValueHook(
-        'getDealsPerCasino',
-        BASE_DEALS_PER_CASINO,
-        { inventory }
-    );
 
     const playerHands: PlayerHand[] = Array.from({ length: INITIAL_HAND_COUNT }, (_, i) => ({
         id: i,
@@ -504,10 +511,15 @@ function processStartGame(
         selectedGamblerId: gamblerId,
         deal: 1,
         dealsTaken: 0,
-        handsRemaining,
+        handsRemaining: INITIAL_HAND_COUNT,
         totalScore: 0,
         targetScore,
-        comps: 5,
+        comps: STARTING_COMP_TICKETS,
+        cash: STARTING_CASH,
+        ante: BASE_ANTE,
+        handsUntilAnteIncrease: HANDS_PER_ANTE,
+        shopDealsAtLastFreeRestock: 0,
+        shopReturnPhase: 'entering_casino',
         phase: 'entering_casino',
         deckProbabilities,
         dealer: { cards: [], isRevealed: false, blackjackValue: 0 },
@@ -518,11 +530,15 @@ function processStartGame(
         interactionMode: 'default',
         activeTableActionId: null,
         inventory,
+        relicSlots: INITIAL_RELIC_SLOTS,
+        pendingRaiseChoices: [],
+        handUpgrades: {},
         tableActionCharges,
         tableActionHeldCards,
         modifiers: { drawCountMod: 0, placeCountMod: 0 },
+        shopStockInitialized: false,
         shopItems: [],
-        giftShopRestockCost: 3,
+        giftShopRestockCost: BASE_SHOP_RESTOCK_COST,
         shopRewardSummary: null,
         runningSummary: null,
         rngState: rng.getState(),
@@ -551,59 +567,32 @@ function processStartGame(
 }
 
 function canAddShopItem(state: GameState, itemId: string): boolean {
-    const config = getRelicConfig(itemId);
-    if (!config) return false;
-
-    const inventory = state.inventory as RelicInstance[];
-
-    if (config.categories.includes('Charm')) {
-        const currentCharms = inventory.filter(inst => getRelicConfig(inst.id)?.categories.includes('Charm')).length;
-        const maxCharms = executeValueHook('getMaxCharms', 5, { inventory, dryRun: true });
-        return currentCharms < maxCharms;
-    }
-
-    if (config.categories.includes('Angle')) {
-        const currentAngles = inventory.filter(inst => getRelicConfig(inst.id)?.categories.includes('Angle')).length;
-        const maxAngles = executeValueHook('getMaxAngles', 5, { inventory, dryRun: true });
-        return currentAngles < maxAngles;
-    }
-
-    return true;
+    return state.shopItems.find(item => item.id === itemId)?.type === 'RaisePack' || !!getRaise(itemId) || canAcquireRelic(itemId, state.inventory, state.relicSlots);
 }
 
-function processDeal(state: GameState, forceContinue?: boolean): ActionResult {
-    if (state.phase !== 'entering_casino' && state.phase !== 'playing' && state.phase !== 'deal_over') {
+function processDeal(state: GameState, _forceContinue?: boolean): ActionResult {
+    if (state.phase !== 'entering_casino' && state.phase !== 'deal_over') {
         return { nextState: state, events: [] };
     }
-
-    // If coming from deal_over (Next Deal button), perform checks first
-    if (state.phase === 'deal_over') {
-         const hasReachedTarget = state.totalScore >= state.targetScore;
-
-        // Game over — no hands left and haven't reached target
-        if (!hasReachedTarget && state.handsRemaining <= 0 && !forceContinue) {
-            const events: GameEvent[] = [];
-            events.push({ type: 'game_over', won: false, finalScore: state.totalScore });
-            events.push({ type: 'phase_changed', from: state.phase, to: 'game_over' });
-            return {
-                nextState: { ...state, phase: 'game_over' },
-                events,
-            };
-        }
-
-        if (hasReachedTarget && state.handsRemaining <= 0 && !forceContinue) {
-             return { nextState: state, events: [] }; // Ignore invalid deal
-        }
+    if (state.cash < state.ante) {
+        return {
+            nextState: { ...state, phase: 'game_over' },
+            events: [
+                { type: 'game_over', won: false, finalScore: state.totalScore },
+                { type: 'phase_changed', from: state.phase, to: 'game_over' },
+            ],
+        };
     }
+    const activeHandIds = [1];
 
     const rng = new SeededRNG(state.rngState);
     const events: GameEvent[] = [];
 
-    // Create empty player hands
     const playerHands: PlayerHand[] = Array.from({ length: INITIAL_HAND_COUNT }, (_, i) => ({
         id: i,
         cards: [],
         isHeld: false,
+        isInactive: !activeHandIds.includes(i),
         isBust: false,
         blackjackValue: 0,
     }));
@@ -632,18 +621,19 @@ function processDeal(state: GameState, forceContinue?: boolean): ActionResult {
 
     const dealerCards: [Card, Card] = [dealerCard1, dealerCard2];
 
-    const newDealsTaken = state.dealsTaken + (state.phase === 'entering_casino' ? 1 : 1);
-    const dealsPerCasino = executeValueHook(
-        'getDealsPerCasino',
-        BASE_DEALS_PER_CASINO,
-        { inventory: state.inventory as RelicInstance[] }
-    );
-    const newHandsRemaining = dealsPerCasino - newDealsTaken;
+    const newDealsTaken = state.dealsTaken + 1;
+    const newHandsRemaining = 1;
+    const newComps = state.comps;
+    const newCash = state.cash - state.ante;
 
     events.push({
         type: 'deal_started',
-        deal: state.deal,
+        deal: newDealsTaken,
         handsRemaining: newHandsRemaining,
+        activeHandIds,
+        comps: newComps,
+        cash: newCash,
+        ante: state.ante,
     });
     events.push({
         type: 'cards_dealt',
@@ -665,7 +655,10 @@ function processDeal(state: GameState, forceContinue?: boolean): ActionResult {
         drawnCards: [],
         selectedDrawIndex: null,
         cardsPlacedThisTurn: 0,
+        deal: newDealsTaken,
         dealsTaken: newDealsTaken,
+        comps: newComps,
+        cash: newCash,
         handsRemaining: newHandsRemaining,
         runningSummary: null,
         modifiers: { drawCountMod: 0, placeCountMod: 0 },
@@ -680,61 +673,13 @@ function processDeal(state: GameState, forceContinue?: boolean): ActionResult {
     return { nextState, events };
 }
 
+// Compatibility alias for old callers; there are no casino payouts.
 function processLeaveCasino(state: GameState): ActionResult {
-    if (state.phase !== 'deal_over' && state.phase !== 'entering_casino') {
-        return { nextState: state, events: [] };
-    }
-
-    if (state.totalScore < state.targetScore) {
-        return { nextState: state, events: [] };
-    }
-
-    const events: GameEvent[] = [];
-    // Calculate reward summary
-    const invArr = state.inventory as RelicInstance[];
-    const hasDoubleDown = invArr.some(r => r.id === 'double_down');
-    const dealsBonus = state.handsRemaining * 2;
-    const doubleDownBonus = hasDoubleDown ? ((state.tableActionCharges['double_down'] ?? 0) * 1) : 0;
-    const hasSurrender = invArr.some(r => r.id === 'surrender');
-    const surrenderBonus = hasSurrender ? ((state.tableActionCharges['surrender'] ?? 0) * 1) : 0;
-    const interestedBonus = Math.min(5, Math.floor(state.comps / 5));
-    const winBonus = 2;
-    const totalBonus = dealsBonus + doubleDownBonus + surrenderBonus + interestedBonus + winBonus;
-
-    const rewardSummary = {
-        dealsBonus,
-        doubleDownBonus,
-        surrenderBonus,
-        interestedBonus,
-        winBonus,
-        total: totalBonus,
-    };
-
-    events.push({ type: 'casino_cleared', deal: state.deal, score: state.totalScore });
-
-    // Payout sequence
-    events.push({ type: 'payout_started', total: totalBonus, rewardSummary });
-    if (dealsBonus > 0) events.push({ type: 'payout_step', label: 'Hands Remaining', amount: dealsBonus, description: '2 chips per hand' });
-    if (doubleDownBonus > 0) events.push({ type: 'payout_step', label: 'Double Down Charges', amount: doubleDownBonus });
-    if (surrenderBonus > 0) events.push({ type: 'payout_step', label: 'Surrender Charges', amount: surrenderBonus });
-    if (interestedBonus > 0) events.push({ type: 'payout_step', label: 'Interest', amount: interestedBonus });
-    events.push({ type: 'payout_step', label: 'Casino Clear Bonus', amount: winBonus });
-    events.push({ type: 'payout_complete', total: totalBonus });
-
-    events.push({ type: 'phase_changed', from: state.phase, to: 'casino_payout' });
-
-    return {
-        nextState: {
-            ...state,
-            phase: 'casino_payout',
-            shopRewardSummary: rewardSummary,
-        },
-        events,
-    };
+    return processEnterGiftShop(state);
 }
 
 function processDraw(state: GameState): ActionResult {
-    if (state.phase !== 'playing' || state.drawnCards.some(c => c !== null)) {
+    if (state.phase !== 'playing' || state.drawnCards.some(c => c !== null) || !state.playerHands.some(h => canPlayHand(h, state.comps))) {
         return { nextState: state, events: [] };
     }
 
@@ -788,7 +733,7 @@ function processSelectDrawnCard(state: GameState, drawIndex: number): ActionResu
 function processPlaceCard(state: GameState, handIndex: number): ActionResult {
     const { playerHands, drawnCards, selectedDrawIndex, cardsPlacedThisTurn, modifiers, inventory } = state;
 
-    if (selectedDrawIndex === null || !drawnCards[selectedDrawIndex]) {
+    if (state.phase !== 'playing' || selectedDrawIndex === null || !drawnCards[selectedDrawIndex]) {
         return { nextState: state, events: [] };
     }
 
@@ -798,9 +743,12 @@ function processPlaceCard(state: GameState, handIndex: number): ActionResult {
 
     // Place card into hand
     const targetHand = playerHands[handIndex];
-    if (!targetHand || targetHand.isBust || targetHand.isHeld) {
+    if (!targetHand || !canPlayHand(targetHand, state.comps)) {
         return { nextState: state, events: [] };
     }
+
+    const newComps = state.comps - (targetHand.isInactive ? 1 : 0);
+    if (targetHand.isInactive) events.push({ type: 'side_hand_opened', handIndex, cost: 1, newComps });
 
     const isSpecial = cardToPlace.type === 'chip' || cardToPlace.type === 'mult' || cardToPlace.type === 'score';
     const spacing = 120;
@@ -816,6 +764,7 @@ function processPlaceCard(state: GameState, handIndex: number): ActionResult {
 
     let updatedHand: PlayerHand = {
         ...targetHand,
+        isInactive: false,
         cards: newCards,
         blackjackValue: newBJValue,
         isBust,
@@ -931,7 +880,7 @@ function processPlaceCard(state: GameState, handIndex: number): ActionResult {
     let totalPlaceCount = 1 + modifiers.placeCountMod;
     totalPlaceCount = executeValueHook('getPlaceCount', totalPlaceCount, { inventory: invArr });
 
-    const anyPlayable = updatedHands.some(h => !h.isBust && !h.isHeld && h.blackjackValue !== 21);
+    const anyPlayable = updatedHands.some(h => canPlayHand(h, newComps));
     const hasRemainingCards = remainingDrawn.some(c => c !== null);
     const canPlaceMore = newPlacedCount < totalPlaceCount && hasRemainingCards && anyPlayable;
 
@@ -962,7 +911,7 @@ function processPlaceCard(state: GameState, handIndex: number): ActionResult {
     });
 
     // Auto-stand detection
-    const allUnplayable = updatedHands.every(h => h.isBust || h.isHeld || h.blackjackValue === 21);
+    const allUnplayable = updatedHands.every(h => !canPlayHand(h, newComps));
     if (!canPlaceMore && allUnplayable) {
         events.push({ type: 'auto_stand_triggered' });
     }
@@ -970,6 +919,7 @@ function processPlaceCard(state: GameState, handIndex: number): ActionResult {
     const nextState: GameState = {
         ...state,
         playerHands: updatedHands,
+        comps: newComps,
         drawnCards: canPlaceMore ? remainingDrawn : [],
         selectedDrawIndex: canPlaceMore ? nextDrawIndex : null,
         cardsPlacedThisTurn: canPlaceMore ? newPlacedCount : 0,
@@ -1066,6 +1016,7 @@ function processResolveHandOutcome(state: GameState): ActionResult {
 
     // 3. Evaluate each player hand
     const scoredHands = state.playerHands.map((h, i) => {
+        if (h.isInactive) return { ...h, outcome: null, resultRevealed: false };
         let outcome: 'win' | 'loss' | 'bust' | null = 'loss';
 
         if (h.cards.length === 0) {
@@ -1140,7 +1091,7 @@ function processScoreRound(state: GameState): ActionResult {
     scoredHands.forEach(hand => {
         if (hand.cards.length === 0) return;
         const isWin = hand.outcome === 'win';
-        const preScore = evaluateHandScore(hand.cards, isWin, hand.isDoubled ?? false, currentInv, state.handsRemaining, undefined, hand.outcome);
+        const preScore = evaluateHandScore(hand.cards, isWin, hand.isDoubled ?? false, currentInv, state.comps, undefined, hand.outcome, state.handUpgrades);
         preScore.criteria.forEach(c => {
             if (c.id === 'flush' || c.id.startsWith('flush_')) categoryCounts.flush++;
             if (c.id === 'straight' || c.id.startsWith('straight_')) categoryCounts.straight++;
@@ -1160,9 +1111,10 @@ function processScoreRound(state: GameState): ActionResult {
             isWin,
             hand.isDoubled ?? false,
             currentInv,
-            state.handsRemaining,
+            state.comps,
             categoryCounts,
-            hand.outcome
+            hand.outcome,
+            state.handUpgrades
         );
 
         events.push({ type: 'scoring_hand_focus', handIndex: i });
@@ -1181,13 +1133,13 @@ function processScoreRound(state: GameState): ActionResult {
                      rowChips += match.chips;
                      rowMult += match.multiplier;
                      
-                     if (match.chips > 0) {
+                     if (match.chips !== 0) {
                          events.push({ type: 'scoring_row_chips', handIndex: i, criterionId: criterion.id, chips: rowChips });
                          runningSummary = { ...runningSummary, chips: runningSummary.chips + match.chips };
                          events.push({ type: 'summary_update', ...runningSummary });
                      }
                      
-                     if (match.multiplier > 0) {
+                     if (match.multiplier !== 0) {
                          events.push({ type: 'scoring_row_mult', handIndex: i, criterionId: criterion.id, multiplier: rowMult });
                          runningSummary = { ...runningSummary, mult: runningSummary.mult + match.multiplier };
                          events.push({ type: 'summary_update', ...runningSummary });
@@ -1200,7 +1152,7 @@ function processScoreRound(state: GameState): ActionResult {
                      events.push({ type: 'summary_update', ...runningSummary });
                  }
                  
-                 if (criterion.multiplier > 0) {
+                 if (criterion.multiplier !== 0) {
                      events.push({ type: 'scoring_row_mult', handIndex: i, criterionId: criterion.id, multiplier: criterion.multiplier });
                      runningSummary = { ...runningSummary, mult: runningSummary.mult + criterion.multiplier };
                      events.push({ type: 'summary_update', ...runningSummary });
@@ -1256,7 +1208,8 @@ function processScoreRound(state: GameState): ActionResult {
     }
 
     // 6. Deal scoring complete
-    const finalScore = Math.floor(runningSummary.chips * runningSummary.mult);
+    // Decimal raises should not lose a dollar at an integer payout boundary.
+    const finalScore = Math.floor(Number((runningSummary.chips * runningSummary.mult).toFixed(8)));
     events.push({
         type: 'deal_scoring_complete',
         totalChips: runningSummary.chips,
@@ -1266,24 +1219,41 @@ function processScoreRound(state: GameState): ActionResult {
 
     // 7. Update total score
     const newTotalScore = state.totalScore + finalScore;
-    events.push({ type: 'chip_collection', amount: finalScore, newTotalScore });
+    const newCash = Math.max(0, state.cash + finalScore);
+    events.push({ type: 'chip_collection', amount: finalScore, newTotalScore, newCash });
 
-    // 7. Determine next phase
-    const hasReachedTarget = newTotalScore >= state.targetScore;
-    const newHandsRemaining = state.handsRemaining;
-    let nextPhase: GameState['phase'] = 'deal_over';
-
-    if (!hasReachedTarget && newHandsRemaining <= 0) {
-        nextPhase = 'deal_over';
+    const ticketRewards = finalHands.reduce((total, hand) => total + (hand.finalScore?.criteria.reduce((sum, row) => sum + (row.compTickets ?? 0), 0) ?? 0), 0);
+    let newComps = state.comps + ticketRewards;
+    if (ticketRewards > 0) {
+        events.push({ type: 'comps_earned', amount: ticketRewards, newTotal: newComps, reason: 'winning_hands' });
     }
-
-    if (hasReachedTarget) {
-        events.push({ type: 'target_reached', totalScore: newTotalScore, targetScore: state.targetScore });
+    const increaseDue = state.handsUntilAnteIncrease <= 1;
+    const ante = state.ante + (increaseDue ? ANTE_INCREASE_AMOUNT : 0);
+    const handsUntilAnteIncrease = increaseDue ? HANDS_PER_ANTE : state.handsUntilAnteIncrease - 1;
+    const rng = new SeededRNG(state.rngState);
+    let shopItems = state.shopItems;
+    let tableActionCharges = state.tableActionCharges;
+    if (increaseDue) {
+        events.push({ type: 'ante_increased', previousAnte: state.ante, ante, handsUntilAnteIncrease });
+        shopItems = generateRunShopItems({ ...state, inventory: currentInv }, rng);
+        events.push({ type: 'shop_restocked', newItems: [...shopItems], cost: 0, newCash });
+        tableActionCharges = Object.fromEntries(Object.entries(state.tableActionCharges).map(([id, charges]) => {
+            const action = getRelicConfig(id)?.tableAction;
+            return [id, action?.recharge === 'casino' ? action.maxCharges : charges];
+        }));
+        const ticketBonus = Math.max(0, executeValueHook('getDealsPerCasino', BASE_DEALS_PER_CASINO, { inventory: currentInv }) - BASE_DEALS_PER_CASINO);
+        if (ticketBonus > 0) {
+            newComps += ticketBonus;
+            events.push({ type: 'comps_earned', amount: ticketBonus, newTotal: newComps, reason: 'ante_increase_bonus' });
+        }
+    }
+    const nextPhase: GameState['phase'] = newCash >= ante ? 'deal_over' : 'game_over';
+    if (nextPhase === 'game_over') {
+        events.push({ type: 'game_over', won: false, finalScore: newTotalScore });
     }
 
     events.push({ type: 'phase_changed', from: 'scoring', to: nextPhase });
 
-    const rng = new SeededRNG(state.rngState);
     const hasWin = scoredHands.some(h => h.outcome === 'win');
     return {
         nextState: {
@@ -1291,6 +1261,15 @@ function processScoreRound(state: GameState): ActionResult {
             phase: nextPhase,
             playerHands: finalHands,
             totalScore: newTotalScore,
+            cash: newCash,
+            ante,
+            handsUntilAnteIncrease,
+            shopItems,
+            shopStockInitialized: state.shopStockInitialized || increaseDue,
+            shopDealsAtLastFreeRestock: increaseDue ? state.dealsTaken : state.shopDealsAtLastFreeRestock,
+            giftShopRestockCost: increaseDue ? BASE_SHOP_RESTOCK_COST : state.giftShopRestockCost,
+            tableActionCharges,
+            comps: newComps,
             runningSummary,
             inventory: currentInv,
             rngState: rng.getState(),
@@ -1302,18 +1281,7 @@ function processScoreRound(state: GameState): ActionResult {
 
 
 function processCompleteDealEarly(state: GameState): ActionResult {
-    const events: GameEvent[] = [];
-    const bonusComps = state.handsRemaining * 5;
-
-    events.push({ type: 'comps_earned', amount: bonusComps, newTotal: state.comps + bonusComps, reason: 'early_completion' });
-
-    const updatedState = {
-        ...state,
-        comps: state.comps + bonusComps,
-    };
-
-    // Delegate to nextDeal via deal
-    return processDeal(updatedState);
+    return processDeal(state);
 }
 
 // ─── Debug Action Implementations ────────────────────────
@@ -1422,34 +1390,10 @@ function processDebugFillCharges(state: GameState, relicId: string): ActionResul
 }
 
 function processDebugGiveCash(state: GameState, amount: number): ActionResult {
-    if (state.phase === 'gift_shop') {
-        return {
-            nextState: {
-                ...state,
-                comps: state.comps + amount
-            },
-            events: [
-                { type: 'comps_earned', amount, newTotal: state.comps + amount, reason: 'debug' }
-            ]
-        };
-    } else {
-        const newTotal = state.totalScore + amount;
-        const events: GameEvent[] = [
-            { type: 'chip_collection', amount, newTotalScore: newTotal }
-        ];
-
-        if (newTotal >= state.targetScore) {
-            events.push({ type: 'target_reached', totalScore: newTotal, targetScore: state.targetScore });
-        }
-
-        return {
-            nextState: {
-                ...state,
-                totalScore: newTotal
-            },
-            events
-        };
-    }
+    return {
+        nextState: { ...state, cash: state.cash + amount },
+        events: [],
+    };
 }
 
 function processDebugDrawCard(state: GameState, cardId: string): ActionResult {
