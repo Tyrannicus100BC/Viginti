@@ -59,9 +59,9 @@ export const GAMBLER_DEFINITIONS: GamblerDefinition[] = [
             ranks: { ace: 20, face: 40, upper: 20, lower: 20 },
             specialChance: 0,
             specialWeights: [
-                { type: 'chip', value: 5, chance: 0.04 },
-                { type: 'mult', value: 1, chance: 0.03 },
-                { type: 'score', value: 5, chance: 0.03 }
+                { type: 'chip', chance: 0.04 },
+                { type: 'mult', chance: 0.03 },
+                { type: 'score', chance: 0.03 }
             ]
         }),
         getInitialRelics: () => [getRelicInstance('flusher'), getRelicInstance('soap')]

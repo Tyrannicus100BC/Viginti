@@ -1,5 +1,8 @@
+import { generateRelicPackChoices } from '../../logic/relicPacks';
+import { normalizeDeckProbabilities } from '../../logic/specialCards';
+import { applyPackCard, generatePackCardChoices, getPackCard, increaseSpecialChance } from '../../logic/packCards';
 import { getRaise, generateRaiseChoices } from '../../logic/handScoring';
-import { getPackDefinition } from '../../logic/packs';
+import { getPackDefinition, hasPendingPack, isPackItem, PACK_ITEM_TYPES, type PackFamily } from '../../logic/packs';
 /**
  * Pure shop action processing functions.
  * Handles: enter_gift_shop, buy_shop_item, restock_shop, sell_relic,
@@ -34,7 +37,7 @@ function buildTableActionCharges(
         const action = getTableActionConfig(instance.id);
         if (!action) return;
         const current = existingCharges[instance.id];
-        let next = current ?? (action.recharge === 'casino' ? action.maxCharges : 0);
+        let next = current ?? action.maxCharges;
         if (options?.resetPerCasino && action.recharge === 'casino') {
             next = action.maxCharges;
         }
@@ -86,16 +89,20 @@ export function processEnterGiftShop(state: GameState): ActionResult {
 
 /** Shop stock is independent of the former city/casino reward schedules. */
 export function generateRunShopItems(state: GameState, rng: SeededRNG) {
+    const families: PackFamily[] = ['raise', 'deck', 'relic'];
+    const first = rng.pick(families);
+    const second = rng.pick(families.filter(family => family !== first));
     return generateShopItems([
         { type: 'Relic', count: 4 },
-        { type: 'RaisePack', count: 2 },
+        { type: PACK_ITEM_TYPES[first], count: 1 },
+        { type: PACK_ITEM_TYPES[second], count: 1 },
     ], state.inventory as RelicInstance[], undefined, rng);
 }
 
 // ─── Buy Shop Item ──────────────────────────────────────
 
 export function processBuyShopItem(state: GameState, itemId: string): ActionResult {
-    if (state.phase !== 'gift_shop' || state.pendingRaiseChoices.length) return { nextState: state, events: [] };
+    if (state.phase !== 'gift_shop' || hasPendingPack(state)) return { nextState: state, events: [] };
 
     const { cash, inventory, shopItems } = state;
     const item = shopItems.find(i => i.id === itemId);
@@ -106,13 +113,18 @@ export function processBuyShopItem(state: GameState, itemId: string): ActionResu
 
     if (cash < cost) return { nextState: state, events: [] };
 
-    if (item.type === 'RaisePack') {
+    if (isPackItem(item)) {
         const rng = new SeededRNG(state.rngState);
         const pack = getPackDefinition(item.packId);
         return {
             nextState: {
                 ...state, cash: cash - cost,
-                pendingRaiseChoices: generateRaiseChoices(rng, pack.offerCount).map(raise => raise.id),
+                pendingRaiseChoices: pack.family === 'raise' ? generateRaiseChoices(rng, pack.offerCount).map(raise => raise.id) : [],
+                pendingPackChoices: pack.family === 'relic' ? generateRelicPackChoices(
+                    rng, pack.offerCount, inventory,
+                    shopItems.filter(stock => !stock.purchased && RelicManager.getRelicConfig(stock.id)).map(stock => stock.id)
+                )
+                    : pack.family === 'deck' ? generatePackCardChoices(rng, pack.offerCount, state.deckProbabilities).map(card => card.id) : [],
                 pendingPack: { packId: pack.id, picksRemaining: pack.pickCount },
                 shopItems: shopItems.map(stock => stock.id === itemId ? { ...stock, purchased: true } : stock),
                 rngState: rng.getState(),
@@ -180,9 +192,41 @@ export function processChooseRaise(state: GameState, raiseId: string): ActionRes
     };
 }
 
+export function processChoosePackCard(state: GameState, cardId: string): ActionResult {
+    if (state.phase !== 'gift_shop' || !state.pendingPackChoices.includes(cardId) || !state.pendingPack) {
+        return { nextState: state, events: [] };
+    }
+    const family = getPackDefinition(state.pendingPack.packId).family;
+    let updated = state;
+    if (family === 'relic') {
+        if (!canAcquireRelic(cardId, state.inventory, state.relicSlots)) return { nextState: state, events: [] };
+        const relic = RelicManager.getRelicConfig(cardId)!;
+        const inventory = [...state.inventory, { id: cardId, state: { ...relic.properties } }];
+        updated = { ...state, inventory,
+            tableActionCharges: buildTableActionCharges(inventory, state.tableActionCharges),
+            tableActionHeldCards: buildTableActionHeldCards(inventory, state.tableActionHeldCards) };
+    } else {
+        const card = getPackCard(cardId);
+        if (family !== 'deck' || !card) return { nextState: state, events: [] };
+        updated = { ...state, deckProbabilities: applyPackCard(state.deckProbabilities, card) };
+    }
+    const picksRemaining = state.pendingPack.picksRemaining - 1;
+    return {
+        nextState: { ...updated,
+            pendingPackChoices: picksRemaining > 0 ? state.pendingPackChoices.filter(id => id !== cardId) : [],
+            pendingPack: picksRemaining > 0 ? { ...state.pendingPack, picksRemaining } : null },
+        events: [{ type: 'pack_card_chosen', cardId }],
+    };
+}
+
+export function processSkipPack(state: GameState): ActionResult {
+    if (state.phase !== 'gift_shop' || (!hasPendingPack(state) && !state.pendingPack)) return { nextState: state, events: [] };
+    return { nextState: { ...state, pendingRaiseChoices: [], pendingPackChoices: [], pendingPack: null }, events: [{ type: 'pack_skipped' }] };
+}
+
 export function processBuyRelicSlot(state: GameState): ActionResult {
     const cost = getRelicSlotCost(state.relicSlots);
-    if (state.phase !== 'gift_shop' || state.pendingRaiseChoices.length || state.cash < cost) {
+    if (state.phase !== 'gift_shop' || hasPendingPack(state) || state.cash < cost) {
         return { nextState: state, events: [] };
     }
     return {
@@ -194,13 +238,13 @@ export function processBuyRelicSlot(state: GameState): ActionResult {
 // ─── Restock Shop ───────────────────────────────────────
 
 export function processRestockShop(state: GameState): ActionResult {
-    if (state.phase !== 'gift_shop' || state.pendingRaiseChoices.length || state.cash < state.giftShopRestockCost) {
+    if (state.phase !== 'gift_shop' || hasPendingPack(state) || state.cash < state.giftShopRestockCost) {
         return { nextState: state, events: [] };
     }
     const rng = new SeededRNG(state.rngState);
     // A paid restock only cycles relics. Sold packs remain sold until an ante refresh.
-    const packs = state.shopItems.filter(item => item.type === 'RaisePack');
-    const oldRelicIds = state.shopItems.filter(item => item.type !== 'RaisePack').map(item => item.id);
+    const packs = state.shopItems.filter(isPackItem);
+    const oldRelicIds = state.shopItems.filter(item => !isPackItem(item)).map(item => item.id);
     const newRelics = generateShopItems([{ type: 'Relic', count: 4 }], state.inventory as RelicInstance[], undefined, rng, oldRelicIds);
     const newItems = [...newRelics, ...packs];
     const cost = state.giftShopRestockCost;
@@ -220,7 +264,7 @@ export function processRestockShop(state: GameState): ActionResult {
 // ─── Sell Relic ─────────────────────────────────────────
 
 export function processSellRelic(state: GameState, relicId: string, index: number): ActionResult {
-    if (state.phase !== 'gift_shop' || state.pendingRaiseChoices.length) return { nextState: state, events: [] };
+    if (state.phase !== 'gift_shop' || hasPendingPack(state)) return { nextState: state, events: [] };
 
     const { inventory, cash } = state;
     const instance = inventory[index];
@@ -248,10 +292,9 @@ export function processSellRelic(state: GameState, relicId: string, index: numbe
 // ─── Leave Shop ─────────────────────────────────────────
 
 export function processLeaveShop(state: GameState): ActionResult {
-    if (state.phase !== 'gift_shop' || state.pendingRaiseChoices.length) return { nextState: state, events: [] };
-    const nextPhase = state.cash >= state.ante ? state.shopReturnPhase : 'game_over';
+    if (state.phase !== 'gift_shop' || hasPendingPack(state)) return { nextState: state, events: [] };
+    const nextPhase = state.shopReturnPhase;
     const events: GameEvent[] = [{ type: 'shop_left' }];
-    if (nextPhase === 'game_over') events.push({ type: 'game_over', won: false, finalScore: state.totalScore });
     events.push({ type: 'phase_changed', from: 'gift_shop', to: nextPhase });
     return { nextState: { ...state, phase: nextPhase }, events };
 }
@@ -273,33 +316,17 @@ export function processEnhanceCard(
     cardId: string, // In the new system, cardId might be a "Group ID" or we shift to a different action
     enhancement: { type: 'chip' | 'mult' | 'score'; value: number }
 ): ActionResult {
-    if (state.phase !== 'gift_shop' || state.pendingRaiseChoices.length) return { nextState: state, events: [] };
+    if (state.phase !== 'gift_shop' || hasPendingPack(state)) return { nextState: state, events: [] };
 
     const { cash, deckProbabilities } = state;
     const cost = getEnhanceCost(enhancement);
     if (cash < cost) return { nextState: state, events: [] };
 
-    // Adds or increases a specific special card weight
-    const existingWeight = deckProbabilities.specialWeights.find(
-        w => w.type === enhancement.type && w.value === enhancement.value
-    );
-
-    let nextWeights;
-    if (existingWeight) {
-        nextWeights = deckProbabilities.specialWeights.map(w => 
-            (w.type === enhancement.type && w.value === enhancement.value)
-                ? { ...w, chance: Math.min(1, w.chance + 0.05) }
-                : w
-        );
-    } else {
-        nextWeights = [
-            ...deckProbabilities.specialWeights,
-            { type: enhancement.type, value: enhancement.value, chance: 0.05 }
-        ];
-    }
+    const probabilities = normalizeDeckProbabilities(deckProbabilities);
+    const nextWeights = increaseSpecialChance(probabilities.specialWeights, enhancement, 0.05);
 
     const nextProbs = {
-        ...deckProbabilities,
+        ...probabilities,
         specialWeights: nextWeights
     };
 
@@ -318,7 +345,7 @@ export function processEnhanceCard(
 // ─── Destroy Card ───────────────────────────────────────
 
 export function processDestroyCard(state: GameState, cardId: string): ActionResult {
-    if (state.phase !== 'gift_shop' || state.pendingRaiseChoices.length) return { nextState: state, events: [] };
+    if (state.phase !== 'gift_shop' || hasPendingPack(state)) return { nextState: state, events: [] };
 
     const { cash, removalCount } = state;
     const cost = getRemovalCashCost(removalCount);

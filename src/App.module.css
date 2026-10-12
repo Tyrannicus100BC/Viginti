@@ -1272,6 +1272,13 @@
     background-image: url("data:image/svg+xml,%3csvg width='100%25' height='100%25' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100%25' height='100%25' fill='none' rx='6' ry='6' stroke='%23ffd700' stroke-width='1' stroke-dasharray='8%2c 8' stroke-dashoffset='0' stroke-linecap='square'/%3e%3c/svg%3e");
 }
 
+.relicDebugBtn {
+    align-self: flex-start;
+    width: auto;
+    margin-top: 10px;
+    pointer-events: auto;
+}
+
 /* Winnings Label clickable style */
 .statValueClickable {
     cursor: pointer;
@@ -1383,29 +1390,3 @@
     height: 100%;
 }
 .dealActions > button { min-width: 0; }
-
-.anteIncreaseOverlay {
-    position: absolute;
-    inset: 0;
-    z-index: 6500;
-    display: grid;
-    place-items: center;
-    background: rgba(5, 12, 18, .65);
-    backdrop-filter: blur(5px);
-}
-.anteIncreasePopup {
-    transform: translateY(-60px);
-    padding: 32px 56px;
-    border: 1px solid #d4af37;
-    border-radius: 16px;
-    background: #1c2833;
-    color: #f9e6a3;
-    text-align: center;
-    box-shadow: 0 16px 70px #0009;
-}
-.anteIncreasePopup:hover { border-color: #d4af37; }
-.anteIncreasePopup:focus { outline: none; }
-.anteIncreasePopup:focus-visible { outline: 2px solid #f9e6a3; outline-offset: 5px; }
-.anteIncreaseTitle { display: block; margin: 0 0 12px; font-size: 32px; font-weight: 700; }
-.anteIncreaseAmount { display: block; font-size: 26px; font-variant-numeric: tabular-nums; }
-.anteIncreaseHint { display: block; margin-top: 20px; color: #d2c5a0; font-size: 15px; }

@@ -59,16 +59,20 @@ describe('RelicEngine', () => {
             expect(result).toBe(16);
         });
 
-        it('applies deft relic to deals per casino', () => {
+        it('ignores removed deft relic', () => {
             const inv: RelicInstance[] = [{ id: 'deft', state: { extra_draws: 1 } }];
             const result = executeValueHook('getDealsPerCasino', BASE_DEALS_PER_CASINO, { inventory: inv });
-            expect(result).toBe(BASE_DEALS_PER_CASINO + 1);
+            expect(result).toBe(BASE_DEALS_PER_CASINO);
         });
 
-        it('applies photocopier relic to draw count', () => {
+        it('applies photocopier on every second draw without advancing previews', () => {
             const inv: RelicInstance[] = [{ id: 'photocopier', state: { extra_draws: 1 } }];
-            const result = executeValueHook('getDrawCount', 1, { inventory: inv });
-            expect(result).toBe(2);
+            for (const expected of [1, 2, 1, 2]) {
+                const before = { ...inv[0].state };
+                expect(executeValueHook('getDrawCount', 1, { inventory: inv, dryRun: true })).toBe(expected);
+                expect(inv[0].state).toEqual(before);
+                expect(executeValueHook('getDrawCount', 1, { inventory: inv })).toBe(expected);
+            }
         });
     });
 
@@ -162,7 +166,7 @@ describe('RelicEngine', () => {
     });
 
     describe('executeOnHandCompletion', () => {
-        it('royalty adds chips for hands with 2+ face cards', () => {
+        it('removed royalty no longer adds chips', () => {
             const inv: RelicInstance[] = [{ id: 'royalty', state: { amount: 25 } }];
             const handCards = [makeCard('K'), makeCard('Q')];
             const score = { criteria: [], totalChips: 10, totalMultiplier: 1, finalScore: 10, scoringCards: handCards };
@@ -171,10 +175,8 @@ describe('RelicEngine', () => {
             const result = executeOnHandCompletion(inv, handCards, score, summary);
 
             const activations = result.events.filter(e => e.type === 'relic_activated');
-            expect(activations.length).toBeGreaterThanOrEqual(1);
-
-            // Summary should have extra chips
-            expect(result.runningSummary!.chips).toBe(35); // 10 + 25
+            expect(activations).toHaveLength(0);
+            expect(result.runningSummary!.chips).toBe(10);
         });
 
         it('royalty does not trigger without 2 face cards', () => {
@@ -191,7 +193,7 @@ describe('RelicEngine', () => {
     });
 
     describe('executeOnDealCompletion', () => {
-        it('high_roller adds chips when all 3 hands win', () => {
+        it('removed high_roller no longer adds chips', () => {
             const inv: RelicInstance[] = [{ id: 'high_roller', state: { amount: 100 } }];
             const summary = { chips: 50, mult: 2 };
             const hands = [{}, {}, {}] as any[];
@@ -199,8 +201,8 @@ describe('RelicEngine', () => {
             const result = executeOnDealCompletion(inv, 3, 0, 0, summary, hands);
 
             const activations = result.events.filter(e => e.type === 'relic_activated');
-            expect(activations.length).toBeGreaterThanOrEqual(1);
-            expect(result.runningSummary!.chips).toBe(150); // 50 + 100
+            expect(activations).toHaveLength(0);
+            expect(result.runningSummary!.chips).toBe(50);
         });
 
         it('high_roller does not trigger with fewer than 3 wins', () => {
@@ -262,7 +264,7 @@ describe('RelicEngine', () => {
             expect(inv[0].state).toEqual(originalState);
         });
 
-        it('one_armed doubles mult when exactly 1 win', () => {
+        it('removed one_armed no longer doubles mult', () => {
             const inv: RelicInstance[] = [{ id: 'one_armed', state: { factor: 2 } }];
             const summary = { chips: 50, mult: 3 };
             const hands = [{}, {}, {}] as any[];
@@ -270,9 +272,8 @@ describe('RelicEngine', () => {
             const result = executeOnDealCompletion(inv, 1, 2, 0, summary, hands);
 
             const activations = result.events.filter(e => e.type === 'relic_activated');
-            expect(activations.length).toBeGreaterThanOrEqual(1);
-            // factor=2, so valToAdd = currentMult * (factor - 1) = 3 * 1 = 3
-            expect(result.runningSummary!.mult).toBe(6); // 3 + 3
+            expect(activations).toHaveLength(0);
+            expect(result.runningSummary!.mult).toBe(3);
         });
 
         it('mini_shoe always adds bonus chips', () => {
@@ -286,13 +287,13 @@ describe('RelicEngine', () => {
         });
 
         it('robe_and_slippers_set always adds bonus mult', () => {
-            const inv: RelicInstance[] = [{ id: 'robe_and_slippers_set', state: { bonus_mult: 0.5 } }];
+            const inv: RelicInstance[] = [{ id: 'robe_and_slippers_set', state: { bonus_mult: 0.2 } }];
             const summary = { chips: 50, mult: 2 };
             const hands = [{}, {}, {}] as any[];
 
             const result = executeOnDealCompletion(inv, 1, 2, 0, summary, hands);
 
-            expect(result.runningSummary!.mult).toBe(2.5); // 2 + 0.5
+            expect(result.runningSummary!.mult).toBe(2.2);
         });
     });
 

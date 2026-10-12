@@ -1,3 +1,4 @@
+import { isPackItem, getPackDefinition } from '../logic/packs';
 import { canAcquireRelic, INITIAL_RELIC_SLOTS, getRelicSlotCost } from '../logic/relics/inventory';
 import { getRaise } from '../logic/handScoring';
 /**
@@ -45,6 +46,8 @@ import {
     processEnterGiftShop,
     processBuyShopItem,
     processChooseRaise,
+    processChoosePackCard,
+    processSkipPack,
     processBuyRelicSlot,
     processRestockShop,
     processSellRelic,
@@ -135,6 +138,11 @@ function processCoreAction(state: GameState, action: PlayerAction): ActionResult
         // Shop actions
         case 'enter_gift_shop':
             return processEnterGiftShop(state);
+        case 'skip_pack':
+            return processSkipPack(state);
+        case 'choose_pack_card':
+            return processChoosePackCard(state, action.cardId);
+
         case 'choose_raise':
             return processChooseRaise(state, action.raiseId);
         case 'buy_relic_slot':
@@ -195,10 +203,8 @@ export function getValidActions(state: GameState): PlayerAction[] {
             break;
 
         case 'entering_casino':
-            if (state.cash >= state.ante) {
-                actions.push({ type: 'deal' });
-                actions.push({ type: 'enter_gift_shop' });
-            }
+            actions.push({ type: 'deal' });
+            actions.push({ type: 'enter_gift_shop' });
             break;
 
         case 'playing': {
@@ -317,15 +323,19 @@ export function getValidActions(state: GameState): PlayerAction[] {
         }
 
         case 'deal_over':
-            if (state.cash >= state.ante) {
-                actions.push({ type: 'deal' });
-                actions.push({ type: 'enter_gift_shop' });
-            }
+            actions.push({ type: 'deal' });
+            actions.push({ type: 'enter_gift_shop' });
             break;
 
         case 'gift_shop': {
-            if (state.pendingRaiseChoices.length) {
+            if (state.pendingPack || state.pendingPackChoices.length || state.pendingRaiseChoices.length) {
+                state.pendingPackChoices.forEach(cardId => {
+                    if (getPackDefinition(state.pendingPack?.packId).family !== 'relic' || canAcquireRelic(cardId, state.inventory, state.relicSlots)) {
+                        actions.push({ type: 'choose_pack_card', cardId });
+                    }
+                });
                 state.pendingRaiseChoices.forEach(raiseId => actions.push({ type: 'choose_raise', raiseId }));
+                actions.push({ type: 'skip_pack' });
                 break;
             }
             if (state.cash >= getRelicSlotCost(state.relicSlots)) actions.push({ type: 'buy_relic_slot' });
@@ -443,6 +453,7 @@ export function createInitialState(): GameState {
         inventory: [],
         relicSlots: INITIAL_RELIC_SLOTS,
         pendingRaiseChoices: [],
+        pendingPackChoices: [],
         pendingPack: null,
         handUpgrades: {},
         tableActionCharges: {},
@@ -534,6 +545,7 @@ function processStartGame(
         inventory,
         relicSlots: INITIAL_RELIC_SLOTS,
         pendingRaiseChoices: [],
+        pendingPackChoices: [],
         pendingPack: null,
         handUpgrades: {},
         tableActionCharges,
@@ -571,7 +583,7 @@ function processStartGame(
 }
 
 function canAddShopItem(state: GameState, itemId: string): boolean {
-    return state.shopItems.find(item => item.id === itemId)?.type === 'RaisePack' || !!getRaise(itemId) || canAcquireRelic(itemId, state.inventory, state.relicSlots);
+    return state.shopItems.some(item => item.id === itemId && isPackItem(item)) || !!getRaise(itemId) || canAcquireRelic(itemId, state.inventory, state.relicSlots);
 }
 
 function processDeal(state: GameState, _forceContinue?: boolean): ActionResult {
@@ -689,7 +701,7 @@ function processDraw(state: GameState): ActionResult {
 
     const rng = new SeededRNG(state.rngState);
     const events: GameEvent[] = [];
-    const inventory = state.inventory as RelicInstance[];
+    const inventory = state.inventory.map(relic => ({ ...relic, state: { ...relic.state } }));
 
     // Calculate draw count
     let drawCount = 1 + state.modifiers.drawCountMod;
@@ -712,6 +724,7 @@ function processDraw(state: GameState): ActionResult {
 
     const nextState: GameState = {
         ...state,
+        inventory,
         drawnCards,
         selectedDrawIndex: selectedIndex,
         modifiers: { ...state.modifiers, drawCountMod: 0 }, // Consume draw mod
@@ -1234,25 +1247,31 @@ function processScoreRound(state: GameState): ActionResult {
     const handsUntilAnteIncrease = increaseDue ? HANDS_PER_ANTE : state.handsUntilAnteIncrease - 1;
     const rng = new SeededRNG(state.rngState);
     let shopItems = state.shopItems;
-    let tableActionCharges = state.tableActionCharges;
+    const tableActionCharges = { ...state.tableActionCharges };
+    currentInv = currentInv.map(instance => {
+        const action = getRelicConfig(instance.id)?.tableAction;
+        if (action?.recharge !== 'rounds') return instance;
+        const rounds = (instance.state.rounds_since_recharge ?? 0) + 1;
+        if (rounds >= 2) {
+            tableActionCharges[instance.id] = action.maxCharges;
+            events.push({ type: 'charge_gained', relicId: instance.id, newCharges: action.maxCharges, reason: 'rounds' });
+        }
+        const relicState = { ...instance.state, rounds_since_recharge: rounds >= 2 ? 0 : rounds };
+        events.push({ type: 'relic_state_changed', relicId: instance.id, newState: relicState });
+        return { ...instance, state: relicState };
+    });
     if (increaseDue) {
         events.push({ type: 'ante_increased', previousAnte: state.ante, ante, handsUntilAnteIncrease });
         shopItems = generateRunShopItems({ ...state, inventory: currentInv }, rng);
         events.push({ type: 'shop_restocked', newItems: [...shopItems], cost: 0, newCash });
-        tableActionCharges = Object.fromEntries(Object.entries(state.tableActionCharges).map(([id, charges]) => {
-            const action = getRelicConfig(id)?.tableAction;
-            return [id, action?.recharge === 'casino' ? action.maxCharges : charges];
-        }));
         const ticketBonus = Math.max(0, executeValueHook('getDealsPerCasino', BASE_DEALS_PER_CASINO, { inventory: currentInv }) - BASE_DEALS_PER_CASINO);
         if (ticketBonus > 0) {
             newComps += ticketBonus;
             events.push({ type: 'comps_earned', amount: ticketBonus, newTotal: newComps, reason: 'ante_increase_bonus' });
         }
     }
-    const nextPhase: GameState['phase'] = newCash >= ante ? 'deal_over' : 'game_over';
-    if (nextPhase === 'game_over') {
-        events.push({ type: 'game_over', won: false, finalScore: newTotalScore });
-    }
+    // Keep the shop available; affordability is checked when the player deals.
+    const nextPhase: GameState['phase'] = 'deal_over';
 
     events.push({ type: 'phase_changed', from: 'scoring', to: nextPhase });
 

@@ -3,6 +3,7 @@ import { createInitialState, processAction, getValidActions } from '../engine';
 import type { GameState } from '../GameState';
 import { TUTORIAL_STEPS } from '../tutorial/definitions';
 import { BASE_ANTE, STARTING_CASH, getNextAnte } from '../economy';
+import { getRelicSellCashValue } from '../../logic/rewards/generator';
 
 function start(): GameState {
     return processAction(createInitialState(), {
@@ -33,7 +34,7 @@ function push(state: GameState) {
 }
 
 describe('Cash ante and side-hand tickets', () => {
-    it.each([[50, 65], [65, 80], [80, 100], [100, 125]])('rounds the 25%% increase from $%i to the nearest $5 ($%i)', (ante, next) => {
+    it.each([[50, 75], [75, 115], [115, 175], [175, 265]])('rounds the 50%% increase from $%i to the nearest $5 ($%i)', (ante, next) => {
         expect(getNextAnte(ante)).toBe(next);
     });
 
@@ -129,11 +130,15 @@ describe('Cash ante and side-hand tickets', () => {
         expect(getValidActions(settled).map(a => a.type)).toEqual(['deal', 'enter_gift_shop']);
     });
 
-    it('rejects an unaffordable deal without charging cash or drawing cards', () => {
-        const result = processAction({ ...start(), cash: BASE_ANTE - 1, comps: 100 }, { type: 'deal' });
+    it.each(['entering_casino', 'deal_over'] as const)('ends on an unaffordable Deal from %s without charging cash or drawing cards', phase => {
+        const state = { ...start(), phase, cash: BASE_ANTE - 1, comps: 100 };
+        expect(getValidActions(state)).toEqual([{ type: 'deal' }, { type: 'enter_gift_shop' }]);
+        const result = processAction(state, { type: 'deal' });
         expect(result.nextState.phase).toBe('game_over');
         expect(result.nextState.cash).toBe(BASE_ANTE - 1);
         expect(result.nextState.dealsTaken).toBe(0);
+        expect(result.nextState.rngState).toBe(state.rngState);
+        expect(result.events).toContainEqual({ type: 'game_over', won: false, finalScore: state.totalScore });
         expect(result.events.some(e => e.type === 'cards_dealt')).toBe(false);
     });
 
@@ -168,17 +173,36 @@ describe('Cash ante and side-hand tickets', () => {
         expect(settled.phase).toBe('deal_over');
     });
 
-    it('ends after losses when cash cannot cover the next ante regardless of tickets', () => {
+    it('waits for Deal after losses when cash cannot cover the next ante regardless of tickets', () => {
         const settled = settle(act({ ...start(), cash: BASE_ANTE, comps: 100 }, { type: 'deal' }), []);
         expect(settled.cash).toBe(0);
         expect(settled.comps).toBe(100);
-        expect(settled.phase).toBe('game_over');
-        expect(getValidActions(settled)).toEqual([]);
+        expect(settled.phase).toBe('deal_over');
+        expect(getValidActions(settled)).toEqual([{ type: 'deal' }, { type: 'enter_gift_shop' }]);
+        expect(act(settled, { type: 'deal' }).phase).toBe('game_over');
+    });
+
+    it('lets players sell a relic after losing to afford another deal', () => {
+        const owned = act(start(), { type: 'debug_add_relic', relicId: 'hold' });
+        const refund = getRelicSellCashValue('hold');
+        const ante = 80;
+        // Leave one relic sale's worth missing after the ante and $10 loss.
+        const settled = settle(act({ ...owned, ante, cash: ante * 2 - refund + 10 }, { type: 'deal' }), []);
+        expect(settled).toMatchObject({ phase: 'deal_over', cash: ante - refund });
+        const inShop = act(settled, { type: 'enter_gift_shop' });
+        const index = inShop.inventory.findIndex(relic => relic.id === 'hold');
+        expect(getValidActions(inShop)).toContainEqual({ type: 'sell_relic', relicId: 'hold', index });
+        const sold = act(inShop, { type: 'sell_relic', relicId: 'hold', index });
+        expect(sold.cash).toBe(ante);
+        expect(sold.inventory.some(relic => relic.id === 'hold')).toBe(false);
+        const back = act(sold, { type: 'leave_shop' });
+        expect(back.phase).toBe('deal_over');
+        expect(act(back, { type: 'deal' })).toMatchObject({ phase: 'playing', cash: 0, dealsTaken: 2 });
     });
 
     it('compounds the ante every four completed deals, after final score, and refreshes stock once', () => {
         let state = { ...start(), cash: 10000 };
-        const antes = [50, 65, 80, 100, 125];
+        const antes = [50, 75, 115, 175, 265];
         for (let hand = 1; hand <= 16; hand++) {
             state = act(state, { type: 'deal' });
             const result = push(state);
@@ -199,18 +223,26 @@ describe('Cash ante and side-hand tickets', () => {
         }
     });
 
-    it('checks bankruptcy against the increased ante even when the old one is affordable', () => {
+    it('waits for Deal to check the increased ante even when the old one is affordable', () => {
         const result = push(act({ ...start(), cash: BASE_ANTE * 2 + 5, handsUntilAnteIncrease: 1 }, { type: 'deal' }));
-        expect(result.nextState).toMatchObject({ cash: BASE_ANTE + 5, ante: 65, phase: 'game_over' });
-        const types = result.events.map(e => e.type);
-        expect(types.indexOf('game_over')).toBeGreaterThan(types.indexOf('ante_increased'));
+        expect(result.nextState).toMatchObject({ cash: BASE_ANTE + 5, ante: 75, phase: 'deal_over' });
+        expect(result.events.some(event => event.type === 'game_over')).toBe(false);
+        expect(act(result.nextState, { type: 'deal' }).phase).toBe('game_over');
     });
 
-    it('recharges formerly per-casino actions on increase, after completing the fourth round', () => {
-        const state = act(start(), { type: 'debug_add_relic', relicId: 'redraw' });
-        const fourth = act({ ...state, phase: 'deal_over', dealsTaken: 3, handsUntilAnteIncrease: 1, tableActionCharges: { ...state.tableActionCharges, redraw: 0 } }, { type: 'deal' });
-        expect(fourth.tableActionCharges.redraw).toBe(0);
-        expect(push(fourth).nextState.tableActionCharges.redraw).toBe(3);
+    it.each(['double_down', 'surrender', 'discard', 'redraw', 'hold', 'switch'])('refills %s every two owned rounds independently of the ante', relicId => {
+        let state = act({ ...start(), cash: 10000, handsUntilAnteIncrease: 1 }, { type: 'debug_add_relic', relicId });
+        const capacity = state.tableActionCharges[relicId];
+        for (let round = 1; round <= 4; round++) {
+            state = act({ ...state, tableActionCharges: { ...state.tableActionCharges, [relicId]: 0 } }, { type: 'deal' });
+            expect(state.tableActionCharges[relicId]).toBe(0);
+            const before = state;
+            const result = push(state);
+            state = result.nextState;
+            expect(state.tableActionCharges[relicId]).toBe(round % 2 === 0 ? capacity : 0);
+            expect(before.inventory.find(relic => relic.id === relicId)?.state.rounds_since_recharge).toBe((round - 1) % 2);
+            expect(result.events.some(event => event.type === 'charge_gained' && event.relicId === relicId && event.reason === 'rounds')).toBe(round % 2 === 0);
+        }
     });
 
     it('keeps unvisited new stock badged across rounds, clears it on a visit and badges the next refresh', () => {

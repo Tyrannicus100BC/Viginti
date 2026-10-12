@@ -1,8 +1,25 @@
-import { type ScoreRowContext, type HandContext, type GameContext, type HandCompletionContext, type DealCompletionContext, type HandBustContext } from './types';
+import { type ScoreRowContext, type HandContext, type GameContext, type HandCompletionContext, type DealCompletionContext, type HandBustContext, type RelicConfig } from './types';
 import type { Card, HandScore } from '../../types';
 import { RANK_VALUES } from '../rules';
 
 // Helpers
+const createDecayingBonusHook = (type: 'chips' | 'mult') => ({
+    onDealCompletion: async (context: DealCompletionContext, relicState: { amount: number; decay_amount?: number }, config: RelicConfig) => {
+        const decayAmount = Math.max(0, Number(relicState.decay_amount ?? config.properties?.decay_amount ?? 0.1));
+        if (relicState.amount <= 0) {
+            context.removeRelic?.(config.id);
+            return;
+        }
+        await context.highlightRelic(config.id, {
+            trigger: () => {
+                context.modifyRunningSummary(type === 'chips' ? relicState.amount : 0, type === 'mult' ? relicState.amount : 0);
+                relicState.amount = Math.max(0, Number((relicState.amount - decayAmount).toFixed(8)));
+                if (relicState.amount <= 0) context.removeRelic?.(config.id);
+            }
+        });
+    }
+});
+
 const isFaceCard = (c: Card) => ['J', 'Q', 'K'].includes(c.rank);
 
 // Wait Helper
@@ -95,6 +112,30 @@ const createSuitBonusHook = (suit: string) => ({
             return { ...score, criteria: newCriteria, totalChips, totalMultiplier: totalMult, finalScore: Math.floor(totalChips * totalMult) };
         }
         return score;
+    }
+});
+
+// Card bonuses belong to the outcome row so they are scored and displayed once.
+const addWinMultiplier = (score: HandScore, bonus: number): HandScore => {
+    const criteria = score.criteria.map(row => row.id === 'win' || row.id === 'viginti'
+        ? { ...row, multiplier: Number((row.multiplier + bonus).toFixed(8)) }
+        : row);
+    const totalMultiplier = Number(criteria.reduce((sum, row) => sum + row.multiplier, 0).toFixed(8));
+    return { ...score, criteria, totalMultiplier,
+        finalScore: Math.floor(Number((score.totalChips * totalMultiplier).toFixed(8))) };
+};
+
+const createCardWinBonusHook = (ranks: string[]) => ({
+    onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => {
+        if (!context.isWin) return score;
+        const count = context.handCards.filter(card => (!card.type || card.type === 'standard') && ranks.includes(card.rank)).length;
+        return count ? addWinMultiplier(score, count * relicState.bonus_mult) : score;
+    },
+    onScoreRow: async (context: ScoreRowContext, _relicState: any, config: any) => {
+        if ((context.criterionId === 'win' || context.criterionId === 'viginti') &&
+            context.score.scoringCards.some(card => (!card.type || card.type === 'standard') && ranks.includes(card.rank))) {
+            await context.highlightRelic(config.id, { preDelay: 200 });
+        }
     }
 });
 
@@ -426,113 +467,13 @@ export const Hooks = {
     },
 
     // Specific Cards
-    star_bead_nines: {
-        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any, config: any) => {
-            if (!context.isWin) return score;
-            const matchingCards = context.handCards.filter(c => c.rank === '9');
-            const count = matchingCards.length;
-            if (count > 0) {
-                 const relicId = config?.id || 'star_bead';
-                 const newCriteria = [...score.criteria, {
-                    id: relicId as any,
-                    name: config?.name || 'Star Bead',
-                    count: 1,
-                    chips: 0,
-                    multiplier: count * relicState.bonus_mult,
-                    cardIds: matchingCards.map(c => c.id)
-                }];
-                const totalChips = newCriteria.reduce((s, c) => s + c.chips, 0);
-                const totalMult = newCriteria.reduce((s, c) => s + c.multiplier, 0);
-                return { ...score, criteria: newCriteria, totalChips, totalMultiplier: totalMult, finalScore: Math.floor(totalChips * totalMult) };
-            }
-            return score;
-        },
-        onScoreRow: async (context: ScoreRowContext, _relicState: any, config: any) => {
-             const relicId = config?.id || 'star_bead';
-             if (context.criterionId === relicId) {
-                 await context.highlightRelic(relicId, { preDelay: 200 });
-             }
-        }
-    },
-    heart_button_ten_four: {
-        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any, config: any) => {
-            if (!context.isWin) return score;
-            const matchingCards = context.handCards.filter(c => c.rank === '10' || c.rank === '4');
-            const count = matchingCards.length;
-            if (count > 0) {
-                 const relicId = config?.id || 'heart_button';
-                 const newCriteria = [...score.criteria, {
-                     id: relicId as any,
-                     name: config?.name || 'Heart Button',
-                     count: 1,
-                     chips: 0,
-                     multiplier: count * relicState.bonus_mult,
-                     cardIds: matchingCards.map(c => c.id)
-                 }];
-                 const totalChips = newCriteria.reduce((sum, crit) => sum + crit.chips, 0);
-                 const totalMult = newCriteria.reduce((sum, crit) => sum + crit.multiplier, 0);
-                 return { ...score, criteria: newCriteria, totalChips, totalMultiplier: totalMult, finalScore: Math.floor(totalChips * totalMult) };
-            }
-            return score;
-        },
-        onScoreRow: async (context: ScoreRowContext, _relicState: any, config: any) => {
-             const relicId = config?.id || 'heart_button';
-             if (context.criterionId === relicId) {
-                 await context.highlightRelic(relicId, { preDelay: 200 });
-             }
-        }
-    },
-    lucky_acorn_kings: {
-        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any, config: any) => {
-            if (!context.isWin) return score;
-            const matchingCards = context.handCards.filter(c => c.rank === 'K');
-            const count = matchingCards.length;
-            if (count > 0) {
-                 const relicId = config?.id || 'lucky_acorn';
-                 const newCriteria = [...score.criteria, {
-                     id: relicId as any,
-                     name: config?.name || 'Lucky Acorn',
-                     count: 1,
-                     chips: 0,
-                     multiplier: count * relicState.bonus_mult,
-                     cardIds: matchingCards.map(c => c.id)
-                 }];
-                 const totalChips = newCriteria.reduce((sum, crit) => sum + crit.chips, 0);
-                 const totalMult = newCriteria.reduce((sum, crit) => sum + crit.multiplier, 0);
-                 return { ...score, criteria: newCriteria, totalChips, totalMultiplier: totalMult, finalScore: Math.floor(totalChips * totalMult) };
-            }
-            return score;
-        },
-        onScoreRow: async (context: ScoreRowContext, _relicState: any, config: any) => {
-             const relicId = config?.id || 'lucky_acorn';
-             if (context.criterionId === relicId) {
-                 await context.highlightRelic(relicId, { preDelay: 200 });
-             }
-        }
-    },
+    star_bead_nines: createCardWinBonusHook(['9']),
+    heart_button_ten_four: createCardWinBonusHook(['10', '4']),
+    lucky_acorn_kings: createCardWinBonusHook(['K']),
 
     // Global
-    faded_tag_bonus: {
-        onDealCompletion: async (context: DealCompletionContext, relicState: any, config: any) => {
-            const relicId = config?.id || 'faded_tag';
-            const decayAmount = Math.max(0, Number(relicState.decay_amount ?? config?.properties?.decay_amount ?? 2));
-
-            if (relicState.amount <= 0) {
-                context.removeRelic?.(relicId);
-                return;
-            }
-
-            await context.highlightRelic(relicId, {
-                trigger: () => {
-                    context.modifyRunningSummary(0, relicState.amount);
-                    relicState.amount = Math.max(0, relicState.amount - decayAmount);
-                    if (relicState.amount <= 0) {
-                        context.removeRelic?.(relicId);
-                    }
-                }
-            });
-        }
-    },
+    faded_tag_bonus: createDecayingBonusHook('mult'),
+    faded_bill_bonus: createDecayingBonusHook('chips'),
     mini_shoe_bonus_chips: {
         onDealCompletion: async (context: DealCompletionContext, relicState: any, _config: any) => {
             await context.highlightRelic('mini_shoe', {
@@ -541,8 +482,8 @@ export const Hooks = {
         }
     },
     robe_slippers_bonus_mult: {
-        onDealCompletion: async (context: DealCompletionContext, relicState: any, _config: any) => {
-            await context.highlightRelic('robe_slippers', {
+        onDealCompletion: async (context: DealCompletionContext, relicState: any, config: any) => {
+            await context.highlightRelic(config.id, {
                  trigger: () => context.modifyRunningSummary(0, relicState.bonus_mult)
             });
         }
@@ -568,43 +509,24 @@ export const Hooks = {
 
     // Draw / Place Logic
     cloning_machine_draw: {
-        getDrawCount: (val: number, _context: GameContext, relicState: any) => val + relicState.extra_draws
+        getDrawCount: (val: number, context: GameContext, relicState: any) => {
+            const nextDraw = (relicState.draws_taken ?? 0) + 1;
+            if (!context.dryRun) relicState.draws_taken = nextDraw;
+            return nextDraw % 2 === 0 ? val + relicState.extra_draws : val;
+        }
     },
     redemption_bust_bonus: {
-        onCheckCardPlace: (context: any, _relicState: any, _config: any) => {
-            // Always wait on bust for Redemption (Second Chance) so player sees the bust before the rescue
-            return context.blackjackValue > 21;
-        },
-        onHandBust: async (_context: HandBustContext, relicState: any, _config: any) => {
+        onCheckCardPlace: (context: any) => context.blackjackValue > 21,
+        onHandBust: async (_context: HandBustContext, relicState: any) => {
             relicState.pending_bonus = true;
         },
         getDrawCount: (val: number, context: GameContext, relicState: any) => {
-            // Check pending bonus
-            if (relicState.pending_bonus) {
-                if (!context.dryRun) {
-                    // Reset active bonus from previous turn if any (though logic handles this by default)
-                    relicState.active_bonus = true;
-                    relicState.pending_bonus = false;
-                }
-                return val + relicState.extra_draw;
-            }
-             // Logic: active_bonus should be reset on new draw? 
-             // Actually, if we just set active_bonus = true, we need to know when to turn it off?
-             // The current implementation turned it off at start of draw.
-             // Revised logic:
-             if (!context.dryRun) {
-                 relicState.active_bonus = false; // Clear old active
-             }
-            return val;
-        },
-        getPlaceCount: (val: number, _context: GameContext, relicState: any) => {
-            if (relicState.active_bonus) {
-                return val + relicState.extra_place;
-            }
-            return val;
+            if (!relicState.pending_bonus) return val;
+            if (!context.dryRun) relicState.pending_bonus = false;
+            return val + relicState.extra_draw;
         }
     },
-    
+
     // Score relics
     safety_net_20: {
         onDealCompletion: async (_context: DealCompletionContext, relicState: any, _config: any) => {
@@ -617,7 +539,7 @@ export const Hooks = {
         onCardPlaced: async (context: any, relicState: any, _config: any) => {
             if (!relicState.armed && context.blackjackValue === 20) {
                  
-                 await context.highlightRelic('safety_net_20', {
+                 await context.highlightRelic('safety_net', {
                      trigger: async () => {
                          // Discard hand
                          context.modifyHand([]);
@@ -626,35 +548,12 @@ export const Hooks = {
                  });
             }
         },
-        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any, _config: any) => {
-            // If armed and the hand is a winner, add the bonus chips row
-            if (relicState.armed && context.isWin) {
-                const newCriteria = [...score.criteria, {
-                    id: 'safety_net' as any,
-                    name: 'Safety Net',
-                    count: 1,
-                    chips: relicState.bonus_chips,
-                    multiplier: 0,
-                    cardIds: []
-                }];
-                const totalChips = newCriteria.reduce((sum, crit) => sum + crit.chips, 0);
-                const totalMult = newCriteria.reduce((sum, crit) => sum + crit.multiplier, 0);
-                return { 
-                    ...score, 
-                    criteria: newCriteria, 
-                    totalChips, 
-                    totalMultiplier: totalMult, 
-                    finalScore: Math.floor(totalChips * totalMult) 
-                };
-            }
-            return score;
+        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any) => {
+            return relicState.armed && context.isWin ? addWinMultiplier(score, relicState.bonus_mult) : score;
         },
         onScoreRow: async (context: ScoreRowContext, relicState: any, config: any) => {
-            // When we hit our specific row ID during the scoring sequence, highlight the relic
-            if (context.criterionId === 'safety_net') {
-                 await context.highlightRelic(config.id, {
-                     trigger: () => context.modifyRunningSummary(relicState.bonus_chips, 0)
-                 });
+            if (relicState.armed && (context.criterionId === 'win' || context.criterionId === 'viginti')) {
+                await context.highlightRelic(config.id);
             }
         }
     },

@@ -1,4 +1,6 @@
-import { getPackDefinition, type PendingPack } from '../logic/packs';
+import { normalizeRelicInstance } from '../logic/relics/state';
+import { normalizeDeckProbabilities } from '../logic/specialCards';
+import { getPackDefinition, isPackItem, PACK_ITEM_TYPES, type PendingPack } from '../logic/packs';
 import { RelicManager } from '../logic/relics/manager';
 /**
  * GameBridge — Zustand store that wraps the pure game engine.
@@ -51,6 +53,8 @@ function isActionEquivalent(a: PlayerAction, b: PlayerAction): boolean {
             return a.drawIndex === b.drawIndex;
         case 'buy_shop_item':
             return a.itemId === b.itemId;
+        case 'choose_pack_card':
+            return a.cardId === (b as Extract<PlayerAction, { type: 'choose_pack_card' }>).cardId;
         case 'choose_raise':
             return (a as any).raiseId === (b as any).raiseId;
         case 'sell_relic':
@@ -199,6 +203,7 @@ interface GameBridgeState extends UIState {
     readonly inventory: readonly RelicInstance[];
     readonly relicSlots: number;
     readonly pendingRaiseChoices: readonly string[];
+    readonly pendingPackChoices: readonly string[];
     readonly pendingPack: PendingPack | null;
     readonly handUpgrades: import('../logic/handScoring').HandUpgrades;
     readonly tableActionCharges: Readonly<Record<string, number>>;
@@ -274,6 +279,7 @@ export const useGameBridge = create<GameBridgeState>((set, get) => {
         inventory: gs.inventory,
         relicSlots: gs.relicSlots,
         pendingRaiseChoices: gs.pendingRaiseChoices,
+        pendingPackChoices: gs.pendingPackChoices,
         pendingPack: gs.pendingPack,
         handUpgrades: gs.handUpgrades ?? {},
         tableActionCharges: gs.tableActionCharges,
@@ -594,13 +600,25 @@ export const useGameBridge = create<GameBridgeState>((set, get) => {
                 // or assume it's the pure GameState.
                 
                 const rawState = parsed.gameState || parsed;
-                const inventory = rawState.inventory.filter((instance: RelicInstance) => RelicManager.getRelicConfig(instance.id));
+                const inventory: RelicInstance[] = rawState.inventory
+                    .filter((instance: RelicInstance) => RelicManager.getRelicConfig(instance.id))
+                    .map(normalizeRelicInstance);
+                const actionRelics = inventory.filter(instance => RelicManager.getRelicConfig(instance.id)?.tableAction);
                 const nextGameState = {
                     ...rawState,
+                    deckProbabilities: normalizeDeckProbabilities(rawState.deckProbabilities),
                     inventory,
+                    tableActionCharges: Object.fromEntries(actionRelics.map(instance => {
+                        const action = RelicManager.getRelicConfig(instance.id)!.tableAction!;
+                        return [instance.id, rawState.tableActionCharges?.[instance.id] ?? action.maxCharges];
+                    })),
+                    tableActionHeldCards: Object.fromEntries(actionRelics.map(instance => [instance.id, rawState.tableActionHeldCards?.[instance.id] ?? null])),
                     relicSlots: Math.max(4, inventory.length, rawState.relicSlots ?? 4),
                     pendingRaiseChoices: rawState.pendingRaiseChoices ?? [],
-                    pendingPack: rawState.pendingRaiseChoices?.length ? {
+                    pendingPackChoices: getPackDefinition(rawState.pendingPack?.packId).family === 'relic'
+                        ? (rawState.pendingPackChoices ?? []).filter((id: string) => RelicManager.getRelicConfig(id))
+                        : rawState.pendingPackChoices ?? [],
+                    pendingPack: (rawState.pendingPack || rawState.pendingRaiseChoices?.length || rawState.pendingPackChoices?.length) ? {
                         packId: getPackDefinition(rawState.pendingPack?.packId).id,
                         picksRemaining: rawState.pendingPack?.picksRemaining ?? 1,
                     } : null,
@@ -609,11 +627,13 @@ export const useGameBridge = create<GameBridgeState>((set, get) => {
                     shopHasNewStock: rawState.shopHasNewStock ?? false,
                     handUpgrades: rawState.handUpgrades ?? {},
                     // Imported shops use the same stock presentation as new runs.
-                    shopItems: (rawState.shopItems ?? []).map((item: ShopItem) => {
+                    shopItems: (rawState.shopItems ?? []).filter((item: ShopItem) =>
+                        !['Relic', 'Control', 'Score'].includes(item.type) || RelicManager.getRelicConfig(item.id)
+                    ).map((item: ShopItem) => {
                         if (item.type === 'Control' || item.type === 'Score') return { ...item, type: 'Relic' };
-                        if (item.type === 'Raise' || item.type === 'RaisePack') {
+                        if (item.type === 'Raise' || isPackItem(item)) {
                             const pack = getPackDefinition(item.packId);
-                            return { ...item, type: 'RaisePack', packId: pack.id, cost: item.type === 'Raise' ? pack.cost : item.cost, nameOverride: pack.name };
+                            return { ...item, type: PACK_ITEM_TYPES[pack.family], packId: pack.id, cost: item.type === 'Raise' ? pack.cost : item.cost, nameOverride: pack.name };
                         }
                         return item;
                     }),

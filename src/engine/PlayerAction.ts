@@ -33,6 +33,8 @@ export type PlayerAction =
     | { type: 'buy_shop_item'; itemId: string }
     | { type: 'buy_relic_slot' }
     | { type: 'choose_raise'; raiseId: string }
+    | { type: 'choose_pack_card'; cardId: string }
+    | { type: 'skip_pack' }
     | { type: 'restock_shop' }
     | { type: 'sell_relic'; relicId: string; index: number }
     | { type: 'leave_shop' }

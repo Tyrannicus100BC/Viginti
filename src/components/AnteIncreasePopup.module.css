@@ -1,0 +1,133 @@
+.overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 6500;
+    display: grid;
+    place-items: center;
+    background: rgba(5, 12, 18, .65);
+    backdrop-filter: blur(5px);
+    animation: backdropEnter 240ms ease-out both;
+}
+
+.popup {
+    transform: translateY(-60px);
+    padding: 32px 48px;
+    border: 1px solid #d4af37;
+    border-radius: 16px;
+    background: radial-gradient(ellipse at 50% 0, #354039, #1c2833 75%);
+    color: #f9e6a3;
+    text-align: center;
+    box-shadow: 0 16px 70px #0009;
+    cursor: pointer;
+    animation: popupEnter 480ms cubic-bezier(.2, .8, .25, 1) both;
+}
+
+.popup:focus { outline: none; }
+.popup:focus-visible { outline: 2px solid #f9e6a3; outline-offset: 5px; }
+
+.title {
+    display: block;
+    margin-bottom: 22px;
+    font-size: 32px;
+    font-weight: 700;
+    animation: reveal 380ms ease-out 160ms both;
+}
+
+.amounts {
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 16px;
+    font-variant-numeric: tabular-nums;
+}
+
+.previous {
+    color: #b1b8b7;
+    font-size: 26px;
+    animation: reveal 300ms ease-out 340ms both;
+}
+
+.arrow {
+    font-size: 28px;
+    color: #d4af37;
+    animation: arrowEnter 300ms ease-out 450ms both;
+}
+
+.next {
+    display: inline-block;
+    min-width: 3.5ch;
+    font-size: 48px;
+    line-height: 1.1;
+    font-weight: 800;
+    animation: reveal 280ms ease-out 550ms both;
+}
+
+.settled {
+    color: #ffe8a0;
+    animation: amountLand 480ms ease-out both;
+}
+
+.increase {
+    display: block;
+    margin-top: 12px;
+    color: #d4af37;
+    font-size: 18px;
+    font-weight: 700;
+    opacity: 0;
+}
+
+.increaseVisible { animation: reveal 300ms ease-out both; }
+
+.hint {
+    display: block;
+    margin-top: 22px;
+    color: #d2c5a0;
+    font-size: 15px;
+    animation: reveal 350ms ease-out 1800ms both;
+}
+
+.srOnly {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+}
+
+@keyframes backdropEnter {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes popupEnter {
+    0% { opacity: 0; transform: translateY(-32px) scale(.92); }
+    75% { opacity: 1; transform: translateY(-64px) scale(1.015); }
+    100% { opacity: 1; transform: translateY(-60px) scale(1); }
+}
+
+@keyframes reveal {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes arrowEnter {
+    from { opacity: 0; transform: translateX(-10px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes amountLand {
+    0% { transform: scale(1); text-shadow: 0 0 0 transparent; }
+    35% { transform: scale(1.15); text-shadow: 0 0 24px #ffd564b3; }
+    100% { transform: scale(1); text-shadow: 0 0 12px #ffd56433; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .overlay, .popup, .title, .previous, .arrow, .next, .increase, .hint {
+        animation: none;
+        opacity: 1;
+    }
+}

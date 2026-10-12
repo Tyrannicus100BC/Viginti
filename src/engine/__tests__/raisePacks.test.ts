@@ -2,13 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { createInitialState, getValidActions, processAction } from '../engine';
 import type { GameState } from '../GameState';
 import type { PlayerAction } from '../PlayerAction';
-import { generateRaise, generateRaiseChoices, getHandPayout, getHandRaiseChanges, getRaise, HAND_TYPES, PACK_RAISES, RAISE_AFFIX_SLOTS, formatRaiseCash, formatRaiseMult } from '../../logic/handScoring';
+import { generateRaise, generateRaiseChoices, getHandPayout, getHandRaiseChanges, getRaise, HAND_TYPES, PACK_RAISES, RAISE_AFFIXES, RAISE_AFFIX_SLOTS, formatRaiseCash, formatRaiseMult } from '../../logic/handScoring';
 import { getRelicSide, getSideSlotCount } from '../../logic/relics/inventory';
 import { SeededRNG } from '../rng';
 import { TUTORIAL_STEPS } from '../tutorial/definitions';
 import { useGameBridge } from '../../store/gameBridge';
 import { evaluateHandScore } from '../../logic/scoring';
-import { getPackDefinition, PACKS, rollPackDefinition } from '../../logic/packs';
+import { getPackDefinition, isPackItem, PACKS, rollPackDefinition } from '../../logic/packs';
 
 const act = (state: GameState, action: PlayerAction) => processAction(state, action).nextState;
 const shop = (): GameState => act(act(createInitialState(), {
@@ -33,7 +33,7 @@ describe('relic slots and raise packs', () => {
     });
 
     it('stocks four unified relics and two packs, then pays once and applies exactly one choice', () => {
-        const original = { ...shop(), shopItems: shop().shopItems.map(item => item.type === 'RaisePack' ? { ...item, packId: 'raise_basic' as const, cost: 40 } : item) };
+        const original = { ...shop(), shopItems: shop().shopItems.map(item => isPackItem(item) ? { ...item, type: 'RaisePack' as const, packId: 'raise_basic' as const, cost: 40 } : item) };
         expect(original.shopItems.filter(item => item.type === 'Relic')).toHaveLength(4);
         expect(original.shopItems.filter(item => item.type === 'RaisePack')).toHaveLength(2);
         const pack = original.shopItems.find(item => item.type === 'RaisePack')!;
@@ -42,7 +42,7 @@ describe('relic slots and raise packs', () => {
         expect(opened.handUpgrades).toEqual({});
         expect(opened.pendingRaiseChoices).toHaveLength(3);
         expect(new Set(opened.pendingRaiseChoices).size).toBe(3);
-        expect(getValidActions(opened)).toEqual(opened.pendingRaiseChoices.map(raiseId => ({ type: 'choose_raise', raiseId })));
+        expect(getValidActions(opened)).toEqual([...opened.pendingRaiseChoices.map(raiseId => ({ type: 'choose_raise', raiseId })), { type: 'skip_pack' }]);
         for (const action of [
             { type: 'leave_shop' }, { type: 'restock_shop' }, { type: 'buy_relic_slot' },
             { type: 'buy_shop_item', itemId: pack.id }, { type: 'choose_raise', raiseId: 'fake' },
@@ -69,7 +69,7 @@ describe('relic slots and raise packs', () => {
         expect(Object.keys(next.handUpgrades)).toHaveLength(1);
     });
 
-    it.each(PACKS)('opens $name with its offer and selection counts', pack => {
+    it.each(PACKS.filter(pack => pack.family === 'raise'))('opens $name with its offer and selection counts', pack => {
         const state = { ...shop(), cash: 1000, shopItems: [{ id: 'pack', type: 'RaisePack' as const, packId: pack.id, cost: pack.cost }] };
         const opened = act(state, { type: 'buy_shop_item', itemId: 'pack' });
         expect(opened.pendingRaiseChoices).toHaveLength(pack.offerCount);
@@ -129,8 +129,8 @@ describe('relic slots and raise packs', () => {
 
     it('migrates old shop stock to relics and packs while retaining earned upgrades', () => {
         const legacy = { ...shop(), handUpgrades: { raise_pair_cash: 2 },
-            inventory: Array.from({ length: 6 }, (_, i) => ({ id: ['redraw', 'surrender', 'discard', 'switch', 'double_down', 'ruler'][i], state: {} })),
-            shopItems: [{ id: 'medal', type: 'Score', cost: 70 }, { id: 'raise_pair_mult', type: 'Raise', cost: 60 }] };
+            inventory: Array.from({ length: 6 }, (_, i) => ({ id: ['redraw', 'surrender', 'discard', 'switch', 'double_down', 'hold'][i], state: {} })),
+            shopItems: [{ id: 'star_bead', type: 'Score', cost: 70 }, { id: 'raise_pair_mult', type: 'Raise', cost: 60 }] };
         const { relicSlots: omittedSlots, pendingRaiseChoices: omittedChoices, ...oldState } = legacy;
         expect(omittedSlots).toBeDefined();
         expect(omittedChoices).toBeDefined();
@@ -175,6 +175,11 @@ describe('relic slots and raise packs', () => {
             expect(generateRaise(copy, rarity)).toEqual(raise);
             expect(copy.getState()).toBe(rng.getState());
             expect(raise.affixes!.reduce((total, affix) => total + affix.slotCost, 0)).toBe(RAISE_AFFIX_SLOTS[rarity]);
+            const bonuses = raise.modifiers.flatMap(effect => [
+                ...(effect.chips ? [`${effect.handTypeId}:chips`] : []),
+                ...(effect.mult ? [`${effect.handTypeId}:mult`] : []),
+            ]);
+            expect(new Set(bonuses).size).toBe(bonuses.length);
             const negative = raise.modifiers.filter(effect => effect.chips < 0 || effect.mult < 0);
             penalties.add(negative.length);
             expect(negative.length).toBeLessThanOrEqual(1);
@@ -197,6 +202,41 @@ describe('relic slots and raise packs', () => {
         }
         expect(kinds).toEqual(new Set(rarity === 'Common' ? ['simple', 'tradeoff'] : ['simple', 'tradeoff', 'double']));
         expect(penalties).toEqual(new Set([0, 1]));
+    });
+
+    it.each([
+        ['simple_pair_mult', 'tradeoff_pair_mult_flush_mult'],
+        ['simple_pair_mult', 'tradeoff_flush_cash_pair_mult'],
+        ['tradeoff_pair_mult_flush_mult', 'simple_pair_mult'],
+        ['tradeoff_pair_mult_flush_mult', 'simple_flush_mult'],
+        ['simple_pair_cash', 'simple_pair_cash'],
+        ['simple_pair_mult', 'double_pair_mult'],
+    ])('prevents %s from overlapping with %s on one card', (firstId, secondId) => {
+        const first = RAISE_AFFIXES.find(affix => affix.id === firstId)!;
+        const second = RAISE_AFFIXES.find(affix => affix.id === secondId)!;
+        const pickRoll = (id: string, kind: typeof first.kind) => {
+            const pool = RAISE_AFFIXES.filter(affix => affix.kind === kind);
+            return (pool.findIndex(affix => affix.id === id) + 0.5) / pool.length;
+        };
+        const kindRoll = { simple: 0, tradeoff: 0.8, double: 0.99 };
+        const rolls = [kindRoll[first.kind], pickRoll(firstId, first.kind), kindRoll[second.kind], pickRoll(secondId, second.kind)];
+        const rng = new SeededRNG(1);
+        rng.next = () => rolls.shift()!;
+        const raise = generateRaise(rng, second.kind === 'double' ? 'Rare' : 'Uncommon');
+        expect(raise.affixes![0].id).toBe(firstId);
+        expect(raise.affixes![1].id).not.toBe(secondId);
+        const bonuses = raise.modifiers.map(effect => `${effect.handTypeId}:${effect.chips ? 'chips' : 'mult'}`);
+        expect(new Set(bonuses).size).toBe(bonuses.length);
+    });
+
+    it('allows chips and multiplier modifiers for the same hand on one card', () => {
+        const rolls = [0, 0.45, 0, 0.5];
+        const rng = new SeededRNG(1);
+        rng.next = () => rolls.shift()!;
+        expect(generateRaise(rng, 'Uncommon').modifiers).toEqual([
+            { handTypeId: 'pair', chips: 5, mult: 0 },
+            { handTypeId: 'pair', chips: 0, mult: 0.1 },
+        ]);
     });
 
     it('rejects compositions with unknown affixes, an incorrect budget or two penalties', () => {

@@ -17,7 +17,7 @@ describe('ante increase presentation', () => {
         const events: GameEvent[] = [
             { type: 'deal_scoring_complete', totalChips: 25, totalMult: 1, finalScore: 25 },
             { type: 'chip_collection', amount: 25, newTotalScore: 25, newCash: 115 },
-            { type: 'ante_increased', previousAnte: 50, ante: 65, handsUntilAnteIncrease: 4 },
+            { type: 'ante_increased', previousAnte: 50, ante: 75, handsUntilAnteIncrease: 4 },
             { type: 'phase_changed', from: 'scoring', to: 'deal_over' },
         ];
         let dismiss: (() => void) | undefined;
@@ -29,10 +29,10 @@ describe('ante increase presentation', () => {
         expect(patches).toContainEqual({ isCollectingChips: false });
         expect(patches.some(patch => patch.anteIncrease)).toBe(false);
         await vi.advanceTimersByTimeAsync(200);
-        expect(patches.at(-1)).toMatchObject({ anteIncrease: { previousAnte: 50, ante: 65 }, ante: 65, handsUntilAnteIncrease: 4 });
+        expect(patches.at(-1)).toMatchObject({ anteIncrease: { previousAnte: 50, ante: 75 }, ante: 75, handsUntilAnteIncrease: 4 });
         expect(patches.some(patch => patch.phase === 'deal_over')).toBe(false);
         await vi.advanceTimersByTimeAsync(60000);
-        expect(patches.at(-1)).toMatchObject({ anteIncrease: { previousAnte: 50, ante: 65 } });
+        expect(patches.at(-1)).toMatchObject({ anteIncrease: { previousAnte: 50, ante: 75 } });
         expect(patches.some(patch => patch.phase === 'deal_over')).toBe(false);
         expect(dismiss).toBeDefined();
         dismiss!();
@@ -59,7 +59,7 @@ describe('ante increase presentation', () => {
         await vi.runAllTimersAsync();
         await vi.advanceTimersByTimeAsync(60000);
         expect(useGameBridge.getState()).toMatchObject({
-            phase: 'scoring', anteIncrease: { previousAnte: 50, ante: 65 }, isProcessingEvents: true,
+            phase: 'scoring', anteIncrease: { previousAnte: 50, ante: 75 }, isProcessingEvents: true,
         });
         useGameBridge.getState().continueAnteIncrease();
         await vi.runAllTimersAsync();
@@ -73,7 +73,7 @@ describe('ante increase presentation', () => {
         const waitForAnteContinue = vi.fn(() => new Promise<void>(() => {}));
         const patches: Record<string, unknown>[] = [];
         await playEvents([
-            { type: 'ante_increased', previousAnte: 50, ante: 65, handsUntilAnteIncrease: 4 },
+            { type: 'ante_increased', previousAnte: 50, ante: 75, handsUntilAnteIncrease: 4 },
             { type: 'phase_changed', from: 'scoring', to: 'deal_over' },
         ], { updateUI: patch => patches.push(patch), sfx: null, getSpeed: () => 1, headless: true, waitForAnteContinue });
         expect(waitForAnteContinue).not.toHaveBeenCalled();

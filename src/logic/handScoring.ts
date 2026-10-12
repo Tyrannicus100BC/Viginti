@@ -18,15 +18,15 @@ interface HandTypeDefinition {
     description: string;
     chipCards: boolean;
     compTickets?: number;
-    variant?: { id: 'viginti' | 'bust'; name: string; chips: number; mult: number };
+    variant?: { id: 'viginti' | 'bust'; name: string; icon?: string; chips: number; mult: number };
 }
 
 export const HAND_TYPES: readonly HandTypeDefinition[] = [
-    { id: 'win', name: 'Win', icon: '🏆', chips: 10, mult: 0, compTickets: 1, description: 'Beat the dealer. Exactly 21 has a higher base payout. Win or Viginti earns +1 comp ticket.', chipCards: false, variant: { id: 'viginti', name: '21', chips: 20, mult: 0.1 } },
-    { id: 'loss', name: 'Lose', icon: '💥', chips: -10, mult: 0, description: 'Lose to the dealer. Busts have a larger base penalty. A push has no outcome payout.', chipCards: false, variant: { id: 'bust', name: 'Bust', chips: -20, mult: -0.1 } },
-    { id: 'pair', name: 'Pair', icon: '🎴', chips: 0, mult: 0.1, description: 'Every two cards of the same rank. Three of a kind contains three pairs.', chipCards: true },
-    { id: 'straight', name: 'Straight', icon: '📈', chips: 10, mult: 0, description: 'Every separate run of two or more ranks. Aces can be high or low.', chipCards: true },
-    { id: 'flush', name: 'Flush', icon: '♠', chips: 0, mult: 0, description: 'Every suit group of two or more cards.', chipCards: true },
+    { id: 'win', name: 'Win', icon: '/hands/win.svg', chips: 10, mult: 0, compTickets: 1, description: 'Beat the dealer. Exactly 21 has a higher base payout. Win or Viginti earns +1 comp ticket.', chipCards: false, variant: { id: 'viginti', name: '21', icon: '/hands/viginti.svg', chips: 20, mult: 0.1 } },
+    { id: 'loss', name: 'Lose', icon: '/hands/lose.svg', chips: -10, mult: 0, description: 'Lose to the dealer. Busts have a larger base penalty. A push has no outcome payout.', chipCards: false, variant: { id: 'bust', name: 'Bust', icon: '/hands/bust.svg', chips: -20, mult: -0.1 } },
+    { id: 'pair', name: 'Pair', icon: '/hands/pair.svg', chips: 0, mult: 0.1, description: 'Every two cards of the same rank. Three of a kind contains three pairs.', chipCards: true },
+    { id: 'straight', name: 'Straight', icon: '/hands/straight.svg', chips: 10, mult: 0, description: 'Every separate run of two or more ranks. Aces can be high or low.', chipCards: true },
+    { id: 'flush', name: 'Flush', icon: '/hands/flush.svg', chips: 0, mult: 0, description: 'Every suit group of two or more cards.', chipCards: true },
 ] as const;
 
 export interface RaiseModifier {
@@ -71,6 +71,7 @@ export const RAISE_AFFIXES: readonly RaiseAffix[] = HAND_TYPES.flatMap(hand => (
     }))),
 ]));
 const AFFIX_BY_ID = new Map(RAISE_AFFIXES.map(affix => [affix.id, affix]));
+const modifierKey = (effect: RaiseModifier) => `${effect.handTypeId}:${effect.chips ? 'chips' : 'mult'}`;
 
 function buildAffixRaise(rarity: RelicRarity, affixes: readonly RaiseAffix[]): Raise {
     const modifiers = affixes.flatMap(affix => affix.modifiers);
@@ -99,15 +100,21 @@ function decodeAffixRaise(id: string): Raise | undefined {
 
 export function generateRaise(rng: SeededRNG, rarity: RelicRarity): Raise {
     const affixes: RaiseAffix[] = [];
+    const usedBonuses = new Set<string>();
     let remaining = RAISE_AFFIX_SLOTS[rarity];
     let hasPenalty = false;
     while (remaining > 0) {
+        // Reserve both sides of a tradeoff so later affixes cannot alter either bonus again.
+        const candidates = RAISE_AFFIXES.filter(affix => affix.slotCost <= remaining
+            && (affix.kind !== 'tradeoff' || !hasPenalty)
+            && affix.modifiers.every(effect => !usedBonuses.has(modifierKey(effect))));
         const kinds = (['simple', 'tradeoff', 'double'] as const)
-            .filter(kind => (kind !== 'double' || remaining >= 2) && (kind !== 'tradeoff' || !hasPenalty));
+            .filter(kind => candidates.some(affix => affix.kind === kind));
         let roll = rng.next() * kinds.reduce((total, kind) => total + AFFIX_KIND_WEIGHTS[kind], 0);
         const kind = kinds.find(kind => { roll -= AFFIX_KIND_WEIGHTS[kind]; return roll < 0; })!;
-        const affix = rng.pick(RAISE_AFFIXES.filter(affix => affix.kind === kind));
+        const affix = rng.pick(candidates.filter(affix => affix.kind === kind));
         affixes.push(affix);
+        affix.modifiers.forEach(effect => usedBonuses.add(modifierKey(effect)));
         remaining -= affix.slotCost;
         if (kind === 'tradeoff') hasPenalty = true;
     }
@@ -188,7 +195,7 @@ export function generateRaiseChoices(rng: SeededRNG, count = 3): Raise[] {
     const offeredEffects = new Set<string>();
     while (choices.length < count) {
         const roll = rng.next();
-        const rarity: RelicRarity = roll < 0.6 ? 'Common' : roll < 0.9 ? 'Uncommon' : 'Rare';
+        const rarity: RelicRarity = roll < 0.7 ? 'Common' : roll < 0.95 ? 'Uncommon' : 'Rare';
         const raise = generateRaise(rng, rarity);
         // Different roll orders can produce the same displayed card.
         const effects = `${rarity}:${raise.modifiers.map(effect => `${effect.handTypeId}:${effect.chips}:${effect.mult}`).sort().join('|')}`;

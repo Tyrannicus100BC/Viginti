@@ -11,7 +11,7 @@ import type { ShopItem } from '../engine/GameState';
 import { useGameBridge } from '../store/gameBridge';
 import type { PackSourceRect } from './RaisePackChoice';
 import { RaisePackArt } from './RaisePackArt';
-import { getPackDefinition } from '../logic/packs';
+import { getPackDefinition, hasPendingPack, isPackItem } from '../logic/packs';
 import { getRelicRarityFrameColor, getRelicRarityTextColor } from '../logic/relics/rarity';
 
 interface GiftShopProps {
@@ -41,7 +41,7 @@ export const GiftShop: React.FC<GiftShopProps> = ({
     onRelicPurchased
 }) => {
     const isProcessingEvents = useGameBridge(state => state.isProcessingEvents);
-    const { inventory, shopItems, buyShopItem, cash, restockGiftShop, giftShopRestockCost, relicSlots, buyRelicSlot, pendingRaiseChoices, isSellingMode, toggleSellingMode } = useGameStore();
+    const { inventory, shopItems, buyShopItem, cash, restockGiftShop, giftShopRestockCost, relicSlots, buyRelicSlot, pendingRaiseChoices, pendingPackChoices, pendingPack, isSellingMode, toggleSellingMode } = useGameStore();
     const disabledButtons: string[] = [];
 
     const [fullSlotErrorItemId, setFullSlotErrorItemId] = React.useState<string | null>(null);
@@ -276,10 +276,10 @@ export const GiftShop: React.FC<GiftShopProps> = ({
         return () => window.clearTimeout(timeoutId);
     }, [isExiting, onExitAnimationComplete]);
 
-    const relics = (shopItems as ShopItem[]).filter(i => i.type !== 'Raise' && i.type !== 'RaisePack');
+    const relics = (shopItems as ShopItem[]).filter(i => i.type !== 'Raise' && !isPackItem(i));
     const relicSlotsOnShelf = Array.from({ length: 4 }, (_, i) => relics[i] ?? null);
-    const packs = (shopItems as ShopItem[]).filter(i => i.type === 'RaisePack' && !i.purchased);
-    const choosingRaise = isOpeningPack || pendingRaiseChoices.length > 0;
+    const packs = (shopItems as ShopItem[]).filter(i => isPackItem(i) && !i.purchased);
+    const choosingRaise = isOpeningPack || hasPendingPack({ pendingRaiseChoices, pendingPackChoices, pendingPack });
     const canAffordRestock = cash >= giftShopRestockCost && !choosingRaise;
     const slotCost = getRelicSlotCost(relicSlots);
 
@@ -289,16 +289,16 @@ export const GiftShop: React.FC<GiftShopProps> = ({
             disabled={cash < item.cost || item.purchased || choosingRaise || isProcessingEvents}
             onClick={event => {
                 const rect = event.currentTarget.getBoundingClientRect();
-                flushSync(() => onRaisePackPurchased?.({ left: rect.left, top: rect.top, width: rect.width, height: rect.height }));
+                flushSync(() => onRaisePackPurchased?.({ left: rect.left, top: rect.top, width: rect.width, height: rect.height, packId: pack.id }));
                 void buyShopItem(item.id).then(() => {
                     // A rejected buffered purchase must not leave an empty reveal on screen.
-                    if (!useGameBridge.getState().pendingRaiseChoices.length) onRaisePackPurchased?.(null);
+                    if (!hasPendingPack(useGameBridge.getState())) onRaisePackPurchased?.(null);
                 }).catch(() => onRaisePackPurchased?.(null));
             }}
             aria-label={`Buy ${pack.name}, ${pack.rarity}, choose ${pack.pickCount} of ${pack.offerCount}, for $${item.cost}`}>
             <span className={styles.packRarity} style={{ color: getRelicRarityTextColor(pack.rarity) }}>{pack.rarity}</span>
             <span className={styles.raisePrice}>{'$' + item.cost}</span>
-            <RaisePackArt />
+            <RaisePackArt family={pack.family} />
             <span className={styles.raiseHand}>{pack.name}</span>
             <span className={styles.raiseKind}>Choose {pack.pickCount} of {pack.offerCount}</span>
         </button>;
@@ -438,7 +438,7 @@ export const GiftShop: React.FC<GiftShopProps> = ({
                         </div>
                     </section>
                     <section className={styles.rightShelf} aria-labelledby="gift-shop-raises-heading">
-                        <h2 id="gift-shop-raises-heading" className={styles.zoneHeader}>RAISE PACKS</h2>
+                        <h2 id="gift-shop-raises-heading" className={styles.zoneHeader}>PACKS</h2>
                         <div id="gift-shop-raises" className={styles.raisesRow}>
                             {packs.map(item => <div key={item.id} className={styles.raiseSlot}>
                                 {renderPack(item)}

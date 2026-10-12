@@ -60,15 +60,17 @@ describe('permanent hand scoring and Raises', () => {
         expect(evaluateHandScore(cards, false, false, [], 0, undefined, 'loss').criteria.map(row => row.id)).toEqual(['loss', 'pair']);
     });
 
-    it('adds mixed and repeated Raises before conditional relic bonuses', () => {
+    it('adds mixed and repeated Raises alongside card relic bonuses', () => {
         const upgrades = { raise_pair_combo: 2, raise_pair_mult: 1, raise_flush_cash: 3 };
         const payout = getHandPayout('pair', upgrades);
         expect(payout).toMatchObject({ chips: 40, mult: 1.6, count: 3 });
         const score = evaluateHandScore(cards, true, false, [], 0, undefined, 'win', upgrades);
         expect(score.criteria.find(row => row.id === 'pair')).toMatchObject({ chips: 14 + payout.chips, multiplier: payout.mult });
-        const medal = RelicManager.getRelicConfig('medal')!;
-        const withRelic = evaluateHandScore(cards, true, false, [{ id: medal.id, state: { ...medal.properties } }], 0, undefined, 'win', upgrades);
-        expect(withRelic.criteria.find(row => row.id === 'pair')?.chips).toBe(84);
+        const bead = RelicManager.getRelicConfig('star_bead')!;
+        const nines = cards.map(card => ({ ...card, rank: '9' as const }));
+        const withRelic = evaluateHandScore(nines, true, false, [{ id: bead.id, state: { ...bead.properties } }], 0, undefined, 'win', upgrades);
+        expect(withRelic.criteria.find(row => row.id === 'pair')).toMatchObject({ chips: 18 + payout.chips, multiplier: payout.mult });
+        expect(withRelic.criteria.find(row => row.id === 'win')?.multiplier).toBe(0.4);
         expect(getHandPayout('pair', upgrades)).toEqual(payout);
     });
 
@@ -133,7 +135,7 @@ describe('permanent hand scoring and Raises', () => {
     });
 
     it('offers owned Raises again while excluding owned relics', () => {
-        const stock = generateShopItems([{ type: 'Raise', count: 1, specificIds: ['raise_pair_mult'] }, { type: 'Score', count: 1, specificIds: ['medal'] }], [{ id: 'medal', state: {} }], undefined, new SeededRNG(42));
+        const stock = generateShopItems([{ type: 'Raise', count: 1, specificIds: ['raise_pair_mult'] }, { type: 'Score', count: 1, specificIds: ['star_bead'] }], [{ id: 'star_bead', state: {} }], undefined, new SeededRNG(42));
         expect(stock.map(item => item.id)).toEqual(['raise_pair_mult']);
     });
 
@@ -146,12 +148,12 @@ describe('permanent hand scoring and Raises', () => {
         const relics = RelicManager.getAllRelics();
         const state: GameState = { ...stocked(),
             inventory: relics.slice(0, 4).map(relic => ({ id: relic.id, state: {} })),
-            shopItems: [{ id: 'medal', type: 'Relic', cost: 40 }, { id: 'raise_pair_mult', type: 'Raise', cost: 60 }] };
-        expect(act(state, { type: 'buy_shop_item', itemId: 'medal' })).toEqual(state);
-        expect(getValidActions(state)).not.toContainEqual({ type: 'buy_shop_item', itemId: 'medal' });
+            shopItems: [{ id: 'star_bead', type: 'Relic', cost: 40 }, { id: 'raise_pair_mult', type: 'Raise', cost: 60 }] };
+        expect(act(state, { type: 'buy_shop_item', itemId: 'star_bead' })).toEqual(state);
+        expect(getValidActions(state)).not.toContainEqual({ type: 'buy_shop_item', itemId: 'star_bead' });
         const expanded = act(state, { type: 'buy_relic_slot' });
         expect(expanded.relicSlots).toBe(5);
-        expect(act(expanded, { type: 'buy_shop_item', itemId: 'medal' }).inventory).toHaveLength(5);
+        expect(act(expanded, { type: 'buy_shop_item', itemId: 'star_bead' }).inventory).toHaveLength(5);
         expect(act(state, { type: 'buy_shop_item', itemId: 'raise_pair_mult' }).handUpgrades.raise_pair_mult).toBe(1);
     });
 });

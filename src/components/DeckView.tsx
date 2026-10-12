@@ -2,6 +2,7 @@ import { ENHANCE_CASH_COSTS, getRemovalCashCost } from '../engine/economy';
 import React from 'react';
 import type { Card as CardType, Suit, Rank } from '../types';
 import type { DeckProbabilities } from '../engine/GameState';
+import { getSpecialWeights, SPECIAL_COLORS, SPECIAL_LABELS } from '../logic/specialCards';
 import styles from './DeckView.module.css';
 
 interface DeckViewProps {
@@ -72,6 +73,7 @@ export const DeckView: React.FC<DeckViewProps> = ({
     // We'll calculate percentages for display.
     const suitTotal = (probabilities?.suits.hearts ?? 0) + (probabilities?.suits.diamonds ?? 0) + (probabilities?.suits.clubs ?? 0) + (probabilities?.suits.spades ?? 0) || 1;
     const rankTotal = (probabilities?.ranks.ace ?? 0) + (probabilities?.ranks.face ?? 0) + (probabilities?.ranks.upper ?? 0) + (probabilities?.ranks.lower ?? 0) || 1;
+    const specialWeights = getSpecialWeights(probabilities);
 
     const renderProbabilityBar = (label: string, weight: number, total: number, color?: string, icon?: string) => {
         const percent = Math.round((weight / total) * 100);
@@ -193,22 +195,13 @@ export const DeckView: React.FC<DeckViewProps> = ({
                         </div>
 
                         {/* Special Cards */}
-                        {(probabilities?.specialWeights?.length > 0 || (probabilities?.specialChance ?? 0) > 0) && (
+                        {specialWeights.length > 0 && (
                             <div className={styles.probSection}>
                                 <h3 className={styles.sectionHeader}>Special Cards</h3>
                                 <div className={styles.probList}>
-                                    {probabilities.specialWeights?.map((sw, idx) => {
-                                        const label = sw.type === 'chip' ? `$${sw.value}` :
-                                                      sw.type === 'mult' ? `x${sw.value}` :
-                                                      `Score ${sw.value}`;
-                                        const color = sw.type === 'chip' ? '#4ade80' :
-                                                      sw.type === 'mult' ? '#facc15' :
-                                                      '#c084fc';
-                                        return renderProbabilityBar(label, sw.chance * 100, 100, color);
-                                    })}
-                                    {(probabilities?.specialChance ?? 0) > 0 && 
-                                        renderProbabilityBar('Generic', (probabilities?.specialChance ?? 0) * 100, 100, '#9b59b6')
-                                    }
+                                    {specialWeights.map(weight => renderProbabilityBar(
+                                        SPECIAL_LABELS[weight.type], weight.chance * 100, 100, SPECIAL_COLORS[weight.type]
+                                    ))}
                                 </div>
                             </div>
                         )}

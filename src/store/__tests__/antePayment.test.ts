@@ -9,6 +9,23 @@ afterEach(() => {
 });
 
 describe('last affordable ante', () => {
+    it.each(['entering_casino', 'deal_over'] as const)('shows game over only when an unaffordable Deal is dispatched from %s', async phase => {
+        vi.useFakeTimers();
+        const started = processAction(createInitialState(), {
+            type: 'start_game', cityId: 'las_vegas', gamblerId: 'default', seed: 42,
+            globalTutorialsCompleted: TUTORIAL_STEPS.map(step => step.id),
+        }).nextState;
+        useGameBridge.getState().loadGameState(JSON.stringify({ ...started, phase, cash: 0, ante: 65 }));
+        useGameBridge.setState({ headless: false });
+        expect(useGameBridge.getState().phase).toBe(phase);
+        const deal = useGameBridge.getState().dispatch({ type: 'deal' });
+        await vi.runAllTimersAsync();
+        await deal;
+        expect(useGameBridge.getState()).toMatchObject({ phase: 'game_over', cash: 0, isProcessingEvents: false });
+        expect(useGameBridge.getState().eventLog).toContainEqual({ type: 'game_over', won: false, finalScore: started.totalScore });
+        expect(useGameBridge.getState().eventLog.some(event => event.type === 'deal_started')).toBe(false);
+    });
+
     it.each(['entering_casino', 'deal_over'] as const)('keeps the animated round playable at $0 after dealing from %s', async phase => {
         vi.useFakeTimers();
         const started = processAction(createInitialState(), {

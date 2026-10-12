@@ -41,8 +41,7 @@ export interface RankWeights {
 
 export interface SpecialWeight {
     readonly type: 'chip' | 'mult' | 'score';
-    readonly value: number;
-    readonly chance: number; // 0-1 probability
+    readonly chance: number; // 0-1 probability of this type, before rolling its strength
 }
 
 export interface DeckProbabilities {
@@ -63,7 +62,7 @@ export interface GameModifiers {
 
 export interface ShopItem {
     readonly id: string;
-    readonly type: 'Relic' | 'RaisePack' | 'Control' | 'Score' | 'Raise' | 'TableAction';
+    readonly type: 'Relic' | 'RaisePack' | 'DeckPack' | 'RelicPack' | 'SpecialPack' | 'Control' | 'Score' | 'Raise' | 'TableAction';
     readonly cost: number;
     readonly purchased?: boolean;
     readonly nameOverride?: string;
@@ -139,6 +138,7 @@ export interface GameState {
     readonly inventory: readonly RelicInstance[];
     readonly relicSlots: number;
     readonly pendingRaiseChoices: readonly string[];
+    readonly pendingPackChoices: readonly string[];
     readonly pendingPack: PendingPack | null;
     readonly handUpgrades: HandUpgrades;
     readonly tableActionCharges: Readonly<Record<string, number>>;

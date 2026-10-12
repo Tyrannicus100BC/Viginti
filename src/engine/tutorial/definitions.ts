@@ -334,7 +334,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
         type: 'message',
         display: {
             id: 'gift_shop_raise_intro',
-            text: "Buy a Raise Pack\n\nChoose 1 of 3 · Permanent Bonuses and Tradeoffs",
+            text: "Open a Pack\n\nChoose Upgrades for This Run · Skip to Pass",
             highlight: { elementId: 'gift-shop-raises', type: 'rect', padding: 12 },
             scrim: 'dim',
             completionType: 'click',

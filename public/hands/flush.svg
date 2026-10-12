@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <title>Flush: two spades</title>
+  <g transform="translate(7 14) rotate(-10 14.5 23)">
+    <rect width="29" height="46" rx="4" fill="#fff7e8" stroke="#243545" stroke-width="2.5"/>
+    <path d="M13 8C9 13 4 16 4 21C4 27 10 29 13 25C16 29 22 27 22 21C22 16 17 13 13 8Z M13 24L9 32H17Z" fill="#171b20"/>
+  </g>
+  <g transform="translate(29 7) rotate(9 14.5 23)">
+    <rect width="29" height="46" rx="4" fill="#fff7e8" stroke="#243545" stroke-width="2.5"/>
+    <path d="M13 8C9 13 4 16 4 21C4 27 10 29 13 25C16 29 22 27 22 21C22 16 17 13 13 8Z M13 24L9 32H17Z" fill="#171b20"/>
+  </g>
+</svg>

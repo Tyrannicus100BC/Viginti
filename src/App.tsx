@@ -29,6 +29,7 @@ import { CITY_DEFINITIONS } from './logic/cities/definitions';
 import { RelicManager } from './logic/relics/manager';
 import { getRelicRarityFrameColor } from './logic/relics/rarity';
 import { AudioControls } from './components/AudioControls';
+import { AnteIncreasePopup } from './components/AnteIncreasePopup';
 import { sfxEngine } from './utils/sfxEngine';
 import { DebugLogOverlay } from './components/DebugLogOverlay';
 import { DebugLoadDialog } from './components/DebugLoadDialog';
@@ -217,10 +218,13 @@ export default function App() {
         removalCount,
         handUpgrades,
         pendingRaiseChoices,
+        pendingPackChoices,
+        pendingPack,
         deckProbabilities,
         enterGiftShop
     } = useGameStore();
 
+    const pendingPackChoiceCount = pendingRaiseChoices.length + pendingPackChoices.length + (pendingPack ? 1 : 0);
     const { scale, viewportWidth, viewportHeight } = useLayout();
 
     const tableActionSlots = inventory.flatMap(instance => {
@@ -1450,7 +1454,7 @@ export default function App() {
     }, [isGiftShopExiting, leaveShop, phase]);
 
     const startGiftShopExit = React.useCallback(() => {
-        if (phase !== 'gift_shop' || isGiftShopExiting || !giftShopEnterComplete || pendingRaiseChoices.length || raisePackSource) return;
+        if (phase !== 'gift_shop' || isGiftShopExiting || !giftShopEnterComplete || pendingPackChoiceCount || raisePackSource) return;
         setIsGiftShopExiting(true);
         if (giftShopExitTimeoutRef.current !== null) {
             window.clearTimeout(giftShopExitTimeoutRef.current);
@@ -1459,7 +1463,7 @@ export default function App() {
             giftShopExitTimeoutRef.current = null;
             finalizeGiftShopExit();
         }, GIFT_SHOP_EXIT_DURATION_MS + 60);
-    }, [finalizeGiftShopExit, giftShopEnterComplete, isGiftShopExiting, phase, pendingRaiseChoices.length, raisePackSource]);
+    }, [finalizeGiftShopExit, giftShopEnterComplete, isGiftShopExiting, phase, pendingPackChoiceCount, raisePackSource]);
 
     if (phase === 'init') {
         // const canStartRun = isCityUnlocked(selectedCityId) && isGamblerUnlocked(selectedGamblerId);
@@ -1711,7 +1715,6 @@ export default function App() {
         >
             <div className={styles.topNavContainer}>
 
-                {debugEnabled && <button className={styles.manageDebugBtn} onClick={() => setShowRelicStore(true)}>RELICS</button>}
                 <HandScoresButton onClick={() => {
                         playClick();
                         setShowHandScores(true);
@@ -1843,6 +1846,14 @@ export default function App() {
                             hiddenEntry={hiddenInventoryEntry?.kind === 'left' ? { id: hiddenInventoryEntry.id, index: hiddenInventoryEntry.index } : null}
                             pendingHiddenRelicId={pendingInventoryHide?.kind === 'left' ? pendingInventoryHide.id : null}
                         />
+                        {debugEnabled && (
+                            <button
+                                className={`${styles.manageDebugBtn} ${styles.relicDebugBtn}`}
+                                onClick={() => setShowRelicStore(true)}
+                            >
+                                RELICS
+                            </button>
+                        )}
                     </div>
                     <div className={styles.sidebar}>
                         <RelicInventory inventoryKind="right"
@@ -2297,7 +2308,7 @@ export default function App() {
                                             e.stopPropagation();
                                             handleDealAdvanceAction();
                                         }}
-                                        disabled={isInitialDeal || cash < ante}
+                                        disabled={isInitialDeal}
                                     >
                                         Deal ${ante}
                                     </button>
@@ -2316,7 +2327,7 @@ export default function App() {
                                     </button>
                                 </div>
                             ) : (phase === 'gift_shop') ? (
-                                giftShopEnterComplete && !isGiftShopExiting && !pendingRaiseChoices.length && !raisePackSource ? (
+                                giftShopEnterComplete && !isGiftShopExiting && !pendingPackChoiceCount && !raisePackSource ? (
                                     isSellingMode ? (
                                         <button
                                             className={styles.nextDealButton}
@@ -2520,15 +2531,12 @@ export default function App() {
                 </div>
             )}
 
-            {anteIncrease && <div className={styles.anteIncreaseOverlay} role="dialog" aria-modal="true" aria-labelledby="ante-increase-title"
-                onClick={event => { event.stopPropagation(); continueAnteIncrease(); }}
-                onKeyDown={event => { event.stopPropagation(); if (event.key === 'Tab') event.preventDefault(); }}>
-                <button type="button" autoFocus className={styles.anteIncreasePopup} aria-label="Continue after ante increase">
-                    <span id="ante-increase-title" className={styles.anteIncreaseTitle}>Ante Increase</span>
-                    <span className={styles.anteIncreaseAmount}>${anteIncrease.previousAnte} → ${anteIncrease.ante}</span>
-                    <span className={styles.anteIncreaseHint}>Click to continue</span>
-                </button>
-            </div>}
+            {anteIncrease && <AnteIncreasePopup
+                key={`${anteIncrease.previousAnte}-${anteIncrease.ante}`}
+                previousAnte={anteIncrease.previousAnte}
+                ante={anteIncrease.ante}
+                onContinue={continueAnteIncrease}
+            />}
 
             <TutorialOverlay />
             

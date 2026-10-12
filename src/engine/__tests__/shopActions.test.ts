@@ -1,3 +1,4 @@
+import { isPackItem } from '../../logic/packs';
 import { describe, it, expect } from 'vitest';
 import { createInitialState, processAction, getValidActions } from '../engine';
 import type { GameState } from '../GameState';
@@ -98,21 +99,21 @@ describe('Cash gift shop', () => {
     it('paid restocks replace relics while retaining purchased and available packs', () => {
         const original = shop();
         let state: GameState = { ...original, shopItems: original.shopItems.map(item => item.id === original.shopItems[4].id ? { ...item, purchased: true } : item) };
-        const packs = state.shopItems.filter(item => item.type === 'RaisePack');
+        const packs = state.shopItems.filter(isPackItem);
         for (let i = 0; i < 3; i++) {
             const previousRelics = state.shopItems.filter(item => item.type === 'Relic').map(item => item.id);
             state = act(state, { type: 'restock_shop' });
-            expect(state.shopItems.filter(item => item.type === 'RaisePack')).toEqual(packs);
+            expect(state.shopItems.filter(isPackItem)).toEqual(packs);
             const relics = state.shopItems.filter(item => item.type === 'Relic');
             expect(relics).toHaveLength(4);
             expect(relics.every(item => !previousRelics.includes(item.id))).toBe(true);
         }
         // Even an exhausted shelf gains no new packs until the next ante increase.
-        const soldOut = { ...state, cash: 1000, shopItems: state.shopItems.map(item => item.type === 'RaisePack' ? { ...item, purchased: true } : item) };
+        const soldOut = { ...state, cash: 1000, shopItems: state.shopItems.map(item => isPackItem(item) ? { ...item, purchased: true } : item) };
         const restocked = act(soldOut, { type: 'restock_shop' });
-        expect(restocked.shopItems.filter(item => item.type === 'RaisePack' && !item.purchased)).toHaveLength(0);
+        expect(restocked.shopItems.filter(item => isPackItem(item) && !item.purchased)).toHaveLength(0);
         const refreshed = act({ ...restocked, phase: 'scoring', handsUntilAnteIncrease: 1 }, { type: 'score_round' });
-        expect(refreshed.shopItems.filter(item => item.type === 'RaisePack' && !item.purchased)).toHaveLength(2);
+        expect(refreshed.shopItems.filter(item => isPackItem(item) && !item.purchased)).toHaveLength(2);
     });
 
     it('refreshes stock and resets fees at ante increase, before any shop visit', () => {
@@ -142,10 +143,12 @@ describe('Cash gift shop', () => {
         expect(act({ ...start(), comps: 0 }, { type: 'enter_gift_shop' }).phase).toBe('gift_shop');
     });
 
-    it('ends the run on leaving the shop if spending leaves cash below ante', () => {
-        const result = processAction({ ...shop(), cash: 9, ante: 10 }, { type: 'leave_shop' });
-        expect(result.nextState.phase).toBe('game_over');
-        expect(result.events).toContainEqual(expect.objectContaining({ type: 'game_over', won: false }));
+    it.each(['entering_casino', 'deal_over'] as const)('can leave and revisit the shop below ante from %s', shopReturnPhase => {
+        const result = processAction({ ...shop(), shopReturnPhase, cash: 9, ante: 10 }, { type: 'leave_shop' });
+        expect(result.nextState.phase).toBe(shopReturnPhase);
+        expect(result.events.some(event => event.type === 'game_over')).toBe(false);
+        expect(act(result.nextState, { type: 'enter_gift_shop' }).phase).toBe('gift_shop');
+        expect(act(result.nextState, { type: 'deal' }).phase).toBe('game_over');
     });
 
     it('selling, enhancement and removal use cash, leaving tickets unchanged', () => {
@@ -159,7 +162,7 @@ describe('Cash gift shop', () => {
         expect(sold.inventory).toEqual(state.inventory);
         const enhanced = act(state, { type: 'enhance_card', cardId: 'probability', enhancement: { type: 'chip', value: 5 } });
         expect(enhanced.cash).toBe(state.cash - 10);
-        expect(enhanced.deckProbabilities.specialWeights).toContainEqual({ type: 'chip', value: 5, chance: 0.05 });
+        expect(enhanced.deckProbabilities.specialWeights).toContainEqual({ type: 'chip', chance: 0.05 });
         expect(enhanced.comps).toBe(state.comps);
         const removed = act(state, { type: 'destroy_card', cardId: 'card' });
         expect(removed.cash).toBe(state.cash - 20);

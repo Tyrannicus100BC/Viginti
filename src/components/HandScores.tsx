@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { HAND_TYPES, getHandPayout, getHandRaiseChanges, formatRaiseCash, formatRaiseMult, type HandTypeId, type HandUpgrades } from '../logic/handScoring';
 import styles from './HandScores.module.css';
+import { HandIcon } from './HandIcon';
 
 const cash = (amount: number) => `${amount < 0 ? '−' : ''}$${Math.abs(amount)}`;
 type ScoreRow = Omit<ReturnType<typeof getHandPayout>, 'id'> & { id: string; handTypeId: HandTypeId };
@@ -61,7 +62,7 @@ function HandScoreRow({ hand, upgrades }: { hand: ScoreRow; upgrades: HandUpgrad
     return <article ref={row} className={`${styles.hand} ${hand.compTickets ? styles.hasComps : ''}`}
         tabIndex={0} aria-describedby={showTooltip ? tooltipId : undefined}
         onMouseEnter={open} onMouseLeave={close} onFocus={open} onBlur={close}>
-        <div className={styles.icon} aria-hidden="true">{hand.icon}</div>
+        <HandIcon icon={hand.icon} className={styles.icon} />
         <h3>{hand.name}</h3>
         {(hand.compTickets ?? 0) > 0 && <strong className={styles.comps} aria-label={`${hand.compTickets} comp ticket earned`}>£{hand.compTickets}</strong>}
         <strong className={`${styles.cash} ${hand.chips < 0 ? styles.isNegative : ''}`} aria-label={`${cash(hand.chips)} cash`}>{cash(hand.chips)}</strong>
@@ -92,6 +93,7 @@ export function HandScores({ upgrades = {}, onClose }: { upgrades?: HandUpgrades
             ...hand,
             id: hand.variant.id,
             name: hand.variant.id === 'viginti' ? 'Viginti' : hand.variant.name,
+            icon: hand.variant.icon ?? hand.icon,
             chips: hand.variant.chips,
             mult: hand.variant.mult,
         }] : []),

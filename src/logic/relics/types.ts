@@ -6,6 +6,7 @@ export type HookType = 'value' | 'interrupt';
 export type RelicRarity = 'Common' | 'Uncommon' | 'Rare';
 
 export type TableActionRecharge =
+    | 'rounds'
     | 'none'
     | 'casino'
     | 'bust'

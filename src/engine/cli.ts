@@ -164,6 +164,10 @@ export function describeAction(action: PlayerAction, state?: GameState): string 
             }
             return `Buy ${action.itemId}`;
         }
+        case 'skip_pack':
+            return 'Skip the remaining pack choices';
+        case 'choose_pack_card':
+            return 'Choose pack card ' + action.cardId;
         case 'choose_raise':
             return 'Choose raise ' + action.raiseId;
         case 'buy_relic_slot':
@@ -255,7 +259,7 @@ export const greedyStrategy: Strategy = (state, actions) => {
     // Priority order for remaining actions
     const priority = [
         'select_drawn_card', 'draw',
-        'deal', 'choose_raise', 'buy_shop_item', 'leave_shop', 'enter_gift_shop',
+        'deal', 'choose_raise', 'choose_pack_card', 'skip_pack', 'buy_shop_item', 'leave_shop', 'enter_gift_shop',
         'stand', 'deal', 'complete_deal_early',
     ];
 
@@ -280,7 +284,7 @@ export const greedyStrategy: Strategy = (state, actions) => {
 export function createLLMStrategy(model: string, profile: string): Strategy {
     return async (state, actions) => {
         const systemPrompt = `You are an expert card game player playing "Viginti", a blackjack-inspired rogue-like.
-Your goal is to keep playing as long as possible and grow your winnings. Dealing costs the cash ante and starts the center hand. Opening either side hand costs one comp ticket; further placements in that hand are free. Each Win or Viginti earns one ticket. You lose when your settled cash cannot cover the next ante. The ante rises by 25% every four completed deals (rounded up to whole dollars), refreshing shop stock and resetting paid refresh costs; paid refreshes double in price. Keep enough cash for the next ante when shopping.
+Your goal is to keep playing as long as possible and grow your winnings. Dealing costs the cash ante and starts the center hand. Opening either side hand costs one comp ticket; further placements in that hand are free. Each Win or Viginti earns one ticket. You lose when you try to deal without enough cash for the ante. You can visit the shop and sell relics before dealing. The ante rises by 50% every four completed deals (rounded to the nearest $5), refreshing shop stock and resetting paid refresh costs; paid refreshes double in price. Keep enough cash for the next ante when shopping.
 Current Play Profile: ${profile}
 
 You MUST follow the play profile strictly.
@@ -648,6 +652,7 @@ async function runJsonMode(cityId: string) {
                     name: RELIC_REGISTRY[r.id]?.name ?? r.id,
                 })),
                 pendingRaiseChoices: state.pendingRaiseChoices,
+                pendingPackChoices: state.pendingPackChoices,
                 pendingPack: state.pendingPack,
                 relicSlots: state.relicSlots,
                 shopItems: state.phase === 'gift_shop' ? state.shopItems : undefined,

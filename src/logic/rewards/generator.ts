@@ -1,13 +1,14 @@
 import type { RewardConfig, ShopPriceOverrides } from '../cities/types';
 import { RelicManager } from '../relics/manager';
+import { pickRandomRelic } from '../relics/selection';
 import type { RelicInstance, RelicRarity } from '../relics/types';
 import type { SeededRNG } from '../../engine/rng';
 import { RAISES, getRaise } from '../handScoring';
-import { rollPackDefinition, type PackId } from '../packs';
+import { rollPackDefinition, isPackItem, PACK_ITEM_TYPES, type PackId } from '../packs';
 
 export interface ShopItem {
     id: string;
-    type: 'Relic' | 'RaisePack' | 'Control' | 'Score' | 'Raise' | 'TableAction';
+    type: 'Relic' | 'RaisePack' | 'DeckPack' | 'RelicPack' | 'SpecialPack' | 'Control' | 'Score' | 'Raise' | 'TableAction';
     purchased?: boolean;
     cost: number;
     nameOverride?: string;
@@ -49,9 +50,10 @@ export function generateShopItems(
 
     for (const config of configList) {
         for (let i = 0; i < config.count; i++) {
-            if (config.type === 'RaisePack') {
-                const pack = rollPackDefinition(nextRandom());
-                items.push({ id: `raise_pack_${items.length}`, type: 'RaisePack', packId: pack.id, cost: pack.cost, nameOverride: pack.name });
+            if (isPackItem(config)) {
+                const family = config.type === 'RelicPack' ? 'relic' : config.type === 'DeckPack' || config.type === 'SpecialPack' ? 'deck' : 'raise';
+                const pack = rollPackDefinition(nextRandom(), family);
+                items.push({ id: `${family}_pack_${items.length}`, type: PACK_ITEM_TYPES[family], packId: pack.id, cost: pack.cost, nameOverride: pack.name });
                 continue;
             }
             if (config.type === 'Raise') {
@@ -96,7 +98,8 @@ export function generateShopItems(
                 continue;
             }
 
-            const pick = candidates[Math.floor(nextRandom() * candidates.length)];
+            const pick = pickRandomRelic(candidates, nextRandom);
+            if (!pick) continue;
 
             items.push({
                 id: pick.id,

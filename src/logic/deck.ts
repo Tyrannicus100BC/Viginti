@@ -1,6 +1,7 @@
 import type { Card, Rank, Suit } from '../types';
 import type { DeckProbabilities, SuitWeights, RankWeights } from '../engine/GameState';
 import type { SeededRNG } from '../engine/rng';
+import { getSpecialWeights, rollSpecialStrength } from './specialCards';
 
 export const SUITS: Suit[] = ['hearts', 'diamonds', 'clubs', 'spades'];
 export const RANKS: Rank[] = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
@@ -81,28 +82,24 @@ export function shuffleDeck(deck: Card[]): Card[] {
 export function drawCardFromProbabilities(probs: DeckProbabilities, rng: SeededRNG): Card {
     const suit = pickSuit(probs.suits, rng);
 
-    // Roll for specific special cards from weights
-    if (probs.specialWeights && probs.specialWeights.length > 0) {
-        let roll = rng.next();
+    // Choose the special type first; its strength is an independent follow-up roll.
+    const specials = getSpecialWeights(probs);
+    if (specials.length > 0) {
+        const roll = rng.next();
         let cumulative = 0;
-        for (const sw of probs.specialWeights) {
+        for (const sw of specials) {
             cumulative += sw.chance;
             if (roll < cumulative) {
-                if (sw.type === 'chip') return createChipCard(sw.value);
-                if (sw.type === 'mult') return createMultCard(sw.value);
-                return createScoreCard(sw.value);
+                const strength = rollSpecialStrength(sw.type, rng);
+                if (sw.type === 'chip') return createChipCard(strength);
+                if (sw.type === 'mult') return createMultCard(strength);
+                return createScoreCard(strength);
             }
         }
     }
 
-    // Legacy/Generic special card roll (if total chance still used)
-    if (rng.next() < (probs.specialChance || 0)) {
-        const specialTypes = ['chip', 'mult', 'score'] as const;
-        const type = specialTypes[Math.floor(rng.next() * specialTypes.length)];
-        if (type === 'chip') return createChipCard(5 + Math.floor(rng.next() * 10));
-        if (type === 'mult') return createMultCard(1 + Math.floor(rng.next() * 2));
-        return createScoreCard(5 + Math.floor(rng.next() * 5));
-    }
+    // Preserve the ordinary-card RNG sequence when no special types are enabled.
+    if (!specials.length) rng.next();
 
     const rank = pickRank(probs.ranks, rng);
     return createCard(suit, rank, false);

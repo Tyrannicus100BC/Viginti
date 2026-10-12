@@ -25,7 +25,7 @@ export const CasinosButton: React.FC<HeaderButtonProps> = ({ onClick, title }) =
 
 export const DeckButton: React.FC<HeaderButtonProps> = ({ onClick, title, className }) => {
     return (
-        <button 
+        <button id="deck-view-button"
             className={`${styles.headerIconButton} ${className || ''}`} 
             onClick={onClick}
             title={title || "Deck"}

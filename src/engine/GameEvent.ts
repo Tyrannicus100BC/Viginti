@@ -17,6 +17,8 @@ import type { TutorialDisplayConfig, TutorialScope } from './tutorial/types';
 
 export type GameEvent =
     | { type: 'raise_chosen'; raiseId: string }
+    | { type: 'pack_card_chosen'; cardId: string }
+    | { type: 'pack_skipped' }
     | { type: 'relic_slot_purchased'; slots: number; newCash: number }
     // === Dealing ===
     | { type: 'deal_started'; deal: number; handsRemaining: number; activeHandIds: number[]; comps: number; cash: number; ante: number }
@@ -65,7 +67,7 @@ export type GameEvent =
     | { type: 'chip_collection'; amount: number; newTotalScore: number; newCash: number }
 
     // === Charge Changes ===
-    | { type: 'charge_gained'; relicId: string; newCharges: number; reason: 'bust' | 'loss' }
+    | { type: 'charge_gained'; relicId: string; newCharges: number; reason: 'bust' | 'loss' | 'rounds' }
 
     // === Phase Transitions ===
     | { type: 'phase_changed'; from: GamePhase; to: GamePhase }

@@ -59,3 +59,24 @@
 .fadeOut { opacity: 0 !important; }
 .srOnly { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 @media (prefers-reduced-motion: reduce) { .title, .hiddenTitle, .option, .chooseButton, .spotlight { transition-duration: 50ms; } }
+
+.deckCard { container-type: inline-size; }
+.deckModifier { display: block; color: #9cd7ff; font-size: clamp(11px, 6.5cqw, 17px); font-weight: 700; white-space: nowrap; }
+.deckModifier strong { font-size: inherit; }
+.redSuit { color: #e74c3c; }
+.blackSuit { color: #fff; }
+.deckCard .modifiers { gap: 8px; margin-top: 28px; }
+.deckCard .modifier { padding-block: 5px; }
+.fiveCompact .deckCard .modifiers { gap: 4px; margin-top: 18px; }
+.skipButton { pointer-events: auto; flex-shrink: 0; align-self: center; margin: 24px auto 0; padding: 13px 30px; border: 1px solid #aebfcb60; border-radius: 9px; background: #172533ee; color: #dce6ed; font: inherit; font-size: 13px; letter-spacing: 2px; font-weight: 800; cursor: pointer; }
+.skipButton:hover:not(:disabled) { background: #35546b; }
+.skipButton:focus-visible { outline: 3px solid #74b9ff; outline-offset: 4px; }
+.skipButton:disabled { opacity: .45; cursor: default; }
+.relicChoices { width: min(780px, calc(100% - 40px)); max-height: calc(100% - 140px); display: flex; flex-direction: column; }
+.relicChoices .title, .relicChoices .hiddenTitle { margin-bottom: 12px; }
+.slotStatus { flex-shrink: 0; color: #c6d9e8; font-size: 15px; margin: 0 0 14px; }
+.relicChoices .options { display: flex; flex-direction: column; align-items: stretch; gap: 12px; overflow-y: auto; min-height: 0; padding: 8px 12px 12px; pointer-events: auto; }
+.relicChoices .option { display: block; flex-shrink: 0; }
+.relicCard { height: auto; min-height: 100px; padding: 14px 18px; text-align: left; }
+.flightCard { position: absolute; z-index: 20; box-sizing: border-box; margin: 0; pointer-events: none; }
+.blockedCard { opacity: .6 !important; }
