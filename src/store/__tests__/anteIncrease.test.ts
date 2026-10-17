@@ -18,7 +18,7 @@ describe('ante increase presentation', () => {
             { type: 'deal_scoring_complete', totalChips: 25, totalMult: 1, finalScore: 25 },
             { type: 'chip_collection', amount: 25, newTotalScore: 25, newCash: 115 },
             { type: 'ante_increased', previousAnte: 50, ante: 75, handsUntilAnteIncrease: 4 },
-            { type: 'phase_changed', from: 'scoring', to: 'deal_over' },
+            { type: 'phase_changed', from: 'scoring', to: 'pack_choice' },
         ];
         let dismiss: (() => void) | undefined;
         const playing = playEvents(events, {
@@ -30,17 +30,17 @@ describe('ante increase presentation', () => {
         expect(patches.some(patch => patch.anteIncrease)).toBe(false);
         await vi.advanceTimersByTimeAsync(200);
         expect(patches.at(-1)).toMatchObject({ anteIncrease: { previousAnte: 50, ante: 75 }, ante: 75, handsUntilAnteIncrease: 4 });
-        expect(patches.some(patch => patch.phase === 'deal_over')).toBe(false);
+        expect(patches.some(patch => patch.phase === 'pack_choice')).toBe(false);
         await vi.advanceTimersByTimeAsync(60000);
         expect(patches.at(-1)).toMatchObject({ anteIncrease: { previousAnte: 50, ante: 75 } });
-        expect(patches.some(patch => patch.phase === 'deal_over')).toBe(false);
+        expect(patches.some(patch => patch.phase === 'pack_choice')).toBe(false);
         expect(dismiss).toBeDefined();
         dismiss!();
         await vi.runAllTimersAsync();
         await playing;
         const show = patches.findIndex(patch => !!patch.anteIncrease);
         const hide = patches.findIndex(patch => patch.anteIncrease === null);
-        const phase = patches.findIndex(patch => patch.phase === 'deal_over');
+        const phase = patches.findIndex(patch => patch.phase === 'pack_choice');
         expect(show).toBeGreaterThan(patches.findIndex(patch => patch.isCollectingChips === false));
         expect(hide).toBeGreaterThan(show);
         expect(phase).toBeGreaterThan(hide);
@@ -64,7 +64,7 @@ describe('ante increase presentation', () => {
         useGameBridge.getState().continueAnteIncrease();
         await vi.runAllTimersAsync();
         await scoring;
-        expect(useGameBridge.getState()).toMatchObject({ phase: 'deal_over', anteIncrease: null, isProcessingEvents: false });
+        expect(useGameBridge.getState()).toMatchObject({ phase: 'pack_choice', anteIncrease: null, isProcessingEvents: false });
         expect(useGameBridge.getState().gameState.dealsTaken).toBe(state.dealsTaken);
         expect(useGameBridge.getState().gameState.cash).toBe(state.cash);
     });
@@ -74,10 +74,10 @@ describe('ante increase presentation', () => {
         const patches: Record<string, unknown>[] = [];
         await playEvents([
             { type: 'ante_increased', previousAnte: 50, ante: 75, handsUntilAnteIncrease: 4 },
-            { type: 'phase_changed', from: 'scoring', to: 'deal_over' },
+            { type: 'phase_changed', from: 'scoring', to: 'pack_choice' },
         ], { updateUI: patch => patches.push(patch), sfx: null, getSpeed: () => 1, headless: true, waitForAnteContinue });
         expect(waitForAnteContinue).not.toHaveBeenCalled();
         expect(patches).toContainEqual({ anteIncrease: null });
-        expect(patches).toContainEqual(expect.objectContaining({ phase: 'deal_over' }));
+        expect(patches).toContainEqual(expect.objectContaining({ phase: 'pack_choice' }));
     });
 });

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <title>Viginti: crown with an orange 21</title>
+
+  <path d="M7 16L19 26L32 8L45 26L57 16L51 49H13Z" fill="#ffd76a" stroke="#243545" stroke-width="2.5" stroke-linejoin="round"/>
+  <rect x="13" y="34" width="38" height="21" rx="4" fill="#243545" stroke="#ffd76a" stroke-width="3"/>
+  <path d="M28 27L32 22L36 27L32 31Z" fill="#243545"/>
+  <g stroke="#ffaa00" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M20 40C20 35 30 35 30 40C30 43 24 45 20 50H30"/>
+    <path d="M36 40L41 37V50M36 50H45"/>
+  </g>
+</svg>

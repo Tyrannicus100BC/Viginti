@@ -50,7 +50,6 @@ export const useGameStore = <T>(selector?: (state: any) => T): any => {
         holdReturns: (_forceDealerBust?: boolean) => dispatch({ type: 'stand' }), // 'forceDealerBust' ignored in pure engine unless debug action?
         nextDeal: (forceContinue?: boolean) => dispatch({ type: 'deal', forceContinue }),
         completeDealEarly: () => dispatch({ type: 'complete_deal_early' }),
-        leaveCasino: () => dispatch({ type: 'leave_casino' }),
 
         // Table Actions
         startTableAction: (relicId: string) => dispatch({ type: 'activate_table_action', relicId }),
@@ -59,23 +58,8 @@ export const useGameStore = <T>(selector?: (state: any) => T): any => {
         selectTableActionCard: (payload: any) => dispatch({ type: 'select_table_action_card', ...payload }),
         selectTableActionDrawCard: (drawIndex: number) => dispatch({ type: 'select_table_action_draw_card', drawIndex }),
         
-        // Shop Actions
-        enterGiftShop: () => dispatch({ type: 'enter_gift_shop' }),
-        buyShopItem: (itemId: string) => dispatch({ type: 'buy_shop_item', itemId }),
-        buyRelicSlot: () => dispatch({ type: 'buy_relic_slot' }),
+        // Pack rewards
         chooseRaise: (raiseId: string) => dispatch({ type: 'choose_raise', raiseId }),
-        restockGiftShop: () => dispatch({ type: 'restock_shop' }),
-        sellRelic: (relicId: string, index: number) => dispatch({ type: 'sell_relic', relicId, index }), // Legacy might use (instanceId, index) -> new uses (relicId, index) or just index?
-        // New Engine 'sell_relic' action expects { relicId, index }. 
-        // Legacy: sellRelic(instanceId, index). 
-        // Engine action signature: { type: 'sell_relic', relicId, index }
-        // We'll pass both if possible or map correctly.
-        
-        leaveShop: () => dispatch({ type: 'leave_shop' }),
-        enhanceCard: (cardId: string, effect: any) => dispatch({ type: 'enhance_card', cardId, enhancement: effect }),
-        destroyCard: (cardId: string) => dispatch({ type: 'destroy_card', cardId }),
-        removeCard: (cardId: string) => dispatch({ type: 'destroy_card', cardId }), // Alias?
-        deductRemovalCost: () => {}, // Engine handles cost deduction in destroy_card action automatically.
 
         // Debug
         triggerDebugChips: () => {
@@ -112,8 +96,6 @@ export const useGameStore = <T>(selector?: (state: any) => T): any => {
                                                       // Check definitions.ts for 'draw_indicator' trigger.
                                                       
         // Other UI
-        toggleSellingMode: (enabled: boolean) => bridgeState.toggleSellingMode && bridgeState.toggleSellingMode(enabled),
-        rewardRelicSell: (_relicId: string) => {}, // Handled by engine processSellRelic event?
         goToTitle: () => bridgeState.reset(),
         winGame: () => dispatch({ type: 'debug_victory' }),
     };

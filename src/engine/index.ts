@@ -14,7 +14,7 @@
 export { processAction, getValidActions, createInitialState } from './engine';
 export type { ActionResult } from './engine';
 
-export type { GameState, GamePhase, GameModifiers, ShopItem, InteractionMode, RewardSummary, ScoredHand } from './GameState';
+export type { GameState, GamePhase, GameModifiers, InteractionMode, RewardSummary, ScoredHand } from './GameState';
 export { INITIAL_HAND_COUNT, BASE_DEALS_PER_CASINO } from './GameState';
 
 export type { PlayerAction } from './PlayerAction';

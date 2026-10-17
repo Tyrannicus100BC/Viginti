@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createInitialState, getValidActions, processAction } from '../engine';
 import type { GameState } from '../GameState';
-import { HAND_TYPES, RAISES, getHandPayout, getHandRaiseChanges } from '../../logic/handScoring';
+import { HAND_TYPES, getHandPayout, getHandRaiseChanges } from '../../logic/handScoring';
 import { evaluateHandScore } from '../../logic/scoring';
 import { RelicManager } from '../../logic/relics/manager';
 import { generateShopItems } from '../../logic/rewards/generator';
@@ -17,8 +17,8 @@ const cards: Card[] = [
 ];
 const stocked = (id = 'raise_pair_mult'): GameState => ({
     ...act(createInitialState(), { type: 'start_game', cityId: 'atlantic_city', gamblerId: 'newbie', seed: 42, globalTutorialsCompleted: TUTORIAL_STEPS.map(step => step.id) }),
-    phase: 'gift_shop', cash: 10000, shopStockInitialized: true,
-    shopItems: [{ id, type: 'Raise', cost: RAISES.find(raise => raise.id === id)!.cost }],
+    phase: 'pack_choice', cash: 10000, offeredPacks: [],
+    pendingPack: { packId: 'raise_basic', picksRemaining: 1 }, pendingRaiseChoices: [id],
 });
 
 describe('permanent hand scoring and Raises', () => {
@@ -91,29 +91,26 @@ describe('permanent hand scoring and Raises', () => {
         expect(pairs.every(row => row.chips === 34 && row.multiplier === 0.6)).toBe(true);
     });
 
-    it('stacks purchases without slots, resale, or mutating previous state', () => {
+    it('stacks pack upgrades without using slots or mutating previous state', () => {
         let state = stocked();
         state = { ...state, inventory: RelicManager.getAllRelics().slice(0, 10).map(config => ({ id: config.id, state: { ...config.properties } })) };
         const original = state;
         for (let i = 0; i < 25; i++) {
-            state = { ...state, shopItems: state.shopItems.map(item => ({ ...item, purchased: false })) };
-            expect(getValidActions(state)).toContainEqual({ type: 'buy_shop_item', itemId: 'raise_pair_mult' });
-            state = act(state, { type: 'buy_shop_item', itemId: 'raise_pair_mult' });
+            state = { ...state, pendingPack: { packId: 'raise_basic', picksRemaining: 1 }, pendingRaiseChoices: ['raise_pair_mult'] };
+            expect(getValidActions(state)).toContainEqual({ type: 'choose_raise', raiseId: 'raise_pair_mult' });
+            state = act(state, { type: 'choose_raise', raiseId: 'raise_pair_mult' });
         }
         expect(state.handUpgrades.raise_pair_mult).toBe(25);
         expect(getHandPayout('pair', state.handUpgrades).mult).toBe(12.6);
         expect(state.inventory).toEqual(original.inventory);
         expect(original.handUpgrades).toEqual({});
-        expect(state.cash).toBe(original.cash - 25 * 60);
-        expect(getValidActions(state).filter(action => action.type === 'sell_relic').some(action => action.relicId === 'raise_pair_mult')).toBe(false);
-        expect(act(state, { type: 'buy_shop_item', itemId: 'raise_pair_mult' })).toEqual(state);
+        expect(state.cash).toBe(original.cash);
+        expect(act(state, { type: 'choose_raise', raiseId: 'raise_pair_mult' })).toEqual(state);
         expect(act(state, { type: 'start_game', cityId: 'atlantic_city', gamblerId: 'newbie' }).handUpgrades).toEqual({});
     });
 
-    it('retains Raises through shop visits, restocks and state export/import', () => {
-        let state = act(stocked(), { type: 'buy_shop_item', itemId: 'raise_pair_mult' });
-        state = act(act(state, { type: 'leave_shop' }), { type: 'enter_gift_shop' });
-        state = act(state, { type: 'restock_shop' });
+    it('retains Raises through state export/import', () => {
+        let state = act(stocked(), { type: 'choose_raise', raiseId: 'raise_pair_mult' });
         expect(state.handUpgrades).toEqual({ raise_pair_mult: 1 });
         expect(useGameBridge.getState().loadGameState(JSON.stringify(state))).toBe(true);
         expect(useGameBridge.getState().handUpgrades).toEqual(state.handUpgrades);
@@ -125,7 +122,7 @@ describe('permanent hand scoring and Raises', () => {
 
     it('uses Raises in actual deal settlement, including losing hands', () => {
         const upgrades = { raise_pair_combo: 1 };
-        const state: GameState = { ...stocked(), phase: 'scoring', cash: 0, comps: 7, handUpgrades: upgrades, runningSummary: { chips: 0, mult: 1 },
+        const state: GameState = { ...stocked(), phase: 'scoring', cash: 0, handUpgrades: upgrades, runningSummary: { chips: 0, mult: 1 },
             playerHands: [{ id: 0, cards, blackjackValue: 14, isBust: false, isHeld: true, outcome: 'loss' }] };
         const result = processAction(state, { type: 'score_round' });
         // Lose −$10, Pair $14 + $20, starting 1× plus 0.6×.
@@ -139,21 +136,12 @@ describe('permanent hand scoring and Raises', () => {
         expect(stock.map(item => item.id)).toEqual(['raise_pair_mult']);
     });
 
-    it('uses one relic category and a shared four-slot limit', () => {
+    it('uses one relic category and a shared six-slot limit', () => {
+        expect(stocked().relicSlots).toBe(6);
         for (const relic of RelicManager.getAllRelics()) {
             expect(relic.categories).toContain('Relic');
             expect(relic.categories).not.toContain('Control');
             expect(relic.categories).not.toContain('Score');
         }
-        const relics = RelicManager.getAllRelics();
-        const state: GameState = { ...stocked(),
-            inventory: relics.slice(0, 4).map(relic => ({ id: relic.id, state: {} })),
-            shopItems: [{ id: 'star_bead', type: 'Relic', cost: 40 }, { id: 'raise_pair_mult', type: 'Raise', cost: 60 }] };
-        expect(act(state, { type: 'buy_shop_item', itemId: 'star_bead' })).toEqual(state);
-        expect(getValidActions(state)).not.toContainEqual({ type: 'buy_shop_item', itemId: 'star_bead' });
-        const expanded = act(state, { type: 'buy_relic_slot' });
-        expect(expanded.relicSlots).toBe(5);
-        expect(act(expanded, { type: 'buy_shop_item', itemId: 'star_bead' }).inventory).toHaveLength(5);
-        expect(act(state, { type: 'buy_shop_item', itemId: 'raise_pair_mult' }).handUpgrades.raise_pair_mult).toBe(1);
     });
 });

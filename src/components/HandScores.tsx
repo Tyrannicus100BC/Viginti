@@ -59,12 +59,11 @@ function HandScoreRow({ hand, upgrades }: { hand: ScoreRow; upgrades: HandUpgrad
         };
     }, [showTooltip, upgrades]);
 
-    return <article ref={row} className={`${styles.hand} ${hand.compTickets ? styles.hasComps : ''}`}
+    return <article ref={row} className={`${styles.hand}`}
         tabIndex={0} aria-describedby={showTooltip ? tooltipId : undefined}
         onMouseEnter={open} onMouseLeave={close} onFocus={open} onBlur={close}>
         <HandIcon icon={hand.icon} className={styles.icon} />
         <h3>{hand.name}</h3>
-        {(hand.compTickets ?? 0) > 0 && <strong className={styles.comps} aria-label={`${hand.compTickets} comp ticket earned`}>£{hand.compTickets}</strong>}
         <strong className={`${styles.cash} ${hand.chips < 0 ? styles.isNegative : ''}`} aria-label={`${cash(hand.chips)} cash`}>{cash(hand.chips)}</strong>
         <strong className={styles.mult + (hand.mult < 0 ? ' ' + styles.isNegative : '')} aria-label={formatRaiseMult(hand.mult)}>{formatRaiseMult(hand.mult)}</strong>
         {showTooltip && createPortal(<div ref={tooltip} id={tooltipId} role="tooltip"

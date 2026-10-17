@@ -173,15 +173,6 @@
     font-weight: 500; 
 }
 
-.compsValue {
-    color: #00e5ff;
-    font-weight: bold;
-    white-space: nowrap;
-}
-
-.flexible .compsValue {
-    white-space: normal;
-}
 .sellPriceTag {
     position: absolute;
     bottom: 100%;

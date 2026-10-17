@@ -77,7 +77,6 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
         config.updateUI({
             dealerMessage: null,
             handsRemaining: event.handsRemaining,
-            comps: event.comps,
             cash: event.cash,
             ante: event.ante,
             anteIncrease: null,
@@ -168,14 +167,6 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
     },
 
     // === Card Placement ===
-
-    async side_hand_opened(event, config) {
-        if (event.type !== 'side_hand_opened') return;
-        config.updateUI({
-            comps: event.newComps,
-            playerHands: (prev: any[]) => prev.map(hand => hand.id === event.handIndex ? { ...hand, isInactive: false } : hand),
-        });
-    },
 
     async card_placed(event, config) {
         if (event.type !== 'card_placed') return;
@@ -391,7 +382,6 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
         
         // 1. Reveal the row (frame + label)
         config.updateUI({
-            ...(event.newComps !== undefined ? { comps: event.newComps } : {}),
             scoringCriteria: (prev: any) => {
                 const current = prev[handIndex] || [];
                 return { ...prev, [handIndex]: [...current, criterion] };
@@ -615,42 +605,12 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
         await wait(500, config);
     },
 
-    // === Gift Shop ===
-
-    async shop_entered(event, config) {
-        if (event.type !== 'shop_entered') return;
-        config.updateUI({ shopItems: event.items, shopRewardSummary: event.rewardSummary });
+    async pack_opened(_event, config) {
         config.sfx?.play('click');
-    },
-
-    async item_purchased(event, config) {
-        if (event.type !== 'item_purchased') return;
-        config.sfx?.play('purchase');
-        await wait(300, config);
     },
 
     async raise_chosen(_event, config) {
         config.sfx?.play('click');
-    },
-
-    async relic_slot_purchased(_event, config) {
-        config.sfx?.play('purchase');
-    },
-
-    async shop_restocked(event, config) {
-        if (event.type !== 'shop_restocked') return;
-        config.sfx?.play('restock');
-        if (event.cost > 0) await wait(300, config);
-    },
-
-    async relic_sold(event, config) {
-        if (event.type !== 'relic_sold') return;
-        config.sfx?.play('click');
-        await wait(200, config);
-    },
-
-    async shop_left(_event, config) {
-        await wait(200, config);
     },
 
     // === Deck Management ===
@@ -694,32 +654,6 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
     async casino_cleared(event, config) {
         if (event.type !== 'casino_cleared') return;
         config.sfx?.play('confetti');
-    },
-
-    async payout_started(event, config) {
-        if (event.type !== 'payout_started') return;
-        config.updateUI({ 
-            shopRewardSummary: event.rewardSummary,
-        });
-    },
-
-    async payout_step(_event, config) {
-        // CasinoWinScreen handles the internal animation of rows, 
-        // but we can provide a small delay for the event stream pacing.
-        await wait(100, config);
-    },
-
-    async payout_complete(_event, config) {
-        await wait(200, config);
-    },
-
-    async comps_earned(event, config) {
-        if (event.type !== 'comps_earned') return;
-        config.updateUI({ comps: event.newTotal });
-        // Winning tickets already appear, with sound, as their scoring row opens.
-        if (event.reason === 'winning_hands') return;
-        config.sfx?.play('click');
-        await wait(200, config);
     },
 
     async next_casino_setup(event, config) {

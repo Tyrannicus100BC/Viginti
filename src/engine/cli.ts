@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { getPackDefinition } from '../logic/packs';
 import { canPlayHand } from './economy';
 /**
  * Viginti CLI Simulator
@@ -72,7 +73,7 @@ export function renderState(state: GameState): string {
     lines.push('');
     lines.push(`═══════════════════════════════════════════════`);
     lines.push(`  ${cityName}  |  Deal ${state.deal}  |  Phase: ${state.phase}`);
-    lines.push(`  Cash: $${state.cash ?? 0}  |  Comp Tickets: ${state.comps ?? 0}  |  Ante: $${state.ante}  |  Increase: ${state.handsUntilAnteIncrease}  |  Deals: ${state.dealsTaken ?? 0}`);
+    lines.push(`  Cash: $${state.cash ?? 0}  |  Ante: $${state.ante}  |  Increase: ${state.handsUntilAnteIncrease}  |  Deals: ${state.dealsTaken ?? 0}`);
     // Note: Deck/Discard are calculated from probabilities or currently not tracked as distinct piles in this engine version.
     lines.push(`═══════════════════════════════════════════════`);
 
@@ -110,16 +111,8 @@ export function renderState(state: GameState): string {
     }
 
     // Shop items
-    if (state.phase === 'gift_shop' && state.shopItems.length > 0) {
-        lines.push('  ┌─── Gift Shop ───────────────────────┐');
-        for (const item of state.shopItems) {
-            const name = item.nameOverride ?? RELIC_REGISTRY[item.id]?.name ?? item.id;
-            const status = item.purchased ? '  SOLD' : `  $${item.cost}`;
-            lines.push(`  │ ${item.type.padEnd(12)} ${name.padEnd(20)} ${status}`);
-        }
-        lines.push(`  │ Restock: $${state.giftShopRestockCost}`);
-        lines.push('  └───────────────────────────────────────┘');
-        lines.push('');
+    if (state.phase === 'pack_choice') {
+        lines.push(`  Free pack reward: ${state.offeredPacks.join(', ') || state.pendingPack?.packId || 'complete'}`);
     }
 
     // Inventory
@@ -138,7 +131,7 @@ export function renderState(state: GameState): string {
 
 // ─── Action Descriptions ────────────────────────────────
 
-export function describeAction(action: PlayerAction, state?: GameState): string {
+export function describeAction(action: PlayerAction, _state?: GameState): string {
     switch (action.type) {
         case 'start_game':
             return `Start game — ${action.cityId ?? 'default city'}`;
@@ -154,43 +147,19 @@ export function describeAction(action: PlayerAction, state?: GameState): string 
             return 'Stand (end placement, dealer plays)';
         case 'complete_deal_early':
             return 'Complete deal early';
-        case 'enter_gift_shop':
-            return 'Enter gift shop';
-        case 'buy_shop_item': {
-            if (state) {
-                const item = state.shopItems.find(i => i.id === action.itemId);
-                const name = item?.nameOverride ?? RELIC_REGISTRY[action.itemId]?.name ?? action.itemId;
-                return `Buy ${name} ($${item?.cost ?? '?'})`;
-            }
-            return `Buy ${action.itemId}`;
-        }
-        case 'skip_pack':
-            return 'Skip the remaining pack choices';
-        case 'choose_pack_card':
-            return 'Choose pack card ' + action.cardId;
+        case 'open_pack':
+            return `Open ${getPackDefinition(action.packId).name}`;
+        case 'finish_pack':
+            return 'Return to the table';
         case 'choose_raise':
             return 'Choose raise ' + action.raiseId;
-        case 'buy_relic_slot':
-            return 'Buy relic slot';
-        case 'restock_shop':
-            return `Restock shop ($${state?.giftShopRestockCost ?? '?'})`;
-        case 'sell_relic': {
-            const name = RELIC_REGISTRY[action.relicId]?.name ?? action.relicId;
-            return `Sell ${name}`;
-        }
-        case 'leave_shop':
-            return 'Leave shop → back to table';
-        case 'enhance_card':
-            return `Enhance card ${action.cardId} (+${action.enhancement.type})`;
-        case 'destroy_card':
-            return `Destroy card ${action.cardId}`;
         case 'activate_table_action': {
             const name = RELIC_REGISTRY[action.relicId]?.name ?? action.relicId;
             return `Activate ${name}`;
         }
         case 'cancel_table_action':
             return 'Cancel table action';
-        case 'select_table_action_hand':
+        case 'select_table_action_target':
             return `Target Hand ${action.handIndex + 1}`;
         case 'select_table_action_card':
             return `Target card ${action.cardId}`;
@@ -259,21 +228,14 @@ export const greedyStrategy: Strategy = (state, actions) => {
     // Priority order for remaining actions
     const priority = [
         'select_drawn_card', 'draw',
-        'deal', 'choose_raise', 'choose_pack_card', 'skip_pack', 'buy_shop_item', 'leave_shop', 'enter_gift_shop',
+        'deal', 'choose_raise', 'choose_pack_card', 'skip_pack', 'open_pack', 'finish_pack',
         'stand', 'deal', 'complete_deal_early',
     ];
 
     for (const pType of priority) {
         const match = actions.filter(a => a.type === pType);
         if (match.length > 0) {
-            if (pType === 'buy_shop_item') {
-                // Buy cheapest
-                match.sort((a, b) => {
-                    const itemA = state.shopItems.find(i => i.id === a.itemId);
-                    const itemB = state.shopItems.find(i => i.id === b.itemId);
-                    return (itemA?.cost ?? 0) - (itemB?.cost ?? 0);
-                });
-            }
+
             return match[0];
         }
     }
@@ -284,7 +246,7 @@ export const greedyStrategy: Strategy = (state, actions) => {
 export function createLLMStrategy(model: string, profile: string): Strategy {
     return async (state, actions) => {
         const systemPrompt = `You are an expert card game player playing "Viginti", a blackjack-inspired rogue-like.
-Your goal is to keep playing as long as possible and grow your winnings. Dealing costs the cash ante and starts the center hand. Opening either side hand costs one comp ticket; further placements in that hand are free. Each Win or Viginti earns one ticket. You lose when you try to deal without enough cash for the ante. You can visit the shop and sell relics before dealing. The ante rises by 50% every four completed deals (rounded to the nearest $5), refreshing shop stock and resetting paid refresh costs; paid refreshes double in price. Keep enough cash for the next ante when shopping.
+Your goal is to keep playing as long as possible and grow your winnings. Choose one of three free packs at the start and whenever the ante increases. Dealing costs the cash ante and starts the center hand; both side hands are always free. You lose when you try to deal without enough cash for the ante. The ante rises by 50% every four completed rounds (rounded to the nearest $5). Six relic slots are permanently available. Packs are the only upgrade source.
 Current Play Profile: ${profile}
 
 You MUST follow the play profile strictly.
@@ -295,7 +257,6 @@ Respond ONLY in JSON format: {"reasoning": "...", "actionIndex": 0}`;
             phase: state.phase,
             deal: state.deal,
             totalScore: state.totalScore,
-            comps: state.comps,
             cash: state.cash,
             ante: state.ante,
             handsUntilAnteIncrease: state.handsUntilAnteIncrease,
@@ -315,7 +276,7 @@ Respond ONLY in JSON format: {"reasoning": "...", "actionIndex": 0}`;
                 value: h.blackjackValue,
                 isBust: h.isBust,
                 isHeld: h.isHeld,
-                canPlace: canPlayHand(h, state.comps),
+                canPlace: canPlayHand(h),
                 openingTicketCost: h.isInactive ? 1 : 0
             })),
             dealer: {
@@ -385,8 +346,6 @@ export function formatEvent(event: GameEvent): string {
             return `Deal ${event.deal} started (ante $${event.ante}, cash $${event.cash})`;
         case 'ante_increased':
             return `Ante Increase: $${event.previousAnte} → $${event.ante}`;
-        case 'side_hand_opened':
-            return `Opened Hand ${event.handIndex + 1} for £${event.cost} (${event.newComps} tickets remaining)`;
         case 'cards_dealt':
             return `Dealing initial cards...`;
         case 'card_drawn':
@@ -413,18 +372,6 @@ export function formatEvent(event: GameEvent): string {
             return `🏁 GAME OVER: ${event.won ? 'VICTORY' : 'LOSS'} (Final Score: ${event.finalScore})`;
         case 'phase_changed':
             return `Phase transitioned to: ${event.to}`;
-        case 'item_purchased':
-            return `Purchased ${RELIC_REGISTRY[event.itemId]?.name ?? event.itemId}`;
-        case 'chip_collection':
-            return `Collected ${event.amount} chips (Total Score: ${event.newTotalScore})`;
-        case 'deal_scoring_complete':
-            return `Deal Scoring: $${event.totalChips} x ${event.totalMult} = ${event.finalScore}`;
-        case 'charge_gained':
-            return `Relic ${RELIC_REGISTRY[event.relicId]?.name ?? event.relicId} gained charge (Total: ${event.newCharges})`;
-        case 'casino_cleared':
-            return `🏛️  CLEARED CASINO ${event.deal} (Score: ${event.score})`;
-        case 'next_casino_setup':
-            return `🏛️  ENTERING CASINO ${event.deal} (Target: ${event.targetScore})`;
         default:
             return event.type;
     }
@@ -627,7 +574,6 @@ async function runJsonMode(cityId: string) {
                 phase: state.phase,
                 deal: state.deal,
                 totalScore: state.totalScore,
-                comps: state.comps,
                 cash: state.cash,
                 ante: state.ante,
                 handsUntilAnteIncrease: state.handsUntilAnteIncrease,
@@ -655,7 +601,6 @@ async function runJsonMode(cityId: string) {
                 pendingPackChoices: state.pendingPackChoices,
                 pendingPack: state.pendingPack,
                 relicSlots: state.relicSlots,
-                shopItems: state.phase === 'gift_shop' ? state.shopItems : undefined,
                 deckSize: (state as any).deck?.length ?? 0,
                 discardSize: (state as any).discardPile?.length ?? 0,
             },

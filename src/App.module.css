@@ -44,7 +44,6 @@
     flex-shrink: 0;
 }
 
-
 .stat {
     display: flex;
     flex-direction: column;
@@ -374,70 +373,6 @@
     }
 }
 
-.shopRelicFlyOverlay {
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    z-index: 2600;
-}
-
-.shopRelicFlyCard {
-    position: absolute;
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    padding: 0;
-    will-change: transform;
-    transform-origin: top left;
-}
-
-.shopRelicFlyCardScore {
-    justify-content: flex-end;
-    flex-direction: row-reverse;
-}
-
-.shopRelicFlyIcon {
-    width: calc(40px * var(--relic-fly-ui-scale, 1));
-    height: calc(40px * var(--relic-fly-ui-scale, 1));
-    border-radius: 50%;
-    background: #2c3e50;
-    border: calc(3px * var(--relic-fly-ui-scale, 1)) solid #8b949e;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-    flex-shrink: 0;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
-}
-
-.shopRelicFlyIcon img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-}
-
-.shopRelicFlyIcon span {
-    font-size: calc(1.3rem * var(--relic-fly-ui-scale, 1));
-    line-height: 1;
-}
-
-.shopRelicFlyLabel {
-    font-size: calc(0.9rem * var(--relic-fly-ui-scale, 1));
-    white-space: nowrap;
-    color: #ecf0f1;
-    font-weight: 700;
-    line-height: 1;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-}
-
-.shopRelicFlyLabelControl {
-    margin-left: calc(10px * var(--relic-fly-ui-scale, 1));
-}
-
-.shopRelicFlyLabelScore {
-    margin-right: calc(10px * var(--relic-fly-ui-scale, 1));
-}
-
 .infoTextContainer {
     margin-top: 6px;
     min-height: 30px;
@@ -641,22 +576,6 @@
     filter: grayscale(1);
 }
 
-.giftShopNewBadge {
-    position: absolute;
-    top: -9px;
-    right: 10px;
-    padding: 4px 8px;
-    border: 1px solid #fff0b5;
-    border-radius: 999px;
-    background: #ffd76a;
-    color: #192a3b;
-    font-size: 10px;
-    font-weight: 900;
-    letter-spacing: 1px;
-    line-height: 1;
-    box-shadow: 0 2px 8px #0006;
-}
-
 .actionPlaceholder {
     width: 100%;
     height: 100%;
@@ -854,7 +773,6 @@
     background: rgba(231, 76, 60, 0.1) !important;
 }
 
-
 .topNavContainer {
     position: fixed;
     top: 20px;
@@ -918,7 +836,6 @@
     margin-left: 60px;
 }
 
-
 .dealerMessage {
     position: absolute;
     top: 70px;
@@ -974,7 +891,6 @@
     animation: popOut 0.1s ease-in forwards !important;
 }
 
-
 @keyframes popOut {
     0% {
         opacity: 1;
@@ -986,12 +902,6 @@
         transform: translate(-50%, -50%) scale(0.5);
     }
 }
-
-
-
-
-
-
 
 .doubleDownText {
     font-size: 0.85rem;
@@ -1029,8 +939,6 @@
     animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
     pointer-events: none;
 }
-
-
 
 .winningsWrapper {
     display: flex;
@@ -1073,7 +981,6 @@
     margin-bottom: 0px;
     text-shadow: 0 0 30px rgba(255, 215, 0, 0.6);
 }
-
 
 .confettiCanvas {
     position: fixed;
@@ -1384,9 +1291,23 @@
 
 .dealActions {
     display: grid;
-    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
     gap: 12px;
     width: 100%;
     height: 100%;
 }
 .dealActions > button { min-width: 0; }
+
+/* Keep the debug cash control in the Cash label's own layout position. */
+.cashDebugButton {
+    display: inline-flex;
+    width: auto;
+    font: inherit;
+    letter-spacing: inherit;
+    line-height: inherit;
+    padding: 2px 8px;
+    margin: -2px -8px;
+    vertical-align: baseline;
+}
+.packDebugButton { align-self: flex-end; }
+.packDebugButton:disabled { opacity: .35; cursor: default; }

@@ -1,12 +1,11 @@
-import { isPackItem, getPackDefinition } from '../logic/packs';
-import { canAcquireRelic, INITIAL_RELIC_SLOTS, getRelicSlotCost } from '../logic/relics/inventory';
-import { getRaise } from '../logic/handScoring';
+import { getPackDefinition } from '../logic/packs';
+import { canAcquireRelic, INITIAL_RELIC_SLOTS } from '../logic/relics/inventory';
 /**
  * Game Engine — the main entry point for processing player actions.
- * 
+ *
  * This is the core of the game logic separation:
  *   processAction(state, action) → { nextState, events }
- * 
+ *
  * Everything here is PURE and SYNCHRONOUS.
  * No setTimeout, no DOM, no sound, no animation — just game logic.
  */
@@ -22,7 +21,7 @@ import { GAMBLER_DEFINITIONS } from '../logic/gamblers/definitions';
 import { CITY_DEFINITIONS } from '../logic/cities/definitions';
 // RelicManager access is now via relicEngine.ts
 import { drawCardFromProbabilities } from '../logic/deck';
-import { STARTING_COMP_TICKETS, STARTING_CASH, BASE_ANTE, getNextAnte, HANDS_PER_ANTE, BASE_SHOP_RESTOCK_COST, getRemovalCashCost, canPlayHand } from './economy';
+import { STARTING_CASH, BASE_ANTE, getNextAnte, HANDS_PER_ANTE, canPlayHand } from './economy';
 import { getBlackjackScore, evaluateHandScore } from '../logic/scoring';
 import {
     executeValueHook,
@@ -41,20 +40,7 @@ import {
     processSelectTableActionCard,
     processSelectTableActionDrawCard,
 } from './actions/tableActions';
-import {
-    generateRunShopItems,
-    processEnterGiftShop,
-    processBuyShopItem,
-    processChooseRaise,
-    processChoosePackCard,
-    processSkipPack,
-    processBuyRelicSlot,
-    processRestockShop,
-    processSellRelic,
-    processLeaveShop,
-    processEnhanceCard,
-    processDestroyCard,
-} from './actions/shopActions';
+import { generatePackOffers, processDebugOpenPack, processOpenPack, processFinishPack, processChooseRaise, processChoosePackCard, processSkipPack } from './actions/packActions';
 import {
     checkTutorialTriggers,
     handleTutorialAction,
@@ -91,7 +77,7 @@ export function processAction(state: GameState, action: PlayerAction): ActionRes
     }
 
     const { nextTutorialState, tutorialEvents } = checkTutorialTriggers(result.nextState, result.events);
-    
+
     return {
         nextState: {
             ...result.nextState,
@@ -107,8 +93,6 @@ function processCoreAction(state: GameState, action: PlayerAction): ActionResult
             return processStartGame(state, action.cityId, action.gamblerId, action.seed, action.globalTutorialsCompleted, action.skipAtlanticTutorials);
         case 'deal':
             return processDeal(state, action.forceContinue);
-        case 'leave_casino':
-            return processLeaveCasino(state);
         case 'draw':
             return processDraw(state);
         case 'select_drawn_card':
@@ -135,32 +119,19 @@ function processCoreAction(state: GameState, action: PlayerAction): ActionResult
             return processSelectTableActionCard(state, action.target, action.handIndex, action.cardId);
         case 'select_table_action_draw_card':
             return processSelectTableActionDrawCard(state, action.drawIndex);
-        // Shop actions
-        case 'enter_gift_shop':
-            return processEnterGiftShop(state);
+        case 'open_pack':
+            return processOpenPack(state, action.packId);
+        case 'finish_pack':
+            return processFinishPack(state);
         case 'skip_pack':
             return processSkipPack(state);
         case 'choose_pack_card':
             return processChoosePackCard(state, action.cardId);
-
         case 'choose_raise':
             return processChooseRaise(state, action.raiseId);
-        case 'buy_relic_slot':
-            return processBuyRelicSlot(state);
-        case 'buy_shop_item':
-            return processBuyShopItem(state, action.itemId);
-        case 'restock_shop':
-            return processRestockShop(state);
-        case 'sell_relic':
-            return processSellRelic(state, action.relicId, action.index);
-        case 'leave_shop':
-            return processLeaveShop(state);
-        // Deck management
-        case 'enhance_card':
-            return processEnhanceCard(state, action.cardId, action.enhancement);
-        case 'destroy_card':
-            return processDestroyCard(state, action.cardId);
         // Debug actions
+        case 'debug_open_pack':
+            return processDebugOpenPack(state, action.packId);
         case 'debug_win':
             return processDebugWin(state);
         case 'debug_victory':
@@ -204,13 +175,12 @@ export function getValidActions(state: GameState): PlayerAction[] {
 
         case 'entering_casino':
             actions.push({ type: 'deal' });
-            actions.push({ type: 'enter_gift_shop' });
             break;
 
         case 'playing': {
             const hasDrawn = state.drawnCards.some(c => c !== null);
             const anyPlayable = state.playerHands.some(
-                h => canPlayHand(h, state.comps)
+                h => canPlayHand(h)
             );
 
             if (!hasDrawn) {
@@ -232,7 +202,7 @@ export function getValidActions(state: GameState): PlayerAction[] {
                 // Can place into any non-bust, non-held hand
                 if (state.selectedDrawIndex !== null && anyPlayable) {
                     for (const hand of state.playerHands) {
-                        if (canPlayHand(hand, state.comps)) {
+                        if (canPlayHand(hand)) {
                             actions.push({ type: 'place_card', handIndex: hand.id });
                         }
                     }
@@ -247,7 +217,7 @@ export function getValidActions(state: GameState): PlayerAction[] {
                 if (state.interactionMode === 'select_hand') {
                     // Hand targeting: double_down, surrender, hold (place)
                     for (const hand of state.playerHands) {
-                        if (canPlayHand(hand, state.comps) && (hand.cards.length > 0 || state.activeTableActionId === 'hold')) {
+                        if (canPlayHand(hand) && (hand.cards.length > 0 || state.activeTableActionId === 'hold')) {
                             actions.push({ type: 'select_table_action_target', handIndex: hand.id });
                         }
                     }
@@ -324,11 +294,10 @@ export function getValidActions(state: GameState): PlayerAction[] {
 
         case 'deal_over':
             actions.push({ type: 'deal' });
-            actions.push({ type: 'enter_gift_shop' });
             break;
 
-        case 'gift_shop': {
-            if (state.pendingPack || state.pendingPackChoices.length || state.pendingRaiseChoices.length) {
+        case 'pack_choice': {
+            if (state.pendingPack) {
                 state.pendingPackChoices.forEach(cardId => {
                     if (getPackDefinition(state.pendingPack?.packId).family !== 'relic' || canAcquireRelic(cardId, state.inventory, state.relicSlots)) {
                         actions.push({ type: 'choose_pack_card', cardId });
@@ -336,55 +305,11 @@ export function getValidActions(state: GameState): PlayerAction[] {
                 });
                 state.pendingRaiseChoices.forEach(raiseId => actions.push({ type: 'choose_raise', raiseId }));
                 actions.push({ type: 'skip_pack' });
-                break;
+            } else if (state.offeredPacks.length) {
+                state.offeredPacks.forEach(packId => actions.push({ type: 'open_pack', packId }));
+            } else {
+                actions.push({ type: 'finish_pack' });
             }
-            if (state.cash >= getRelicSlotCost(state.relicSlots)) actions.push({ type: 'buy_relic_slot' });
-            // Can always leave
-            actions.push({ type: 'leave_shop' });
-
-            const disabledButtons: string[] = [];
-
-            // Buyable items
-            for (const item of state.shopItems) {
-                if (!item.purchased && state.cash >= item.cost && canAddShopItem(state, item.id)) {
-                    actions.push({ type: 'buy_shop_item', itemId: item.id });
-                }
-            }
-
-            // Restock
-            if (!disabledButtons.includes('restock') && state.cash >= state.giftShopRestockCost) {
-                actions.push({ type: 'restock_shop' });
-            }
-
-            // Sell relics
-            if (!disabledButtons.includes('sell')) {
-                const invArr = state.inventory as RelicInstance[];
-                invArr.forEach((inst, idx) => {
-                    actions.push({ type: 'sell_relic', relicId: inst.id, index: idx });
-                });
-            }
-
-            // Enhance cards
-            if (!disabledButtons.includes('enhance')) {
-                const deck = (state as any).deck || [];
-                for (const card of deck) {
-                    if (card.rank && !card.specialEffect) {
-                        actions.push({ type: 'enhance_card', cardId: card.id, enhancement: { type: 'chip', value: 5 } });
-                    }
-                }
-            }
-
-            // Destroy cards
-            if (!disabledButtons.includes('destroy')) {
-                const destroyCost = getRemovalCashCost(state.removalCount);
-                if (state.cash >= destroyCost) {
-                    const deck = (state as any).deck || [];
-                    for (const card of deck) {
-                        actions.push({ type: 'destroy_card', cardId: card.id });
-                    }
-                }
-            }
-
             break;
         }
 
@@ -411,11 +336,11 @@ export function getValidActions(state: GameState): PlayerAction[] {
         if (canAcknowledgeTutorial(state.tutorial.activeStepId)) {
             actions.push({ type: 'acknowledge_tutorial', stepId: state.tutorial.activeStepId });
         }
-        
+
         // Apply restrictions
         const restricted = getTutorialRestrictedActions(state.tutorial.activeStepId);
         if (restricted) {
-             return actions.filter(a => 
+             return actions.filter(a =>
                  a.type === 'acknowledge_tutorial' || restricted.includes(a.type)
              );
         }
@@ -436,12 +361,9 @@ export function createInitialState(): GameState {
         handsRemaining: BASE_DEALS_PER_CASINO,
         totalScore: 0,
         targetScore: 0,
-        comps: STARTING_COMP_TICKETS,
         cash: STARTING_CASH,
         ante: BASE_ANTE,
         handsUntilAnteIncrease: HANDS_PER_ANTE,
-        shopDealsAtLastFreeRestock: 0,
-        shopReturnPhase: 'entering_casino',
         phase: 'init',
         dealer: { cards: [], isRevealed: false, blackjackValue: 0 },
         playerHands: [],
@@ -455,6 +377,9 @@ export function createInitialState(): GameState {
         pendingRaiseChoices: [],
         pendingPackChoices: [],
         pendingPack: null,
+        offeredPacks: [],
+        packReturnPhase: 'entering_casino',
+        debugPackReturn: null,
         handUpgrades: {},
         tableActionCharges: {},
         tableActionHeldCards: {},
@@ -465,11 +390,6 @@ export function createInitialState(): GameState {
             specialWeights: []
         },
         modifiers: { drawCountMod: 0, placeCountMod: 0 },
-        shopStockInitialized: false,
-        shopHasNewStock: false,
-        shopItems: [],
-        giftShopRestockCost: BASE_SHOP_RESTOCK_COST,
-        shopRewardSummary: null,
         runningSummary: null,
         rngState: SeededRNG.random().getState(),
         redrawDiscard: null,
@@ -514,6 +434,7 @@ function processStartGame(
         id: i,
         cards: [],
         isHeld: false,
+        isInactive: false,
         isBust: false,
         blackjackValue: 0,
     }));
@@ -527,12 +448,9 @@ function processStartGame(
         handsRemaining: INITIAL_HAND_COUNT,
         totalScore: 0,
         targetScore,
-        comps: STARTING_COMP_TICKETS,
         cash: STARTING_CASH,
         ante: BASE_ANTE,
         handsUntilAnteIncrease: HANDS_PER_ANTE,
-        shopDealsAtLastFreeRestock: 0,
-        shopReturnPhase: 'entering_casino',
         phase: 'entering_casino',
         deckProbabilities,
         dealer: { cards: [], isRevealed: false, blackjackValue: 0 },
@@ -547,27 +465,26 @@ function processStartGame(
         pendingRaiseChoices: [],
         pendingPackChoices: [],
         pendingPack: null,
+        offeredPacks: [],
+        packReturnPhase: 'entering_casino',
+        debugPackReturn: null,
         handUpgrades: {},
         tableActionCharges,
         tableActionHeldCards,
         modifiers: { drawCountMod: 0, placeCountMod: 0 },
-        shopStockInitialized: false,
-        shopHasNewStock: false,
-        shopItems: [],
-        giftShopRestockCost: BASE_SHOP_RESTOCK_COST,
-        shopRewardSummary: null,
         runningSummary: null,
         rngState: rng.getState(),
         redrawDiscard: null,
         removalCount: 0,
     };
 
-    events.push({ type: 'phase_changed', from: 'init', to: 'entering_casino' });
+    const offeredPacks = generatePackOffers(rng);
+    events.push({ type: 'phase_changed', from: state.phase, to: 'pack_choice' });
 
     // Initialize tutorial state
     const tutorialState = initialTutorialState();
     let completedSteps = globalTutorialsCompleted || [];
-    
+
     if (skipAtlanticTutorials && cityId === 'atlantic_city') {
          completedSteps = Array.from(new Set([...completedSteps, ...TUTORIAL_STEPS.map(s => s.id)]));
     }
@@ -576,14 +493,10 @@ function processStartGame(
         tutorialState.globalCompletedStepIds = completedSteps;
     }
 
-    return { 
-        nextState: { ...nextState, tutorial: tutorialState }, 
-        events 
+    return {
+        nextState: { ...nextState, phase: 'pack_choice', offeredPacks, rngState: rng.getState(), tutorial: tutorialState },
+        events
     };
-}
-
-function canAddShopItem(state: GameState, itemId: string): boolean {
-    return state.shopItems.some(item => item.id === itemId && isPackItem(item)) || !!getRaise(itemId) || canAcquireRelic(itemId, state.inventory, state.relicSlots);
 }
 
 function processDeal(state: GameState, _forceContinue?: boolean): ActionResult {
@@ -599,7 +512,7 @@ function processDeal(state: GameState, _forceContinue?: boolean): ActionResult {
             ],
         };
     }
-    const activeHandIds = [1];
+    const activeHandIds = [0, 1, 2];
 
     const rng = new SeededRNG(state.rngState);
     const events: GameEvent[] = [];
@@ -608,7 +521,7 @@ function processDeal(state: GameState, _forceContinue?: boolean): ActionResult {
         id: i,
         cards: [],
         isHeld: false,
-        isInactive: !activeHandIds.includes(i),
+        isInactive: false,
         isBust: false,
         blackjackValue: 0,
     }));
@@ -626,10 +539,10 @@ function processDeal(state: GameState, _forceContinue?: boolean): ActionResult {
     // Deal dealer cards
     const dealerCard1 = drawCardFromProbabilities(state.deckProbabilities, rng);
     const dealerCard2 = drawCardFromProbabilities(state.deckProbabilities, rng);
-    
+
     // Check if player has spyglass
     const isDealerRevealed = executeValueHook('getDealerRevealed', false, { inventory: state.inventory as RelicInstance[] });
-    
+
     dealerCard1.isFaceUp = isDealerRevealed;
     dealerCard1.origin = 'deck';
     dealerCard2.isFaceUp = true;
@@ -639,7 +552,6 @@ function processDeal(state: GameState, _forceContinue?: boolean): ActionResult {
 
     const newDealsTaken = state.dealsTaken + 1;
     const newHandsRemaining = 1;
-    const newComps = state.comps;
     const newCash = state.cash - state.ante;
 
     events.push({
@@ -647,7 +559,6 @@ function processDeal(state: GameState, _forceContinue?: boolean): ActionResult {
         deal: newDealsTaken,
         handsRemaining: newHandsRemaining,
         activeHandIds,
-        comps: newComps,
         cash: newCash,
         ante: state.ante,
     });
@@ -673,7 +584,6 @@ function processDeal(state: GameState, _forceContinue?: boolean): ActionResult {
         cardsPlacedThisTurn: 0,
         deal: newDealsTaken,
         dealsTaken: newDealsTaken,
-        comps: newComps,
         cash: newCash,
         handsRemaining: newHandsRemaining,
         runningSummary: null,
@@ -689,13 +599,8 @@ function processDeal(state: GameState, _forceContinue?: boolean): ActionResult {
     return { nextState, events };
 }
 
-// Compatibility alias for old callers; there are no casino payouts.
-function processLeaveCasino(state: GameState): ActionResult {
-    return processEnterGiftShop(state);
-}
-
 function processDraw(state: GameState): ActionResult {
-    if (state.phase !== 'playing' || state.drawnCards.some(c => c !== null) || !state.playerHands.some(h => canPlayHand(h, state.comps))) {
+    if (state.phase !== 'playing' || state.drawnCards.some(c => c !== null) || !state.playerHands.some(h => canPlayHand(h))) {
         return { nextState: state, events: [] };
     }
 
@@ -760,12 +665,10 @@ function processPlaceCard(state: GameState, handIndex: number): ActionResult {
 
     // Place card into hand
     const targetHand = playerHands[handIndex];
-    if (!targetHand || !canPlayHand(targetHand, state.comps)) {
+    if (!targetHand || !canPlayHand(targetHand)) {
         return { nextState: state, events: [] };
     }
 
-    const newComps = state.comps - (targetHand.isInactive ? 1 : 0);
-    if (targetHand.isInactive) events.push({ type: 'side_hand_opened', handIndex, cost: 1, newComps });
 
     const isSpecial = cardToPlace.type === 'chip' || cardToPlace.type === 'mult' || cardToPlace.type === 'score';
     const spacing = 120;
@@ -897,7 +800,7 @@ function processPlaceCard(state: GameState, handIndex: number): ActionResult {
     let totalPlaceCount = 1 + modifiers.placeCountMod;
     totalPlaceCount = executeValueHook('getPlaceCount', totalPlaceCount, { inventory: invArr });
 
-    const anyPlayable = updatedHands.some(h => canPlayHand(h, newComps));
+    const anyPlayable = updatedHands.some(h => canPlayHand(h));
     const hasRemainingCards = remainingDrawn.some(c => c !== null);
     const canPlaceMore = newPlacedCount < totalPlaceCount && hasRemainingCards && anyPlayable;
 
@@ -928,7 +831,7 @@ function processPlaceCard(state: GameState, handIndex: number): ActionResult {
     });
 
     // Auto-stand detection
-    const allUnplayable = updatedHands.every(h => !canPlayHand(h, newComps));
+    const allUnplayable = updatedHands.every(h => !canPlayHand(h));
     if (!canPlaceMore && allUnplayable) {
         events.push({ type: 'auto_stand_triggered' });
     }
@@ -936,7 +839,6 @@ function processPlaceCard(state: GameState, handIndex: number): ActionResult {
     const nextState: GameState = {
         ...state,
         playerHands: updatedHands,
-        comps: newComps,
         drawnCards: canPlaceMore ? remainingDrawn : [],
         selectedDrawIndex: canPlaceMore ? nextDrawIndex : null,
         cardsPlacedThisTurn: canPlaceMore ? newPlacedCount : 0,
@@ -1033,7 +935,7 @@ function processResolveHandOutcome(state: GameState): ActionResult {
 
     // 3. Evaluate each player hand
     const scoredHands = state.playerHands.map((h, i) => {
-        if (h.isInactive) return { ...h, outcome: null, resultRevealed: false };
+        if (h.isInactive || (!h.cards.length && !h.isHeld)) return { ...h, outcome: null, resultRevealed: false };
         let outcome: 'win' | 'loss' | 'bust' | null = 'loss';
 
         if (h.cards.length === 0) {
@@ -1075,7 +977,7 @@ function processResolveHandOutcome(state: GameState): ActionResult {
             }
         }
     }
-    
+
     // Transition to scoring
     events.push({ type: 'dealer_fade_out' });
     events.push({ type: 'phase_changed', from: 'resolving_outcomes', to: 'scoring' });
@@ -1099,14 +1001,13 @@ function processScoreRound(state: GameState): ActionResult {
     let runningSummary = state.runningSummary || { chips: 0, mult: 1 };
     let currentInv = state.inventory as RelicInstance[];
     const scoredHands = state.playerHands;
-    let newComps = state.comps;
 
     // Pre-calculate to count category instances across all scored hands
     const categoryCounts: Record<string, number> = { flush: 0, rank: 0, straight: 0 };
     scoredHands.forEach(hand => {
         if (hand.cards.length === 0) return;
         const isWin = hand.outcome === 'win';
-        const preScore = evaluateHandScore(hand.cards, isWin, hand.isDoubled ?? false, currentInv, state.comps, undefined, hand.outcome, state.handUpgrades);
+        const preScore = evaluateHandScore(hand.cards, isWin, hand.isDoubled ?? false, currentInv, state.handsRemaining, undefined, hand.outcome, state.handUpgrades);
         preScore.criteria.forEach(c => {
             if (c.id === 'flush' || c.id.startsWith('flush_')) categoryCounts.flush++;
             if (c.id === 'straight' || c.id.startsWith('straight_')) categoryCounts.straight++;
@@ -1126,7 +1027,7 @@ function processScoreRound(state: GameState): ActionResult {
             isWin,
             hand.isDoubled ?? false,
             currentInv,
-            state.comps,
+            state.handsRemaining,
             categoryCounts,
             hand.outcome,
             state.handUpgrades
@@ -1139,12 +1040,7 @@ function processScoreRound(state: GameState): ActionResult {
              if (criterion.id === 'win' || criterion.id === 'viginti') {
                  introCriterion.cardIds = [];
              }
-             const ticketReward = criterion.compTickets ?? 0;
-             newComps += ticketReward;
-             events.push({ type: 'scoring_row_intro', handIndex: i, criterion: introCriterion, newComps });
-             if (ticketReward > 0) {
-                 events.push({ type: 'comps_earned', amount: ticketReward, newTotal: newComps, reason: 'winning_hands' });
-             }
+             events.push({ type: 'scoring_row_intro', handIndex: i, criterion: introCriterion });
 
              if (criterion.matches && criterion.matches.length > 0) {
                  let rowChips = 0;
@@ -1152,13 +1048,13 @@ function processScoreRound(state: GameState): ActionResult {
                  for (const match of criterion.matches) {
                      rowChips += match.chips;
                      rowMult += match.multiplier;
-                     
+
                      if (match.chips !== 0) {
                          events.push({ type: 'scoring_row_chips', handIndex: i, criterionId: criterion.id, chips: rowChips });
                          runningSummary = { ...runningSummary, chips: runningSummary.chips + match.chips };
                          events.push({ type: 'summary_update', ...runningSummary });
                      }
-                     
+
                      if (match.multiplier !== 0) {
                          events.push({ type: 'scoring_row_mult', handIndex: i, criterionId: criterion.id, multiplier: rowMult });
                          runningSummary = { ...runningSummary, mult: runningSummary.mult + match.multiplier };
@@ -1171,7 +1067,7 @@ function processScoreRound(state: GameState): ActionResult {
                      runningSummary = { ...runningSummary, chips: runningSummary.chips + criterion.chips };
                      events.push({ type: 'summary_update', ...runningSummary });
                  }
-                 
+
                  if (criterion.multiplier !== 0) {
                      events.push({ type: 'scoring_row_mult', handIndex: i, criterionId: criterion.id, multiplier: criterion.multiplier });
                      runningSummary = { ...runningSummary, mult: runningSummary.mult + criterion.multiplier };
@@ -1246,7 +1142,6 @@ function processScoreRound(state: GameState): ActionResult {
     const ante = increaseDue ? getNextAnte(state.ante) : state.ante;
     const handsUntilAnteIncrease = increaseDue ? HANDS_PER_ANTE : state.handsUntilAnteIncrease - 1;
     const rng = new SeededRNG(state.rngState);
-    let shopItems = state.shopItems;
     const tableActionCharges = { ...state.tableActionCharges };
     currentInv = currentInv.map(instance => {
         const action = getRelicConfig(instance.id)?.tableAction;
@@ -1262,16 +1157,9 @@ function processScoreRound(state: GameState): ActionResult {
     });
     if (increaseDue) {
         events.push({ type: 'ante_increased', previousAnte: state.ante, ante, handsUntilAnteIncrease });
-        shopItems = generateRunShopItems({ ...state, inventory: currentInv }, rng);
-        events.push({ type: 'shop_restocked', newItems: [...shopItems], cost: 0, newCash });
-        const ticketBonus = Math.max(0, executeValueHook('getDealsPerCasino', BASE_DEALS_PER_CASINO, { inventory: currentInv }) - BASE_DEALS_PER_CASINO);
-        if (ticketBonus > 0) {
-            newComps += ticketBonus;
-            events.push({ type: 'comps_earned', amount: ticketBonus, newTotal: newComps, reason: 'ante_increase_bonus' });
-        }
     }
-    // Keep the shop available; affordability is checked when the player deals.
-    const nextPhase: GameState['phase'] = 'deal_over';
+    const offeredPacks = increaseDue ? generatePackOffers(rng) : [];
+    const nextPhase: GameState['phase'] = increaseDue ? 'pack_choice' : 'deal_over';
 
     events.push({ type: 'phase_changed', from: 'scoring', to: nextPhase });
 
@@ -1284,13 +1172,9 @@ function processScoreRound(state: GameState): ActionResult {
             cash: newCash,
             ante,
             handsUntilAnteIncrease,
-            shopItems,
-            shopStockInitialized: state.shopStockInitialized || increaseDue,
-            shopHasNewStock: increaseDue || state.shopHasNewStock,
-            shopDealsAtLastFreeRestock: increaseDue ? state.dealsTaken : state.shopDealsAtLastFreeRestock,
-            giftShopRestockCost: increaseDue ? BASE_SHOP_RESTOCK_COST : state.giftShopRestockCost,
+            offeredPacks,
+            packReturnPhase: 'deal_over',
             tableActionCharges,
-            comps: newComps,
             runningSummary,
             inventory: currentInv,
             rngState: rng.getState(),
@@ -1312,7 +1196,7 @@ function processDebugWin(state: GameState): ActionResult {
 
     // 1. Force all hands to stand
     const updatedHands = state.playerHands.map(h => ({ ...h, isHeld: true }));
-    
+
     // 2. Rig the deck to ensure dealer bust
     const deck = [...((state as any).deck || [])];
     // Put several 10-value cards at the top of the deck (end of array, which is popped from)
@@ -1326,7 +1210,7 @@ function processDebugWin(state: GameState): ActionResult {
             type: 'standard'
         } as Card);
     }
-    
+
     // 3. Set debug flag to force dealer to hit until they bust
     const riggedState = {
         ...state,
@@ -1348,21 +1232,21 @@ function processDebugVictory(state: GameState): ActionResult {
 function processDebugAddRelic(state: GameState, relicId: string): ActionResult {
     const config = getRelicConfig(relicId);
     if (!config) return { nextState: state, events: [] };
-    
+
     const instance: RelicInstance = {
         id: relicId,
         state: config.properties ? { ...config.properties } : {}
     };
-    
+
     const newInventory = [...state.inventory, instance];
     const newCharges = { ...state.tableActionCharges };
     const newHeld = { ...state.tableActionHeldCards };
-    
+
     if (config.tableAction) {
         newCharges[relicId] = config.tableAction.maxCharges;
         newHeld[relicId] = null;
     }
-    
+
     return {
         nextState: {
             ...state,
@@ -1380,7 +1264,7 @@ function processDebugRemoveRelic(state: GameState, relicId: string): ActionResul
     delete newCharges[relicId];
     const newHeld = { ...state.tableActionHeldCards };
     delete newHeld[relicId];
-    
+
     return {
         nextState: {
             ...state,
@@ -1395,7 +1279,7 @@ function processDebugRemoveRelic(state: GameState, relicId: string): ActionResul
 function processDebugFillCharges(state: GameState, relicId: string): ActionResult {
     const config = getRelicConfig(relicId);
     if (!config || !config.tableAction) return { nextState: state, events: [] };
-    
+
     return {
         nextState: {
             ...state,
@@ -1446,7 +1330,7 @@ function processDebugDrawCard(state: GameState, cardId: string): ActionResult {
     }
 
     if (!card) return { nextState: state, events: [] };
-    
+
     return {
         nextState: {
             ...state,

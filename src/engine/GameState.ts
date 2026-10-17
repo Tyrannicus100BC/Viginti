@@ -19,7 +19,7 @@ export type GamePhase =
     | 'scoring'
     | 'deal_over'
     | 'casino_payout'
-    | 'gift_shop'
+    | 'pack_choice'
     | 'game_over'
     | 'victory';
 
@@ -56,17 +56,6 @@ export interface DeckProbabilities {
 export interface GameModifiers {
     readonly drawCountMod: number;
     readonly placeCountMod: number;
-}
-
-// ─── Shop Items ─────────────────────────────────────────
-
-export interface ShopItem {
-    readonly id: string;
-    readonly type: 'Relic' | 'RaisePack' | 'DeckPack' | 'RelicPack' | 'SpecialPack' | 'Control' | 'Score' | 'Raise' | 'TableAction';
-    readonly cost: number;
-    readonly purchased?: boolean;
-    readonly nameOverride?: string;
-    readonly packId?: PackId;
 }
 
 // ─── Interaction Mode ───────────────────────────────────
@@ -114,12 +103,9 @@ export interface GameState {
     readonly handsRemaining: number;
     readonly totalScore: number;
     readonly targetScore: number;
-    readonly comps: number; // Tickets used to open side hands
     readonly cash: number; // Spendable bankroll
     readonly ante: number;
     readonly handsUntilAnteIncrease: number;
-    readonly shopDealsAtLastFreeRestock: number;
-    readonly shopReturnPhase: 'entering_casino' | 'deal_over';
 
     // === Table State ===
     readonly phase: GamePhase;
@@ -140,17 +126,17 @@ export interface GameState {
     readonly pendingRaiseChoices: readonly string[];
     readonly pendingPackChoices: readonly string[];
     readonly pendingPack: PendingPack | null;
+    readonly offeredPacks: readonly PackId[];
+    readonly packReturnPhase: 'entering_casino' | 'deal_over';
+    readonly debugPackReturn: {
+        readonly phase: 'entering_casino' | 'deal_over' | 'playing' | 'pack_choice';
+        readonly offeredPacks: readonly PackId[];
+        readonly packReturnPhase: 'entering_casino' | 'deal_over';
+    } | null;
     readonly handUpgrades: HandUpgrades;
     readonly tableActionCharges: Readonly<Record<string, number>>;
     readonly tableActionHeldCards: Readonly<Record<string, Card | null>>;
     readonly modifiers: Readonly<GameModifiers>;
-
-    // === Gift Shop ===
-    readonly shopStockInitialized: boolean;
-    readonly shopHasNewStock: boolean;
-    readonly shopItems: readonly ShopItem[];
-    readonly giftShopRestockCost: number;
-    readonly shopRewardSummary: RewardSummary | null;
 
     // === Scoring (during scoring phase) ===
     readonly runningSummary: { readonly chips: number; readonly mult: number } | null;

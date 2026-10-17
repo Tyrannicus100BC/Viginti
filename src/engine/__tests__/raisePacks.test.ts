@@ -8,114 +8,45 @@ import { SeededRNG } from '../rng';
 import { TUTORIAL_STEPS } from '../tutorial/definitions';
 import { useGameBridge } from '../../store/gameBridge';
 import { evaluateHandScore } from '../../logic/scoring';
-import { getPackDefinition, isPackItem, PACKS, rollPackDefinition } from '../../logic/packs';
+import { PACKS, rollPackDefinition } from '../../logic/packs';
 
 const act = (state: GameState, action: PlayerAction) => processAction(state, action).nextState;
-const shop = (): GameState => act(act(createInitialState(), {
+const shop = (): GameState => act(createInitialState(), {
     type: 'start_game', cityId: 'atlantic_city', gamblerId: 'newbie', seed: 17,
     globalTutorialsCompleted: TUTORIAL_STEPS.map(step => step.id),
-}), { type: 'enter_gift_shop' });
+});
 
 describe('relic slots and raise packs', () => {
-    it('starts with four slots, alternates sides and charges escalating slot costs', () => {
-        const initial = shop();
-        expect(initial.relicSlots).toBe(4);
+    it('starts with six permanent slots, three per side', () => {
+        expect(shop().relicSlots).toBe(6);
         expect(Array.from({ length: 6 }, (_, i) => getRelicSide(i))).toEqual(['left', 'right', 'left', 'right', 'left', 'right']);
-        expect(getSideSlotCount('left', 5)).toBe(3);
-        expect(getSideSlotCount('right', 5)).toBe(2);
-        let state = act({ ...initial, cash: 200 }, { type: 'buy_relic_slot' });
-        expect(state).toMatchObject({ relicSlots: 5, cash: 160 });
-        state = act(state, { type: 'buy_relic_slot' });
-        expect(state).toMatchObject({ relicSlots: 6, cash: 100 });
-        expect(act({ ...state, cash: 79 }, { type: 'buy_relic_slot' })).toEqual({ ...state, cash: 79 });
-        const playing = { ...state, phase: 'playing' as const };
-        expect(act(playing, { type: 'buy_relic_slot' })).toEqual(playing);
+        expect(getSideSlotCount('left', 6)).toBe(3);
+        expect(getSideSlotCount('right', 6)).toBe(3);
     });
 
-    it('stocks four unified relics and two packs, then pays once and applies exactly one choice', () => {
-        const original = { ...shop(), shopItems: shop().shopItems.map(item => isPackItem(item) ? { ...item, type: 'RaisePack' as const, packId: 'raise_basic' as const, cost: 40 } : item) };
-        expect(original.shopItems.filter(item => item.type === 'Relic')).toHaveLength(4);
-        expect(original.shopItems.filter(item => item.type === 'RaisePack')).toHaveLength(2);
-        const pack = original.shopItems.find(item => item.type === 'RaisePack')!;
-        const opened = act(original, { type: 'buy_shop_item', itemId: pack.id });
-        expect(opened.cash).toBe(original.cash - pack.cost);
-        expect(opened.handUpgrades).toEqual({});
-        expect(opened.pendingRaiseChoices).toHaveLength(3);
-        expect(new Set(opened.pendingRaiseChoices).size).toBe(3);
-        expect(getValidActions(opened)).toEqual([...opened.pendingRaiseChoices.map(raiseId => ({ type: 'choose_raise', raiseId })), { type: 'skip_pack' }]);
-        for (const action of [
-            { type: 'leave_shop' }, { type: 'restock_shop' }, { type: 'buy_relic_slot' },
-            { type: 'buy_shop_item', itemId: pack.id }, { type: 'choose_raise', raiseId: 'fake' },
-        ] as PlayerAction[]) expect(act(opened, action)).toEqual(opened);
-        const chosenId = opened.pendingRaiseChoices[1];
-        const chosen = act(opened, { type: 'choose_raise', raiseId: chosenId });
-        expect(chosen.pendingRaiseChoices).toEqual([]);
-        expect(chosen.handUpgrades).toEqual({ [chosenId]: 1 });
-        expect(chosen.cash).toBe(opened.cash);
-        expect(chosen.inventory).toEqual(original.inventory);
-        expect(act(chosen, { type: 'choose_raise', raiseId: chosenId })).toEqual(chosen);
-        expect(act(original, { type: 'buy_shop_item', itemId: pack.id })).toEqual(opened);
-    });
-
-    it('preserves pending choices, slots and RNG across export/import without rerolling', () => {
-        const state = shop(), pack = state.shopItems.find(item => item.type === 'RaisePack')!;
-        const opened = act(act(state, { type: 'buy_relic_slot' }), { type: 'buy_shop_item', itemId: pack.id });
-        expect(useGameBridge.getState().loadGameState(JSON.stringify(opened))).toBe(true);
-        const loaded = useGameBridge.getState().gameState;
-        expect(loaded.pendingRaiseChoices).toEqual(opened.pendingRaiseChoices);
-        expect(loaded.relicSlots).toBe(5);
-        expect(loaded.rngState).toBe(opened.rngState);
-        const next = act(loaded, { type: 'choose_raise', raiseId: loaded.pendingRaiseChoices[0] });
-        expect(Object.keys(next.handUpgrades)).toHaveLength(1);
-    });
-
-    it.each(PACKS.filter(pack => pack.family === 'raise'))('opens $name with its offer and selection counts', pack => {
-        const state = { ...shop(), cash: 1000, shopItems: [{ id: 'pack', type: 'RaisePack' as const, packId: pack.id, cost: pack.cost }] };
-        const opened = act(state, { type: 'buy_shop_item', itemId: 'pack' });
-        expect(opened.pendingRaiseChoices).toHaveLength(pack.offerCount);
-        expect(new Set(opened.pendingRaiseChoices).size).toBe(pack.offerCount);
-        expect(opened.pendingPack).toEqual({ packId: pack.id, picksRemaining: pack.pickCount });
-        expect(opened.cash).toBe(1000 - pack.cost);
-        let current = opened;
-        for (let i = 0; i < pack.pickCount; i++) {
-            const id = current.pendingRaiseChoices[0];
-            const rngState = current.rngState;
-            current = act(current, { type: 'choose_raise', raiseId: id });
-            expect(current.handUpgrades[id]).toBe(1);
-            expect(current.cash).toBe(opened.cash);
-            expect(current.rngState).toBe(rngState);
-            expect(act(current, { type: 'choose_raise', raiseId: id })).toEqual(current);
-            if (i < pack.pickCount - 1) {
-                expect(current.pendingRaiseChoices).toEqual(opened.pendingRaiseChoices.filter(choice => choice !== id));
-                expect(current.pendingPack?.picksRemaining).toBe(1);
-                for (const action of [{ type: 'leave_shop' }, { type: 'restock_shop' }, { type: 'buy_relic_slot' }, { type: 'buy_shop_item', itemId: 'pack' }] as PlayerAction[])
-                    expect(act(current, action)).toEqual(current);
-                // Resuming a partially opened pack must preserve its last pick and offers.
-                expect(useGameBridge.getState().loadGameState(JSON.stringify(current))).toBe(true);
-                expect(useGameBridge.getState().gameState.pendingPack).toEqual(current.pendingPack);
-                expect(useGameBridge.getState().gameState.pendingRaiseChoices).toEqual(current.pendingRaiseChoices);
-                current = useGameBridge.getState().gameState;
-            }
+    it.each(PACKS.filter(pack => pack.family === 'raise'))('opens $name for free and applies exactly its allowed picks', pack => {
+        const initial = { ...shop(), offeredPacks: [pack.id] };
+        let state = act(initial, { type: 'open_pack', packId: pack.id });
+        expect(state.pendingRaiseChoices).toHaveLength(pack.offerCount);
+        for (let pick = 0; pick < pack.pickCount; pick++) {
+            expect(act(state, { type: 'finish_pack' })).toEqual(state);
+            const id = state.pendingRaiseChoices[0];
+            expect(getValidActions(state)).toContainEqual({ type: 'choose_raise', raiseId: id });
+            const previous = state;
+            state = act(state, { type: 'choose_raise', raiseId: id });
+            expect(state.handUpgrades[id]).toBe(1);
+            expect(previous.handUpgrades[id]).toBeUndefined();
+            expect(act(state, { type: 'choose_raise', raiseId: id })).toEqual(state);
         }
-        expect(current.pendingRaiseChoices).toEqual([]);
-        expect(current.pendingPack).toBeNull();
-        expect(Object.keys(current.handUpgrades)).toHaveLength(pack.pickCount);
-        expect(current.shopItems[0].purchased).toBe(true);
-        expect(act(current, { type: 'buy_shop_item', itemId: 'pack' })).toEqual(current);
+        expect(state.pendingPack).toBeNull();
+        expect(state.cash).toBe(initial.cash);
+        expect(act(state, { type: 'open_pack', packId: pack.id })).toEqual(state);
+        expect(act(state, { type: 'finish_pack' }).phase).toBe('entering_casino');
     });
 
-    it('uses common, uncommon and rare pack availability without changing legacy packs', () => {
-        expect([0, 0.599, 0.6, 0.899, 0.9, 0.999].map(roll => rollPackDefinition(roll).id))
+    it('keeps the existing 60/30/10 pack size distribution', () => {
+        expect([0, .599, .6, .899, .9, .999].map(roll => rollPackDefinition(roll).id))
             .toEqual(['raise_basic', 'raise_basic', 'raise_jumbo', 'raise_jumbo', 'raise_mega', 'raise_mega']);
-        expect(getPackDefinition()).toEqual(PACKS[0]);
-        const state = { ...shop(), shopItems: [{ id: 'legacy_pack', type: 'RaisePack' as const, cost: 40 }] };
-        const opened = act(state, { type: 'buy_shop_item', itemId: 'legacy_pack' });
-        expect(opened.pendingRaiseChoices).toHaveLength(3);
-        expect(opened.pendingPack).toEqual({ packId: 'raise_basic', picksRemaining: 1 });
-        const { pendingPack: omittedPack, ...oldPending } = opened;
-        expect(omittedPack).toBeDefined();
-        expect(useGameBridge.getState().loadGameState(JSON.stringify(oldPending))).toBe(true);
-        expect(useGameBridge.getState().gameState.pendingPack).toEqual({ packId: 'raise_basic', picksRemaining: 1 });
     });
 
     it('settles decimal penalties without losing a dollar to floating point rounding', () => {
@@ -127,20 +58,7 @@ describe('relic slots and raise packs', () => {
         expect(act(state, { type: 'score_round' }).cash).toBe(70); // $100 * 0.7
     });
 
-    it('migrates old shop stock to relics and packs while retaining earned upgrades', () => {
-        const legacy = { ...shop(), handUpgrades: { raise_pair_cash: 2 },
-            inventory: Array.from({ length: 6 }, (_, i) => ({ id: ['redraw', 'surrender', 'discard', 'switch', 'double_down', 'hold'][i], state: {} })),
-            shopItems: [{ id: 'star_bead', type: 'Score', cost: 70 }, { id: 'raise_pair_mult', type: 'Raise', cost: 60 }] };
-        const { relicSlots: omittedSlots, pendingRaiseChoices: omittedChoices, ...oldState } = legacy;
-        expect(omittedSlots).toBeDefined();
-        expect(omittedChoices).toBeDefined();
-        expect(useGameBridge.getState().loadGameState(JSON.stringify(oldState))).toBe(true);
-        const loaded = useGameBridge.getState().gameState;
-        expect(loaded.relicSlots).toBe(6);
-        expect(loaded.pendingRaiseChoices).toEqual([]);
-        expect(loaded.handUpgrades).toEqual({ raise_pair_cash: 2 });
-        expect(loaded.shopItems.map(item => item.type)).toEqual(['Relic', 'RaisePack']);
-    });
+
 
     it('generates unique offers across all rarities, with benefits and at most one drawback', () => {
         const rarityCounts = new Set<string>(), effectCounts = new Set<number>();

@@ -1,3 +1,4 @@
+import { finishOpeningPack } from './fixtures';
 import { describe, it, expect } from 'vitest';
 import { processAction, createInitialState, getValidActions } from '../engine';
 import type { GameState } from '../GameState';
@@ -20,7 +21,7 @@ describe('Game Engine', () => {
             seed,
             globalTutorialsCompleted: TUTORIAL_STEPS.map(s => s.id)
         });
-        return nextState;
+        return finishOpeningPack(nextState);
     }
 
     function dealHand(state: GameState): GameState {
@@ -83,7 +84,7 @@ describe('Game Engine', () => {
             });
             const phaseEvent = events.find(e => e.type === 'phase_changed');
             expect(phaseEvent).toBeDefined();
-            expect(phaseEvent!.type === 'phase_changed' && phaseEvent.to).toBe('entering_casino');
+            expect(phaseEvent!.type === 'phase_changed' && phaseEvent.to).toBe('pack_choice');
         });
 
         it('is deterministic with same seed', () => {
@@ -447,10 +448,16 @@ describe('Game Engine', () => {
             let state2 = createInitialState();
 
             for (const action of actions) {
+                if (action.type === 'deal') {
+                    state1 = finishOpeningPack(state1);
+                    state2 = finishOpeningPack(state2);
+                }
                 state1 = processAction(state1, action).nextState;
                 state2 = processAction(state2, action).nextState;
             }
 
+            expect(state1.dealsTaken).toBe(1);
+            expect(state1.phase).toBe('deal_over');
             expect(state1.totalScore).toBe(state2.totalScore);
             expect(state1.rngState).toBe(state2.rngState);
             expect(state1.playerHands.map(h => h.blackjackValue)).toEqual(

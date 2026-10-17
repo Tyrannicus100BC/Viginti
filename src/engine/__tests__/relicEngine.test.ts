@@ -1,3 +1,4 @@
+import { finishOpeningPack } from './fixtures';
 /**
  * RelicEngine tests — verify that the pure relic adapter produces the
  * correct GameEvents and handles state immutably.
@@ -41,7 +42,7 @@ function startGame(seed?: number): GameState {
         { phase: 'init' } as GameState,
         { type: 'start_game', cityId: 'atlantic_city', gamblerId: 'default', seed: seed ?? 42 }
     );
-    return nextState;
+    return finishOpeningPack(nextState);
 }
 
 // ─── Value Hook Tests ───────────────────────────────────

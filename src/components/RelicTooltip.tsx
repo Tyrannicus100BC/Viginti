@@ -93,9 +93,8 @@ export const RelicTooltip: React.FC<RelicTooltipProps> = ({
             if (
                 /^[₵\$\+\d]/i.test(part.trim()) && (part.trim().startsWith('₵') || part.trim().startsWith('$') || part.trim().startsWith('+') || part.toLowerCase().includes('chips'))
             ) {
-                const isComps = part.trim().includes('₵');
                 const isNegative = part.trim().startsWith('-') || part.trim().startsWith('$-');
-                return <span key={i} className={isNegative ? styles.negativeValue : (isComps ? styles.compsValue : styles.chipsValue)}>{part}</span>;
+                return <span key={i} className={isNegative ? styles.negativeValue : styles.chipsValue}>{part}</span>;
             }
             if (part.includes('\n')) {
                 return (

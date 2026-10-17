@@ -31,6 +31,9 @@ function startGame(seed = 42) {
         seed,
         globalTutorialsCompleted: TUTORIAL_STEPS.map(s => s.id)
     });
+    dispatch({ type: 'open_pack', packId: getBridge().offeredPacks[0] });
+    dispatch({ type: 'skip_pack' });
+    dispatch({ type: 'finish_pack' });
 }
 
 // ─── Tests ──────────────────────────────────────────────
@@ -238,28 +241,23 @@ describe('GameBridge', () => {
             expect(bridge.phase).toBe(gs.phase);
             expect(bridge.deal).toBe(gs.deal);
             expect(bridge.totalScore).toBe(gs.totalScore);
-            expect(bridge.comps).toBe(gs.comps);
 // deck assertion removed
             expect(bridge.playerHands.length).toBe(gs.playerHands.length);
         });
     });
 
-    it('charges cash to deal, then one ticket to open a side hand', () => {
+    it('charges cash to deal and plays either side hand for free', () => {
         startGame(42);
         dispatch({ type: 'deal' });
-        expect(getBridge().comps).toBe(5);
         expect(getBridge().cash).toBe(50);
-        expect(getBridge().playerHands[0].isInactive).toBe(true);
+        expect(getBridge().playerHands[0].isInactive).toBe(false);
         dispatch({ type: 'draw' });
         dispatch({ type: 'place_card', handIndex: 0 });
-        expect(getBridge().comps).toBe(4);
         expect(getBridge().playerHands[0].isInactive).toBe(false);
         expect(getBridge().playerHands[0].cards).toHaveLength(1);
         dispatch({ type: 'draw' });
         dispatch({ type: 'place_card', handIndex: 0 });
-        expect(getBridge().comps).toBe(4);
         expect(getBridge().playerHands[0].cards).toHaveLength(2);
-        expect(getBridge().comps).toBe(getBridge().gameState.comps);
     });
 
     it('loads older debug snapshots with safe defaults for the new ante fields', () => {
@@ -271,40 +269,35 @@ describe('GameBridge', () => {
         expect(getBridge().loadGameState(JSON.stringify(snapshot))).toBe(true);
         expect(getBridge().ante).toBe(50);
         expect(getBridge().handsUntilAnteIncrease).toBe(4);
-        expect(getBridge().shopHasNewStock).toBe(false);
         expect(getBridge().anteIncrease).toBe(null);
     });
 
-    it('preserves new stock badges in exported runs and clears both state views on the first visit', () => {
-        startGame(42);
-        const state = { ...getBridge().gameState, phase: 'deal_over', shopHasNewStock: true };
+    it('preserves a pending reward in both state views across import', () => {
+        dispatch({ type: 'start_game', cityId: 'las_vegas', gamblerId: 'default', seed: 17 });
+        const state = getBridge().gameState;
         expect(getBridge().loadGameState(JSON.stringify(state))).toBe(true);
-        expect(getBridge().gameState.shopHasNewStock).toBe(true);
-        expect(getBridge().shopHasNewStock).toBe(true);
-        dispatch({ type: 'enter_gift_shop' });
-        expect(getBridge().gameState.shopHasNewStock).toBe(false);
-        expect(getBridge().shopHasNewStock).toBe(false);
+        expect(getBridge().offeredPacks).toEqual(state.offeredPacks);
+        expect(getBridge().phase).toBe('pack_choice');
+    });
+    it('converts older shop snapshots to one free reward and removes retired ticket and stock fields', () => {
+        startGame();
+        const legacy = { ...getBridge().gameState, phase: 'gift_shop', comps: 9, shopItems: [],
+            shopReturnPhase: 'deal_over', packReturnPhase: undefined, relicSlots: 4, offeredPacks: undefined,
+            playerHands: getBridge().playerHands.map(hand => ({ ...hand, isInactive: hand.id !== 1 })) };
+        expect(getBridge().loadGameState(JSON.stringify(legacy))).toBe(true);
+        const migrated = getBridge().gameState;
+        expect(migrated.phase).toBe('pack_choice');
+        expect(migrated.offeredPacks).toHaveLength(3);
+        expect(migrated.relicSlots).toBe(6);
+        expect(migrated.playerHands.every(hand => !hand.isInactive)).toBe(true);
+        expect(migrated).not.toHaveProperty('comps');
+        expect(migrated).not.toHaveProperty('shopItems');
+        expect(migrated.packReturnPhase).toBe('deal_over');
+        const originalOffers = migrated.offeredPacks;
+        const originalRng = migrated.rngState;
+        expect(getBridge().loadGameState(JSON.stringify(migrated))).toBe(true);
+        expect(getBridge().offeredPacks).toEqual(originalOffers);
+        expect(getBridge().gameState.rngState).toBe(originalRng);
     });
 
-    describe('gift shop flow', () => {
-        it('can enter shop from a completed deal', () => {
-            startGame(42);
-
-            // Set up a completed deal
-            const gs = getBridge().gameState;
-            const completedDeal = {
-                ...gs,
-                phase: 'deal_over' as const,
-                totalScore: 100,
-                targetScore: 20,
-                comps: 10,
-            };
-            // Use dispatchSync which goes through processAction
-            useGameBridge.setState({ gameState: completedDeal });
-            dispatch({ type: 'enter_gift_shop' });
-
-            expect(getBridge().phase).toBe('gift_shop');
-            expect(getBridge().shopItems.length).toBeGreaterThan(0);
-        });
-    });
 });

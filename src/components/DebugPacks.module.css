@@ -1,0 +1,20 @@
+.overlay { position: absolute; inset: 0; z-index: 6500; display: flex; align-items: center; justify-content: center; padding: 40px; background: #050c12cc; backdrop-filter: blur(8px); }
+.dialog { width: min(920px, 100%); max-height: 90%; overflow-y: auto; padding: 28px; border: 1px solid #526477; border-radius: 16px; background: #1c2833; color: #ecf0f1; box-shadow: 0 24px 90px #000a; }
+.header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; margin-bottom: 26px; }
+.header h2 { margin: 0 0 10px; font-size: 28px; color: #ffe3a2; }
+.header h2 span { font-size: 17px; font-weight: 500; color: #a9c6db; }
+.header p { margin: 0; color: #a9c6db; font-size: 15px; }
+.close { display: grid; place-items: center; padding: 0; line-height: 1; flex-shrink: 0; border: 1px solid #526477; border-radius: 7px; background: transparent; color: #c6d9e8; font-size: 26px; width: 36px; height: 36px; cursor: pointer; }
+.families { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+.families h3 { margin: 0 0 14px; color: #c6d9e8; text-transform: uppercase; font-size: 12px; letter-spacing: 2px; }
+.packs { display: grid; gap: 12px; }
+.pack { display: grid; grid-template-columns: 44px minmax(0, 1fr); column-gap: 12px; row-gap: 8px; align-items: center; text-align: left; padding: 16px 14px; border: 1px solid var(--pack-color); border-radius: 10px; background: linear-gradient(135deg, #2c4053, #172533); color: #ecf0f1; font: inherit; cursor: pointer; transition: background 150ms, box-shadow 150ms; }
+.pack > svg { grid-row: span 2; width: 44px; height: 44px; }
+.pack strong { font-size: 15px; line-height: 1.3; }
+.pack > span { font-size: 13px; color: #a9c6db; }
+.pack:hover:not(:disabled) { background: #35546b; box-shadow: 0 0 18px color-mix(in srgb, var(--pack-color) 22%, transparent); }
+.pack:disabled { opacity: .5; cursor: default; }
+.pack:focus-visible, .close:focus-visible { outline: 3px solid #74b9ff; outline-offset: 3px; }
+.error { margin: 18px 0 0; color: #ff9c9c; font-size: 14px; }
+@media (max-width: 700px) { .overlay { padding: 20px; } .dialog { padding: 22px; } .families { grid-template-columns: 1fr; } .pack { grid-template-columns: 44px minmax(0, 1fr) auto; } .pack > svg { grid-row: 1; } }
+@media (prefers-reduced-motion: reduce) { .pack { transition: none; } }

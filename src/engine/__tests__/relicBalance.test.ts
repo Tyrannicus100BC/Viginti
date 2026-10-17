@@ -1,3 +1,4 @@
+import { finishOpeningPack } from './fixtures';
 import { describe, expect, it } from 'vitest';
 import { createInitialState, processAction } from '../engine';
 import type { GameState } from '../GameState';
@@ -13,7 +14,7 @@ import type { Card } from '../../types';
 const card = (rank: Card['rank'], id: string = rank): Card => ({ id, rank, suit: 'hearts' });
 const instance = (id: string) => ({ id, state: { ...RelicManager.getRelicConfig(id)!.properties } });
 const act = (state: GameState, action: Parameters<typeof processAction>[1]) => processAction(state, action).nextState;
-const start = () => act(createInitialState(), { type: 'start_game', cityId: 'atlantic_city', gamblerId: 'default', seed: 42 });
+const start = () => finishOpeningPack(act(createInitialState(), { type: 'start_game', cityId: 'atlantic_city', gamblerId: 'default', seed: 42 }));
 const removed = ['flusher', 'soap', 'badge', 'medal', 'ruler', 'protractor', 'old_receipt', 'lucky_rock',
     'burnt_match', 'lost_key', 'feather', 'odd_sock', 'high_roller', 'one_armed', 'royalty', 'key_ring', 'deft'];
 
@@ -185,7 +186,6 @@ describe('relic balance', () => {
             { id: 'redraw', state: { rounds_since_recharge: 1 } },
             { id: 'deft', state: { extra_draws: 1 } },
         ], tableActionCharges: { redraw: 0 },
-            shopItems: [{ id: 'key_ring', type: 'Relic', cost: 40 }, { id: 'star_bead', type: 'Relic', cost: 40 }],
             pendingPack: { packId: 'relic_basic', picksRemaining: 1 }, pendingPackChoices: ['badge', 'star_bead'] };
         expect(useGameBridge.getState().loadGameState(JSON.stringify(legacy))).toBe(true);
         const loaded = useGameBridge.getState().gameState;
@@ -199,19 +199,16 @@ describe('relic balance', () => {
         expect(states.redraw.rounds_since_recharge).toBe(1);
         expect(loaded.tableActionCharges.redraw).toBe(0);
         expect(states.deft).toBeUndefined();
-        expect(loaded.shopItems.map(item => item.id)).toEqual(['star_bead']);
         expect(loaded.pendingPackChoices).toEqual(['star_bead']);
         expect(useGameBridge.getState().loadGameState(JSON.stringify(loaded))).toBe(true);
         expect(useGameBridge.getState().gameState.inventory).toEqual(loaded.inventory);
     });
 
-    it.each(['double_down', 'surrender', 'discard', 'redraw', 'hold', 'switch'])('%s starts fully charged when bought directly or selected from a pack', id => {
+    it.each(['double_down', 'surrender', 'discard', 'redraw', 'hold', 'switch'])('%s starts fully charged when selected from a pack', id => {
         const config = RelicManager.getRelicConfig(id)!;
-        const shop = { ...start(), phase: 'gift_shop' as const, cash: 10000, shopItems: [{ id, type: 'Relic' as const, cost: 40 }] };
-        const bought = act(shop, { type: 'buy_shop_item', itemId: id });
-        expect(bought.tableActionCharges[id]).toBe(config.tableAction!.maxCharges);
-        expect(bought.inventory[0].state.rounds_since_recharge).toBe(0);
-        const pack: GameState = { ...shop, pendingPack: { packId: 'relic_basic', picksRemaining: 1 }, pendingPackChoices: [id] };
-        expect(act(pack, { type: 'choose_pack_card', cardId: id }).tableActionCharges[id]).toBe(config.tableAction!.maxCharges);
+        const pack: GameState = { ...start(), phase: 'pack_choice', pendingPack: { packId: 'relic_basic', picksRemaining: 1 }, pendingPackChoices: [id] };
+        const chosen = act(pack, { type: 'choose_pack_card', cardId: id });
+        expect(chosen.tableActionCharges[id]).toBe(config.tableAction!.maxCharges);
+        expect(chosen.inventory[0].state.rounds_since_recharge).toBe(0);
     });
 });

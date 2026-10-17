@@ -14,12 +14,11 @@ import titleStyles from './components/TitlePhysics.module.css';
 import { GamblerSelect } from './components/GamblerSelect';
 import { CitySelect } from './components/CitySelect';
 
-import { CompsWindow } from './components/CompsWindow';
-import { RaisePackChoice, type PackSourceRect } from './components/RaisePackChoice';
+import { PackReward } from './components/PackReward';
 import { RelicInventory } from './components/RelicInventory';
 
 import { RelicStore } from './components/RelicStore';
-import { GiftShop } from './components/GiftShop';
+import { DebugPacks } from './components/DebugPacks';
 import { TableActionButton } from './components/TableActionButton';
 
 import type { PlayerHand, Card } from './types';
@@ -27,7 +26,6 @@ import { useLayout } from './components/ResponsiveLayout';
 import { DeckButton, HandScoresButton } from './components/HeaderButtons';
 import { CITY_DEFINITIONS } from './logic/cities/definitions';
 import { RelicManager } from './logic/relics/manager';
-import { getRelicRarityFrameColor } from './logic/relics/rarity';
 import { AudioControls } from './components/AudioControls';
 import { AnteIncreasePopup } from './components/AnteIncreasePopup';
 import { sfxEngine } from './utils/sfxEngine';
@@ -66,7 +64,7 @@ const MUSIC_FADE_IN_MS = 0;
 const MUSIC_SWITCH_FADE_OUT_MS = 800;
 const MUSIC_VOLUME_SCALE = 0.5;
 const MENU_MUSIC = '/sounds/Music-Menu.mp3';
-const GIFT_SHOP_MUSIC = '/sounds/Music-GiftShop.mp3';
+const PACK_MUSIC = '/sounds/Music-GiftShop.mp3';
 const GAME_MUSIC_TRACKS = [
     '/sounds/Music-Game-01.mp3',
     '/sounds/Music-Game-02.mp3',
@@ -101,28 +99,8 @@ type HoldPickupAnimation = {
     toScale: number;
 };
 
-type ShopRelicPurchaseLaunch = {
-    relicId: string;
-    relicType: 'left' | 'right';
-    icon: string | null;
-    name: string;
-    sourceRect: { left: number; top: number; width: number; height: number };
-};
-
-type ShopRelicFlight = {
-    key: string;
-    relicType: 'left' | 'right';
-    icon: string | null;
-    name: string;
-    rarityFrameColor: string;
-    start: { left: number; top: number; width: number; height: number };
-    target: { left: number; top: number; width: number; height: number };
-};
-
 const HOLD_PICKUP_DURATION_MS = 360;
 const HOLD_PLACE_SOURCE_Y = -275;
-const SHOP_RELIC_FLY_MS = 620;
-const GIFT_SHOP_EXIT_DURATION_MS = 300;
 
 export default function App() {
     const {
@@ -138,10 +116,8 @@ export default function App() {
 
         totalScore,
         cash,
-        comps,
         ante,
         handsUntilAnteIncrease,
-        shopHasNewStock,
         anteIncrease,
         continueAnteIncrease,
 
@@ -181,12 +157,11 @@ export default function App() {
         dealerVisible,
         isDealerPlaying,
         debugEnabled,
+        debugPackReturn,
+        isProcessingEvents,
+        pendingPack,
         toggleDebug,
         triggerDebugChips,
-        removeCard,
-        deductRemovalCost,
-        enhanceCard,
-        leaveShop,
         cardsPlacedThisTurn,
         getProjectedPlaceCount,
 
@@ -213,18 +188,10 @@ export default function App() {
 
         signalTotalWinningsAnimationComplete,
         drawTutorialReady,
-        isSellingMode,
-        toggleSellingMode,
-        removalCount,
         handUpgrades,
-        pendingRaiseChoices,
-        pendingPackChoices,
-        pendingPack,
         deckProbabilities,
-        enterGiftShop
     } = useGameStore();
 
-    const pendingPackChoiceCount = pendingRaiseChoices.length + pendingPackChoices.length + (pendingPack ? 1 : 0);
     const { scale, viewportWidth, viewportHeight } = useLayout();
 
     const tableActionSlots = inventory.flatMap(instance => {
@@ -245,22 +212,16 @@ export default function App() {
     const [showHandScores, setShowHandScores] = useState(false);
     const [showDebugLog, setShowDebugLog] = useState(false);
     const [showDebugLoad, setShowDebugLoad] = useState(false);
-    const [isRemovingCards, setIsRemovingCards] = useState(false);
-    const [isEnhancingCards, setIsEnhancingCards] = useState(false);
     const [isSelectingDebugCard, setIsSelectingDebugCard] = useState(false);
     const [swapAnimation, setSwapAnimation] = useState<SwapAnimation | null>(null);
     const [holdPickupAnimation, setHoldPickupAnimation] = useState<HoldPickupAnimation | null>(null);
-    const [shopRelicPurchaseLaunch, setShopRelicPurchaseLaunch] = useState<ShopRelicPurchaseLaunch | null>(null);
-    const [shopRelicFlight, setShopRelicFlight] = useState<ShopRelicFlight | null>(null);
-    const [pendingInventoryHide, setPendingInventoryHide] = useState<{ kind: 'left' | 'right'; id: string } | null>(null);
-    const [hiddenInventoryEntry, setHiddenInventoryEntry] = useState<{ kind: 'left' | 'right'; id: string; index: number } | null>(null);
     const [hiddenDrawCardIds, setHiddenDrawCardIds] = useState<string[]>([]);
     const [entryAnimationOverrides, setEntryAnimationOverrides] = useState<Record<string, { xOffset: number; yOffset: number; scale: number }>>({});
     const [hiddenCardIds, setHiddenCardIds] = useState<string[]>([]);
     // showHandRankings removed
-    const [showCompsWindow, setShowCompsWindow] = useState(false);
     const [showRelicStore, setShowRelicStore] = useState(false);
-    const [overlayComplete, setOverlayComplete] = useState(true);
+    const [showDebugPacks, setShowDebugPacks] = useState(false);
+    const [overlayComplete] = useState(true);
     // scoreAnimate removed
 
     const [hasClickedWin, setHasClickedWin] = useState(false);
@@ -272,9 +233,6 @@ export default function App() {
     const swapTimeoutRef = useRef<number | null>(null);
     const holdPickupTimeoutRef = useRef<number | null>(null);
     const holdPlaceOverrideTimeoutsRef = useRef<number[]>([]);
-    const shopRelicRetryTimeoutRef = useRef<number | null>(null);
-    const shopRelicFlyCardRef = useRef<HTMLDivElement | null>(null);
-    const shopRelicFlyAnimationRef = useRef<Animation | null>(null);
 
     const drawAreaRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -398,7 +356,7 @@ export default function App() {
 
     const getDesiredMusicTrack = (currentPhase: string, casinoDeal: number) => {
         if (currentPhase === 'init') return MENU_MUSIC;
-        if (currentPhase === 'gift_shop' || currentPhase === 'casino_payout') return GIFT_SHOP_MUSIC;
+        if (currentPhase === 'pack_choice' || currentPhase === 'casino_payout') return PACK_MUSIC;
         return getGameMusicForDeal(casinoDeal);
     };
 
@@ -637,214 +595,20 @@ export default function App() {
         playCardPlace();
     }, [playCardPlace]);
 
-    const handleShopRelicPurchased = React.useCallback((payload: ShopRelicPurchaseLaunch) => {
-        const inventoryKind = payload.relicType;
-        setPendingInventoryHide({ kind: inventoryKind, id: payload.relicId });
-        setShopRelicPurchaseLaunch(payload);
-    }, []);
-
-    useEffect(() => {
-        if (!shopRelicPurchaseLaunch) return;
-        if (shopRelicFlight) return;
-        let cancelled = false;
-        let attempts = 0;
-        const inventoryKind = shopRelicPurchaseLaunch.relicType;
-
-        const tryResolveTarget = () => {
-            if (cancelled) return;
-            const rows = Array.from(
-                document.querySelectorAll(
-                    `[data-inventory-row="true"][data-inventory-kind="${inventoryKind}"][data-relic-id="${shopRelicPurchaseLaunch.relicId}"]`
-                )
-            ) as HTMLDivElement[];
-
-            if (rows.length === 0) {
-                attempts += 1;
-                if (attempts <= 15) {
-                    shopRelicRetryTimeoutRef.current = window.setTimeout(tryResolveTarget, 25);
-                } else {
-                    setShopRelicPurchaseLaunch(null);
-                    setPendingInventoryHide(null);
-                }
-                return;
-            }
-
-            const targetRow = rows[rows.length - 1];
-            const targetIconEl = targetRow.querySelector('[data-inventory-icon="true"]') as HTMLElement | null;
-            const targetLabelEl = targetRow.querySelector('[data-inventory-label="true"]') as HTMLElement | null;
-            const targetIconRect = targetIconEl?.getBoundingClientRect();
-            const targetLabelRect = targetLabelEl?.getBoundingClientRect();
-            const targetIndex = Number(targetRow.dataset.inventoryIndex ?? -1);
-            if (targetIndex < 0 || !targetIconRect || !targetLabelRect) {
-                setShopRelicPurchaseLaunch(null);
-                setPendingInventoryHide(null);
-                return;
-            }
-
-            const targetLabelText = targetLabelEl?.textContent?.trim();
-            const sourceRect = shopRelicPurchaseLaunch.sourceRect;
-            const left = Math.min(targetIconRect.left, targetLabelRect.left);
-            const top = Math.min(targetIconRect.top, targetLabelRect.top);
-            const right = Math.max(targetIconRect.right, targetLabelRect.right);
-            const bottom = Math.max(targetIconRect.bottom, targetLabelRect.bottom);
-            const targetRect = new DOMRect(left, top, right - left, bottom - top);
-            const relicConfig = RelicManager.getRelicConfig(shopRelicPurchaseLaunch.relicId);
-            const rarityFrameColor = getRelicRarityFrameColor(relicConfig?.rarity ?? 'Common');
-
-            setHiddenInventoryEntry({
-                kind: inventoryKind,
-                id: shopRelicPurchaseLaunch.relicId,
-                index: targetIndex
-            });
-            setShopRelicFlight({
-                key: `${shopRelicPurchaseLaunch.relicId}-${Date.now()}`,
-                relicType: shopRelicPurchaseLaunch.relicType,
-                icon: shopRelicPurchaseLaunch.icon,
-                name: targetLabelText || shopRelicPurchaseLaunch.name,
-                rarityFrameColor,
-                start: {
-                    left: sourceRect.left,
-                    top: sourceRect.top,
-                    width: Math.max(1, sourceRect.width),
-                    height: Math.max(1, sourceRect.height)
-                },
-                target: {
-                    left: targetRect.left,
-                    top: targetRect.top,
-                    width: Math.max(1, targetRect.width),
-                    height: Math.max(1, targetRect.height)
-                }
-            });
-            setShopRelicPurchaseLaunch(null);
-        };
-
-        shopRelicRetryTimeoutRef.current = window.setTimeout(tryResolveTarget, 0);
-        return () => {
-            cancelled = true;
-            if (shopRelicRetryTimeoutRef.current !== null) {
-                window.clearTimeout(shopRelicRetryTimeoutRef.current);
-                shopRelicRetryTimeoutRef.current = null;
-            }
-        };
-    }, [shopRelicPurchaseLaunch, shopRelicFlight]);
-
-    useEffect(() => {
-        if (!shopRelicFlight) return;
-        const cardEl = shopRelicFlyCardRef.current;
-        if (!cardEl) return;
-
-        if (shopRelicFlyAnimationRef.current) {
-            shopRelicFlyAnimationRef.current.cancel();
-            shopRelicFlyAnimationRef.current = null;
-        }
-
-        let rafId: number | null = null;
-        cardEl.style.opacity = '0';
-        rafId = window.requestAnimationFrame(() => {
-            const actualStart = cardEl.getBoundingClientRect();
-            const source = shopRelicFlight.start;
-            const target = shopRelicFlight.target;
-            const startDx = source.left - actualStart.left;
-            const startDy = source.top - actualStart.top;
-            const endDx = target.left - actualStart.left;
-            const endDy = target.top - actualStart.top;
-            const startScaleX = actualStart.width > 0 ? (source.width / actualStart.width) : 1;
-            const startScaleY = actualStart.height > 0 ? (source.height / actualStart.height) : 1;
-            const endScaleX = actualStart.width > 0 ? (target.width / actualStart.width) : 1;
-            const endScaleY = actualStart.height > 0 ? (target.height / actualStart.height) : 1;
-            const startTransform = `translate(${startDx}px, ${startDy}px) scale(${startScaleX}, ${startScaleY})`;
-            const baseEndTransform = `translate(${endDx}px, ${endDy}px) scale(${endScaleX}, ${endScaleY})`;
-
-            cardEl.style.transform = startTransform;
-            // Calibrate destination against actual rendered box to eliminate residual sub-pixel drift.
-            cardEl.style.transform = baseEndTransform;
-            const projectedEnd = cardEl.getBoundingClientRect();
-            const correctionX = target.left - projectedEnd.left;
-            const correctionY = target.top - projectedEnd.top;
-            const endTransform = `translate(${endDx + correctionX}px, ${endDy + correctionY}px) scale(${endScaleX}, ${endScaleY})`;
-            cardEl.style.transform = startTransform;
-            cardEl.style.opacity = '1';
-            const animation = cardEl.animate(
-                [
-                    { transform: startTransform, opacity: 1 },
-                    { transform: endTransform, opacity: 1 }
-                ],
-                {
-                    duration: SHOP_RELIC_FLY_MS,
-                    easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)',
-                    fill: 'forwards'
-                }
-            );
-
-            shopRelicFlyAnimationRef.current = animation;
-            animation.onfinish = () => {
-                if (shopRelicFlyAnimationRef.current === animation) {
-                    shopRelicFlyAnimationRef.current = null;
-                }
-                setShopRelicFlight(null);
-                setHiddenInventoryEntry(null);
-                setPendingInventoryHide(null);
-            };
-        });
-
-        return () => {
-            if (rafId !== null) {
-                window.cancelAnimationFrame(rafId);
-            }
-            if (shopRelicFlyAnimationRef.current) {
-                shopRelicFlyAnimationRef.current.cancel();
-                shopRelicFlyAnimationRef.current = null;
-            }
-        };
-    }, [shopRelicFlight]);
-
-    const [displayComps, setDisplayComps] = useState(comps);
-    const [compsAnimate, setCompsAnimate] = useState(false);
     const confettiFiredRef = useRef(false);
 
     const [showSelectionUI, setShowSelectionUI] = useState(false);
-    const [giftShopEnterComplete, setGiftShopEnterComplete] = useState(false);
-    const [raisePackSource, setRaisePackSource] = useState<PackSourceRect | null>(null);
-    const [isGiftShopExiting, setIsGiftShopExiting] = useState(false);
     const [hasSettledFirstOverlay, setHasSettledFirstOverlay] = useState(false);
     const [, setProgressionRevision] = useState(0);
     const pendingDrawAnimationIds = useRef<Set<string>>(new Set());
     const isDrawAnimationActive = useRef(false);
-    const giftShopExitTimeoutRef = useRef<number | null>(null);
     useEffect(() => {
         return () => {
             if (standWarningTimeoutRef.current !== null) {
                 window.clearTimeout(standWarningTimeoutRef.current);
             }
-            if (shopRelicRetryTimeoutRef.current !== null) {
-                window.clearTimeout(shopRelicRetryTimeoutRef.current);
-                shopRelicRetryTimeoutRef.current = null;
-            }
-            if (shopRelicFlyAnimationRef.current) {
-                shopRelicFlyAnimationRef.current.cancel();
-                shopRelicFlyAnimationRef.current = null;
-            }
-            if (giftShopExitTimeoutRef.current !== null) {
-                window.clearTimeout(giftShopExitTimeoutRef.current);
-                giftShopExitTimeoutRef.current = null;
-            }
         };
     }, []);
-
-    useEffect(() => {
-        if (phase === 'gift_shop') {
-            setGiftShopEnterComplete(false);
-            setIsGiftShopExiting(false);
-            return;
-        }
-        setGiftShopEnterComplete(false);
-        setIsGiftShopExiting(false);
-        setRaisePackSource(null);
-        if (giftShopExitTimeoutRef.current !== null) {
-            window.clearTimeout(giftShopExitTimeoutRef.current);
-            giftShopExitTimeoutRef.current = null;
-        }
-    }, [phase]);
 
     useEffect(() => {
         if (!standWarningMessage) {
@@ -1068,13 +832,7 @@ export default function App() {
         }
     }, [isCollectingChips, phase, !!runningSummary, dealSummary]);
 
-    React.useEffect(() => {
-        setOverlayComplete(true);
-        setDisplayComps(comps);
-        setCompsAnimate(true);
-        const timer = setTimeout(() => setCompsAnimate(false), 500 / animationSpeed);
-        return () => clearTimeout(timer);
-    }, [comps, animationSpeed]);
+
 
     const isOverlayMode = phase === 'entering_casino' && !overlayComplete;
 
@@ -1280,7 +1038,7 @@ export default function App() {
         selectTableActionCard({ target, handIndex, cardId });
     };
 
-    const areAllHandsUnplayable = Array.isArray(playerHands) && playerHands.every(h => h && !canPlayHand(h, comps));
+    const areAllHandsUnplayable = Array.isArray(playerHands) && playerHands.every(h => h && !canPlayHand(h));
     const hasDrawnCards = drawnCards.some(c => c !== null);
     const isDrawAreaClear = !hasDrawnCards;
     const canDraw = phase === 'playing' && isDrawAreaClear && !isDealerPlaying && !isInitialDeal && interactionMode === 'default' && !areAllHandsUnplayable && !isRedrawAnimating;
@@ -1293,7 +1051,7 @@ export default function App() {
     const hasSurrenderTarget = playerHands.some(h => !h.isBust && !h.isHeld && h.blackjackValue !== 21 && h.cards.length > 0);
     const hasDiscardPlayerTargets = playerHands.some(h => !h.isBust && h.blackjackValue !== 21 && h.cards.length > 0);
     const hasDiscardDealerTargets = hasDealerFaceUpCard && dealer.blackjackValue < 21;
-    const hasHoldPlacementTargets = playerHands.some(h => canPlayHand(h, comps));
+    const hasHoldPlacementTargets = playerHands.some(h => canPlayHand(h));
     const hasSwitchTargets = hasDealerFaceUpCard && playerHands.some(h => !h.isBust && h.blackjackValue !== 21 && h.cards.length > 0);
     const dealerSelectableCardIds = (interactionMode === 'select_card' && activeTableActionId === 'discard' && hasDiscardDealerTargets)
         ? dealer.cards.filter(card => card.isFaceUp).map(card => card.id)
@@ -1324,7 +1082,7 @@ export default function App() {
         }
     };
 
-    const areHandsVisible = phase !== 'gift_shop' && phase !== 'casino_payout';
+    const areHandsVisible = phase !== 'pack_choice' && phase !== 'casino_payout';
 
     const showStandWarning = () => {
         if (standWarningTimeoutRef.current !== null) {
@@ -1341,7 +1099,7 @@ export default function App() {
     };
 
     useEffect(() => {
-        if (phase === 'deal_over' || phase === 'init' || phase === 'gift_shop' || phase === 'victory' || phase === 'game_over') {
+        if (phase === 'deal_over' || phase === 'init' || phase === 'pack_choice' || phase === 'victory' || phase === 'game_over') {
             setAnimationSpeed(1);
         }
     }, [phase, setAnimationSpeed]);
@@ -1414,7 +1172,7 @@ export default function App() {
     const signalTotalWinningsOnce = () => {
         if (totalWinningsAnimationSignaled.current) return;
         totalWinningsAnimationSignaled.current = true;
-        signalTotalWinningsAnimationComplete();
+        signalTotalWinningsAnimationComplete?.();
     };
 
     useEffect(() => {
@@ -1443,27 +1201,6 @@ export default function App() {
         if (phase === 'entering_casino') dealFirstHand();
         else nextDeal();
     }, [phase, dealFirstHand, nextDeal]);
-
-    const finalizeGiftShopExit = React.useCallback(() => {
-        if (giftShopExitTimeoutRef.current !== null) {
-            window.clearTimeout(giftShopExitTimeoutRef.current);
-            giftShopExitTimeoutRef.current = null;
-        }
-        if (phase !== 'gift_shop' || !isGiftShopExiting) return;
-        leaveShop();
-    }, [isGiftShopExiting, leaveShop, phase]);
-
-    const startGiftShopExit = React.useCallback(() => {
-        if (phase !== 'gift_shop' || isGiftShopExiting || !giftShopEnterComplete || pendingPackChoiceCount || raisePackSource) return;
-        setIsGiftShopExiting(true);
-        if (giftShopExitTimeoutRef.current !== null) {
-            window.clearTimeout(giftShopExitTimeoutRef.current);
-        }
-        giftShopExitTimeoutRef.current = window.setTimeout(() => {
-            giftShopExitTimeoutRef.current = null;
-            finalizeGiftShopExit();
-        }, GIFT_SHOP_EXIT_DURATION_MS + 60);
-    }, [finalizeGiftShopExit, giftShopEnterComplete, isGiftShopExiting, phase, pendingPackChoiceCount, raisePackSource]);
 
     if (phase === 'init') {
         // const canStartRun = isCityUnlocked(selectedCityId) && isGamblerUnlocked(selectedGamblerId);
@@ -1639,7 +1376,7 @@ export default function App() {
 
     // Click anywhere to draw a card or advance to next deal
     const handleGlobalClick = (e: React.MouseEvent) => {
-        if (showDeck || showHandScores || showCompsWindow || showRelicStore) return;
+        if (showDeck || showHandScores || showRelicStore || showDebugPacks) return;
         if (isTutorialInputLocked()) return;
 
         // Ignore clicks on buttons or interactive elements
@@ -1726,26 +1463,6 @@ export default function App() {
                     className={`${styles.header} ${isOverlayMode ? styles.headerCentered : ''} ${(isOverlayMode && deal === 1 && !hasSettledFirstOverlay) ? styles.noTransition : ''}`}
                     style={isOverlayMode ? { top: 460 } : {}}
                 >
-                    {debugEnabled && !isOverlayMode && (
-                        <button 
-                            className={`${styles.manageDebugBtn} ${styles.debugFade}`}
-                            style={{
-                                position: 'absolute',
-                                top: 16,
-                                left: '50%',
-                                transform: 'translate(-50%, -50%)',
-                                width: 'auto',
-                                padding: '4px 12px',
-                                zIndex: 100
-                            }}
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                triggerDebugChips();
-                            }}
-                        >
-                            CASH
-                        </button>
-                    )}
                     <div id="hud-increase" className={styles.stat}>
                         <span className={styles.statLabel}>Increase</span>
                         <span className={styles.statValue}>{handsUntilAnteIncrease}</span>
@@ -1755,22 +1472,22 @@ export default function App() {
                         <span className={styles.statValue}>${ante.toLocaleString()}</span>
                     </div>
                     <div id="hud-cash" className={styles.stat}>
-                        <span className={styles.statLabel}>Cash</span>
+                        <span className={styles.statLabel}>
+                            {debugEnabled && !isOverlayMode ? <button
+                                className={`${styles.manageDebugBtn} ${styles.cashDebugButton}`}
+                                aria-label="Debug: add $100 cash" title="Add $100 (debug)"
+                                onClick={event => { event.stopPropagation(); triggerDebugChips(); }}
+                            >Cash</button> : 'Cash'}
+                        </span>
                         <span className={styles.statValue}>${cash.toLocaleString()}</span>
                     </div>
-                    <div id="hud-comps" className={styles.stat}>
-                        <span className={styles.statLabel}>COMPS</span>
-                        <span key={displayComps} className={`${styles.statValue} ${compsAnimate ? styles.statValueAnimate : ''}`}>
-                            £{displayComps}
-                        </span>
-                    </div>
+
                 </header>
 
                 <div className={styles.rightButtons}>
                     <DeckButton 
                         onClick={() => {
                             playClick();
-                            setIsRemovingCards(false);
                             setShowDeck(true);
                         }} 
                         className={isReshuffling ? styles.reshuffleAnim : ''}
@@ -1843,8 +1560,6 @@ export default function App() {
                 <div className={styles.sidebarsContainer}>
                     <div className={styles.leftSidebar}>
                         <RelicInventory inventoryKind="left"
-                            hiddenEntry={hiddenInventoryEntry?.kind === 'left' ? { id: hiddenInventoryEntry.id, index: hiddenInventoryEntry.index } : null}
-                            pendingHiddenRelicId={pendingInventoryHide?.kind === 'left' ? pendingInventoryHide.id : null}
                         />
                         {debugEnabled && (
                             <button
@@ -1857,9 +1572,14 @@ export default function App() {
                     </div>
                     <div className={styles.sidebar}>
                         <RelicInventory inventoryKind="right"
-                            hiddenEntry={hiddenInventoryEntry?.kind === 'right' ? { id: hiddenInventoryEntry.id, index: hiddenInventoryEntry.index } : null}
-                            pendingHiddenRelicId={pendingInventoryHide?.kind === 'right' ? pendingInventoryHide.id : null}
                         />
+                        {debugEnabled && <button
+                            className={`${styles.manageDebugBtn} ${styles.relicDebugBtn} ${styles.packDebugButton}`}
+                            aria-label="Debug packs"
+                            disabled={isProcessingEvents || !!pendingPack || !!debugPackReturn ||
+                                !['entering_casino', 'deal_over', 'playing', 'pack_choice'].includes(phase)}
+                            onClick={() => setShowDebugPacks(true)}
+                        >PACKS</button>}
                     </div>
                 </div>
 
@@ -2225,11 +1945,11 @@ export default function App() {
                                             return !hand.isBust && !hand.isHeld && hand.blackjackValue !== 21 && hand.cards.length > 0;
                                         }
                                         if (activeTableActionId === 'hold') {
-                                            return canPlayHand(hand, comps);
+                                            return canPlayHand(hand);
                                         }
                                         return false;
                                     })();
-                                    const canSelectHand = (isAssignMode && canPlayHand(hand, comps)) || canSelectForAction;
+                                    const canSelectHand = (isAssignMode && canPlayHand(hand)) || canSelectForAction;
                                     const selectableCardIds = (interactionMode === 'select_card' && activeTableActionId && (activeTableActionId === 'discard' || activeTableActionId === 'switch') && !hand.isBust && hand.blackjackValue !== 21)
                                         ? hand.cards.map(card => card.id)
                                         : undefined;
@@ -2312,46 +2032,7 @@ export default function App() {
                                     >
                                         Deal ${ante}
                                     </button>
-                                    <button
-                                        id="gift-shop-button"
-                                        className={styles.nextDealButton}
-                                        aria-label={shopHasNewStock ? 'Gift Shop, new stock' : 'Gift Shop'}
-                                        disabled={isInitialDeal}
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            enterGiftShop();
-                                        }}
-                                    >
-                                        Gift Shop
-                                        {shopHasNewStock && <span className={styles.giftShopNewBadge} aria-hidden="true">NEW</span>}
-                                    </button>
                                 </div>
-                            ) : (phase === 'gift_shop') ? (
-                                giftShopEnterComplete && !isGiftShopExiting && !pendingPackChoiceCount && !raisePackSource ? (
-                                    isSellingMode ? (
-                                        <button
-                                            className={styles.nextDealButton}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                toggleSellingMode(false);
-                                            }}
-                                        >
-                                            Done Selling
-                                        </button>
-                                    ) : (
-                                        <button
-                                            className={styles.nextDealButton}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                startGiftShopExit();
-                                            }}
-                                        >
-                                            Back to Table
-                                        </button>
-                                    )
-                                ) : (
-                                    <div className={styles.actionPlaceholder} />
-                                )
                             ) : (
                                 <div className={styles.actionPlaceholder} />
                             )}
@@ -2381,43 +2062,18 @@ export default function App() {
                     <DeckView
                         probabilities={deckProbabilities}
                         activeCards={activeCards}
-                        removalCount={removalCount}
-                        cash={cash}
                         onClose={() => {
                             playClickDown();
                             setShowDeck(false);
-                            setIsRemovingCards(false);
-                            setIsEnhancingCards(false);
                         }}
-                        mode={isRemovingCards ? 'remove' : isEnhancingCards ? 'enhance' : 'view'}
-                        onRemoveCard={isRemovingCards ? (id) => removeCard(id) : undefined}
-                        onDeductRemovalCost={isRemovingCards ? () => deductRemovalCost() : undefined}
-                        onEnhanceCard={isEnhancingCards ? (id, effect) => enhanceCard(id, effect) : undefined}
                     />
                 )
             )}
 
-            {phase === 'gift_shop' && <RaisePackChoice sourceRect={raisePackSource} onComplete={() => setRaisePackSource(null)} />}
+            {phase === 'pack_choice' && <PackReward key={debugPackReturn ? 'debug-pack' : 'reward-pack'} />}
             {showHandScores && <HandScores upgrades={handUpgrades} onClose={() => { playClickDown(); setShowHandScores(false); }} />}
 
-            {phase === 'gift_shop' && (
-                <GiftShop
-                    isOpeningPack={!!raisePackSource}
-                    onRaisePackPurchased={setRaisePackSource}
-                    isExiting={isGiftShopExiting}
-                    onEnterAnimationComplete={() => {
-                        setGiftShopEnterComplete(true);
-                        TutorialManager.getInstance().signalEvent('gift_shop_animated_in');
-                    }}
-                    onExitAnimationComplete={finalizeGiftShopExit}
-                    onRelicPurchased={handleShopRelicPurchased}
-                />
-            )}
-            {showCompsWindow && (
-                <CompsWindow
-                    onClose={() => setShowCompsWindow(false)}
-                />
-            )}
+            {showDebugPacks && <DebugPacks onClose={() => setShowDebugPacks(false)} />}
 
             {showRelicStore && (
                 <RelicStore
@@ -2449,42 +2105,6 @@ export default function App() {
                             />
                         </div>
                     ))}
-                </div>
-            )}
-
-            {shopRelicFlight && (
-                <div className={styles.shopRelicFlyOverlay}>
-                    <div
-                        ref={shopRelicFlyCardRef}
-                        key={shopRelicFlight.key}
-                        className={`${styles.shopRelicFlyCard} ${shopRelicFlight.relicType === 'right' ? styles.shopRelicFlyCardScore : ''}`}
-                        style={{
-                            left: shopRelicFlight.start.left,
-                            top: shopRelicFlight.start.top,
-                            width: shopRelicFlight.start.width,
-                            height: shopRelicFlight.start.height,
-                            // @ts-ignore
-                            '--relic-fly-ui-scale': `${scale}`
-                        }}
-                    >
-                            <div
-                                className={styles.shopRelicFlyIcon}
-                                style={{ borderColor: shopRelicFlight.rarityFrameColor }}
-                            >
-                            {shopRelicFlight.icon && (shopRelicFlight.icon.includes('.') || shopRelicFlight.icon.includes('/')) ? (
-                                <img src={shopRelicFlight.icon} alt={shopRelicFlight.name} />
-                            ) : shopRelicFlight.icon ? (
-                                <span>{shopRelicFlight.icon}</span>
-                            ) : (
-                                <span>{shopRelicFlight.name.slice(0, 2).toUpperCase()}</span>
-                            )}
-                        </div>
-                        <div
-                            className={`${styles.shopRelicFlyLabel} ${shopRelicFlight.relicType === 'right' ? styles.shopRelicFlyLabelScore : styles.shopRelicFlyLabelControl}`}
-                        >
-                            {shopRelicFlight.name}
-                        </div>
-                    </div>
                 </div>
             )}
 

@@ -1,3 +1,4 @@
+import { finishOpeningPack } from '../../engine/__tests__/fixtures';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createInitialState, processAction } from '../../engine/engine';
 import { TUTORIAL_STEPS } from '../../engine/tutorial/definitions';
@@ -21,7 +22,7 @@ function prepareScoring() {
         { type: 'resolve_dealer_turn' },
         { type: 'resolve_hand_outcome' },
     ];
-    for (const action of actions) state = processAction(state, action).nextState;
+    for (const action of actions) state = processAction(action.type === 'deal' ? finishOpeningPack(state) : state, action).nextState;
     expect(state.phase).toBe('scoring');
     state = {
         ...state,
@@ -34,7 +35,6 @@ function prepareScoring() {
     useGameBridge.setState({
         gameState: state,
         phase: state.phase,
-        comps: state.comps,
         visibleScoringRowIndices: {},
         scoringRowValues: {},
         scoringCriteria: {},
@@ -73,36 +73,16 @@ describe('score row presentation', () => {
         expect(useGameBridge.getState()).toMatchObject({ phase: 'deal_over', dealerVisible: false, dealer: { cards: [] } });
     });
 
-    it('increments tickets as each winning row appears, before cash collection, without double awards', async () => {
+    it('shows winning score rows without ticket awards', async () => {
         vi.useFakeTimers();
         prepareScoring();
-        const state = useGameBridge.getState().gameState;
-        useGameBridge.setState({ gameState: {
-            ...state,
-            playerHands: state.playerHands.map((hand, index) => index === 0 ? { ...hand, outcome: 'win' } : hand),
-        } });
-        const snapshots: { tickets: number; awarded: number; collecting: boolean }[] = [];
-        useGameBridge.getState().setSfx({ play(id) {
-            if (id !== 'score') return;
-            const ui = useGameBridge.getState();
-            snapshots.push({
-                tickets: ui.comps,
-                awarded: Object.values(ui.scoringCriteria).flat().reduce((total, row) => total + (row.compTickets ?? 0), 0),
-                collecting: ui.isCollectingChips,
-            });
-        } });
         const scoring = useGameBridge.getState().dispatch({ type: 'score_round' });
         await vi.runAllTimersAsync();
         await scoring;
-
-        expect(snapshots.some(snapshot => snapshot.awarded === 1)).toBe(true);
-        expect(snapshots.some(snapshot => snapshot.awarded === 2)).toBe(true);
-        for (const snapshot of snapshots) {
-            expect(snapshot.tickets).toBe(state.comps + snapshot.awarded);
-            expect(snapshot.collecting).toBe(false);
-        }
-        expect(useGameBridge.getState().comps).toBe(state.comps + 2);
-        expect(useGameBridge.getState().gameState.comps).toBe(state.comps + 2);
+        const state = useGameBridge.getState();
+        expect(state.eventLog.every(event => !('newComps' in event))).toBe(true);
+        expect(state.gameState).not.toHaveProperty('comps');
+        expect(state.scoringCriteria[2].some(row => row.id === 'viginti')).toBe(true);
     });
 
     it('plays once as each row appears, raises pitch across hands, and resets next deal', async () => {

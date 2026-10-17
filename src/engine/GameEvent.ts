@@ -1,3 +1,4 @@
+import type { PackId } from '../logic/packs';
 /**
  * Game event types — the structured log of everything that happens as a result of actions.
  * Events serve two purposes:
@@ -9,8 +10,7 @@
  */
 
 import type { Card, HandScore, ScoringDetail } from '../types';
-import type { RelicInstance } from '../logic/relics/types';
-import type { GamePhase, ShopItem, RewardSummary } from './GameState';
+import type { GamePhase, RewardSummary } from './GameState';
 import type { TutorialDisplayConfig, TutorialScope } from './tutorial/types';
 
 // ─── Event Type Union ───────────────────────────────────
@@ -19,9 +19,9 @@ export type GameEvent =
     | { type: 'raise_chosen'; raiseId: string }
     | { type: 'pack_card_chosen'; cardId: string }
     | { type: 'pack_skipped' }
-    | { type: 'relic_slot_purchased'; slots: number; newCash: number }
+    | { type: 'pack_opened'; packId: PackId }
     // === Dealing ===
-    | { type: 'deal_started'; deal: number; handsRemaining: number; activeHandIds: number[]; comps: number; cash: number; ante: number }
+    | { type: 'deal_started'; deal: number; handsRemaining: number; activeHandIds: number[]; cash: number; ante: number }
     | { type: 'cards_dealt'; playerCard: Card; playerHandIndex: number; dealerCards: [Card, Card] }
     | { type: 'initial_deal_complete' }
 
@@ -31,7 +31,6 @@ export type GameEvent =
     | { type: 'draw_complete'; drawnCards: Card[]; selectedIndex: number }
 
     // === Card Placement ===
-    | { type: 'side_hand_opened'; handIndex: number; cost: number; newComps: number }
     | { type: 'card_placed'; card: Card; handIndex: number; newBlackjackValue: number }
     | { type: 'hand_bust'; handIndex: number; blackjackValue: number }
     | { type: 'hand_modified'; handIndex: number; newCards: Card[]; newBlackjackValue: number; reason: string }
@@ -55,7 +54,7 @@ export type GameEvent =
     // === Scoring ===
     | { type: 'hand_outcome'; handIndex: number; outcome: 'win' | 'loss' | 'bust'; blackjackValue: number }
     | { type: 'scoring_hand_focus'; handIndex: number }
-    | { type: 'scoring_row_intro'; handIndex: number; criterion: ScoringDetail; newComps?: number }
+    | { type: 'scoring_row_intro'; handIndex: number; criterion: ScoringDetail }
     | { type: 'scoring_row_chips'; handIndex: number; criterionId: string; chips: number }
     | { type: 'scoring_row_mult'; handIndex: number; criterionId: string; multiplier: number }
     | { type: 'scoring_hand_complete'; handIndex: number }
@@ -74,13 +73,6 @@ export type GameEvent =
     | { type: 'target_reached'; totalScore: number; targetScore: number }
     | { type: 'game_over'; won: boolean; finalScore: number }
 
-    // === Gift Shop ===
-    | { type: 'shop_entered'; items: ShopItem[]; rewardSummary: RewardSummary | null }
-    | { type: 'item_purchased'; itemId: string; relic?: RelicInstance; newCash: number }
-    | { type: 'shop_restocked'; newItems: ShopItem[]; cost: number; newCash: number }
-    | { type: 'relic_sold'; relicId: string; refund: number; newCash: number }
-    | { type: 'shop_left' }
-
     // === Deck Management ===
     | { type: 'card_enhanced'; cardId: string; enhancement: { type: 'chip' | 'mult' | 'score'; value: number } }
     | { type: 'card_destroyed'; cardId: string }
@@ -96,7 +88,6 @@ export type GameEvent =
     | { type: 'payout_started'; total: number; rewardSummary: RewardSummary }
     | { type: 'payout_step'; label: string; amount: number; description?: string }
     | { type: 'payout_complete'; total: number }
-    | { type: 'comps_earned'; amount: number; newTotal: number; reason: string }
     | { type: 'next_casino_setup'; deal: number; targetScore: number }
 
     // === Tutorial ===

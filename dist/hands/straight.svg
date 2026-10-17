@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <title>Straight: seven followed by eight</title>
+  <g transform="translate(7 14) rotate(-10 14.5 23)">
+    <rect width="29" height="46" rx="4" fill="#fff7e8" stroke="#243545" stroke-width="2.5"/>
+    <g stroke="#171b20" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H21L11 29"/></g>
+  </g>
+  <g transform="translate(29 7) rotate(9 14.5 23)">
+    <rect width="29" height="46" rx="4" fill="#fff7e8" stroke="#243545" stroke-width="2.5"/>
+    <g stroke="#171b20" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 19C3 19 3 8 13 8C23 8 23 19 13 19ZM13 19C2 19 2 30 13 30C24 30 24 19 13 19Z"/></g>
+  </g>
+</svg>

@@ -36,8 +36,6 @@ export const TutorialOverlay: React.FC = () => {
     const [hudRect, setHudRect] = useState<DOMRect | null>(null);
     const [totalWinningsRect, setTotalWinningsRect] = useState<DOMRect | null>(null);
     const [hudDrawsRect, setHudDrawsRect] = useState<DOMRect | null>(null);
-    const [hudCompsRect, setHudCompsRect] = useState<DOMRect | null>(null);
-    const [scoreRelicsRect, setScoreRelicsRect] = useState<DOMRect | null>(null);
     const [messageBoxSize, setMessageBoxSize] = useState({ width: 0, height: 0 });
     
     // New Store Access
@@ -432,7 +430,7 @@ export const TutorialOverlay: React.FC = () => {
         }
 
         const updateRect = () => {
-            const draws = document.getElementById('hud-comps');
+            const draws = document.getElementById('hud-ante');
             const wrapper = document.getElementById('game-scale-wrapper');
             if (!draws || !wrapper) return;
 
@@ -445,70 +443,6 @@ export const TutorialOverlay: React.FC = () => {
             const height = drawsRect.height / scale;
 
             setHudDrawsRect(new DOMRect(left, top, width, height));
-        };
-
-        updateRect();
-        const interval = setInterval(updateRect, 100);
-        window.addEventListener('resize', updateRect);
-
-        return () => {
-            clearInterval(interval);
-            window.removeEventListener('resize', updateRect);
-        };
-    }, [activeStep, scale]);
-
-    useEffect(() => {
-        if (!activeStep || activeStep.id !== 'comp_tickets') {
-            setHudCompsRect(null);
-            return;
-        }
-
-        const updateRect = () => {
-            const compsEl = document.getElementById('hud-comps');
-            const wrapper = document.getElementById('game-scale-wrapper');
-            if (!compsEl || !wrapper) return;
-
-            const wrapperRect = wrapper.getBoundingClientRect();
-            const rect = compsEl.getBoundingClientRect();
-
-            const left = (rect.left - wrapperRect.left) / scale;
-            const top = (rect.top - wrapperRect.top) / scale;
-            const width = rect.width / scale;
-            const height = rect.height / scale;
-
-            setHudCompsRect(new DOMRect(left, top, width, height));
-        };
-
-        updateRect();
-        const interval = setInterval(updateRect, 100);
-        window.addEventListener('resize', updateRect);
-
-        return () => {
-            clearInterval(interval);
-            window.removeEventListener('resize', updateRect);
-        };
-    }, [activeStep, scale]);
-
-    useEffect(() => {
-        if (!activeStep || activeStep.id !== 'spend_comps') {
-            setScoreRelicsRect(null);
-            return;
-        }
-
-        const updateRect = () => {
-            const el = document.getElementById('gift-shop-score');
-            const wrapper = document.getElementById('game-scale-wrapper');
-            if (!el || !wrapper) return;
-
-            const wrapperRect = wrapper.getBoundingClientRect();
-            const rect = el.getBoundingClientRect();
-
-            const left = (rect.left - wrapperRect.left) / scale;
-            const top = (rect.top - wrapperRect.top) / scale;
-            const width = rect.width / scale;
-            const height = rect.height / scale;
-
-            setScoreRelicsRect(new DOMRect(left, top, width, height));
         };
 
         updateRect();
@@ -569,16 +503,14 @@ export const TutorialOverlay: React.FC = () => {
         };
     }, [activeStep, scale]);
 
-    const defaultPositionSteps = new Set(['welcome', 'win_money_first', 'hud_debt', 'hud_draws', 'comp_tickets', 'spend_comps', NEXT_CASINO_TUTORIAL_ID]);
+    const defaultPositionSteps = new Set(['welcome', 'win_money_first', 'hud_debt', 'hud_draws', NEXT_CASINO_TUTORIAL_ID]);
     const shouldAnchorAbovePlayerHands = Boolean(
         activeStep &&
         !defaultPositionSteps.has(activeStep.id) &&
         activeStep.id !== 'draw_indicator' &&
         activeStep.id !== 'place_card' &&
         activeStep.id !== 'get_close' &&
-        activeStep.id !== 'keep_playing' &&
-        activeStep.id !== 'comp_tickets' &&
-        activeStep.id !== 'spend_comps'
+        activeStep.id !== 'keep_playing'
     );
 
     useEffect(() => {
@@ -829,51 +761,6 @@ export const TutorialOverlay: React.FC = () => {
             top: `${top}px`,
             transform: 'translateX(-50%)',
             maxWidth: `${maxHudWidth}px`
-        };
-    })() : activeStep.id === 'comp_tickets' && hudCompsRect ? (() => {
-        const safeMargin = 18;
-        const gapBelow = 22;
-        const halfWidth = messageBoxSize.width / 2;
-
-        const targetTop = hudCompsRect.top + hudCompsRect.height + gapBelow;
-        const minTop = safeMargin;
-        const maxTop = viewportHeight - safeMargin - messageBoxSize.height;
-        const top = Math.min(Math.max(targetTop, minTop), maxTop);
-
-        const targetCenterX = hudCompsRect.left + hudCompsRect.width / 2;
-        const minX = safeMargin + halfWidth;
-        const maxX = viewportWidth - safeMargin - halfWidth;
-        const centerX = Math.min(Math.max(targetCenterX, minX), maxX);
-        const maxHudWidth = Math.min(idealWidth - 32, viewportWidth - 32);
-
-        return {
-            position: 'absolute',
-            left: `${centerX}px`,
-            top: `${top}px`,
-            transform: 'translateX(-50%)',
-            maxWidth: `${maxHudWidth}px`
-        };
-    })() : activeStep.id === 'spend_comps' && scoreRelicsRect ? (() => {
-        const safeMargin = 18;
-        const gapRight = 16;
-        const halfHeight = messageBoxSize.height / 2;
-
-        const targetLeft = scoreRelicsRect.left + scoreRelicsRect.width + gapRight;
-        const minLeft = safeMargin;
-        const maxLeft = viewportWidth - safeMargin - messageBoxSize.width;
-        const left = Math.min(Math.max(targetLeft, minLeft), maxLeft);
-
-        const targetCenterY = scoreRelicsRect.top + scoreRelicsRect.height / 2;
-        const minY = safeMargin + halfHeight;
-        const maxY = viewportHeight - safeMargin - halfHeight;
-        const centerY = Math.min(Math.max(targetCenterY, minY), maxY);
-
-        return {
-            position: 'absolute',
-            left: `${left}px`,
-            top: `${centerY}px`,
-            transform: 'translateY(-50%)',
-            maxWidth: '360px'
         };
     })() : isOutcomeStep && outcomeHandRect && playerHandsRect ? (() => {
         const gapAboveHands = 64;

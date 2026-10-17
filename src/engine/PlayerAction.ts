@@ -1,3 +1,4 @@
+import type { PackId } from '../logic/packs';
 /**
  * Command pattern types for all player inputs.
  * Each variant represents a discrete action the player can take.
@@ -8,7 +9,6 @@ export type PlayerAction =
     // === Game Setup ===
     | { type: 'start_game'; cityId: string; gamblerId: string; seed?: number; globalTutorialsCompleted?: string[]; skipAtlanticTutorials?: boolean }
     | { type: 'deal'; forceContinue?: boolean }
-    | { type: 'leave_casino' }
 
     // === Core Gameplay ===
     | { type: 'draw' }
@@ -28,22 +28,15 @@ export type PlayerAction =
     | { type: 'cancel_table_action' }
     | { type: 'complete_deal_early' }
 
-    // === Gift Shop ===
-    | { type: 'enter_gift_shop' }
-    | { type: 'buy_shop_item'; itemId: string }
-    | { type: 'buy_relic_slot' }
+    // === Pack Rewards ===
+    | { type: 'open_pack'; packId: PackId }
     | { type: 'choose_raise'; raiseId: string }
     | { type: 'choose_pack_card'; cardId: string }
     | { type: 'skip_pack' }
-    | { type: 'restock_shop' }
-    | { type: 'sell_relic'; relicId: string; index: number }
-    | { type: 'leave_shop' }
-
-    // === Deck Management (in gift shop) ===
-    | { type: 'enhance_card'; cardId: string; enhancement: { type: 'chip' | 'mult' | 'score'; value: number } }
-    | { type: 'destroy_card'; cardId: string }
+    | { type: 'finish_pack' }
 
     // === Debug (not available in CLI simulation) ===
+    | { type: 'debug_open_pack'; packId: PackId }
     | { type: 'debug_win' }
     | { type: 'debug_undo' }
     | { type: 'debug_victory' }

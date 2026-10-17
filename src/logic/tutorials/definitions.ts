@@ -60,7 +60,7 @@ export const shouldPromptStandNow = (context: any, options?: StandPromptOptions)
 export const ATLANTIC_CITY_TUTORIAL_STEPS: TutorialStep[] = [
     {
         id: 'welcome',
-        text: "Welcome to Viginti\n\nPay the Cash Ante to Deal\nWin or Viginti Earns One Comp Ticket",
+        text: "Welcome to Viginti\n\nPay the Cash Ante to Deal\nOpen a Free Pack Every Ante Increase",
         completionType: 'click',
         scope: 'session',
         scrim: 'none',
@@ -90,7 +90,7 @@ export const ATLANTIC_CITY_TUTORIAL_STEPS: TutorialStep[] = [
     },
     {
         id: 'player_hands',
-        text: "Start in the Center Hand\n\nOpen Each Side Hand for One Comp Ticket",
+        text: "Start in the Center Hand\n\nPlay Any of Your Three Hands for Free",
         highlight: { elementId: 'player-hands-zone', type: 'rect', padding: 10 },
         completionType: 'click',
         scope: 'session',
@@ -157,7 +157,7 @@ export const ATLANTIC_CITY_TUTORIAL_STEPS: TutorialStep[] = [
     },
     {
         id: 'win_money_first',
-        text: "Winning Hands Earn Cash\n\nWin or Viginti Also Earns One Comp Ticket",
+        text: "Winning Hands Earn Cash\n\nUse It to Pay the Next Ante",
         completionType: 'click',
         scope: 'session',
         autoTrigger: false,
@@ -170,7 +170,7 @@ export const ATLANTIC_CITY_TUTORIAL_STEPS: TutorialStep[] = [
     },
     {
         id: 'hud_debt',
-        text: "Spend Your Winnings in the Gift Shop",
+        text: "Keep Enough Cash for the Next Ante",
         highlight: { elementId: 'hud-cash', type: 'rect', padding: 6 },
         scrim: 'none',
         completionType: 'click',
@@ -182,7 +182,7 @@ export const ATLANTIC_CITY_TUTORIAL_STEPS: TutorialStep[] = [
     },
     {
         id: 'hud_draws',
-        text: "Cash Keeps You Playing\n\nPay the Ante to Deal · It Increases Every Five Hands",
+        text: "Cash Keeps You Playing\n\nPay the Ante to Deal · It Increases Every Four Rounds",
         highlight: { elementId: 'hud-ante', type: 'rect', padding: 6 },
         scrim: 'none',
         completionType: 'custom',
@@ -197,8 +197,8 @@ export const ATLANTIC_CITY_TUTORIAL_STEPS: TutorialStep[] = [
     },
     {
         id: NEXT_CASINO_TUTORIAL_ID,
-        text: "Visit the Gift Shop\n\nCome Back Whenever You Like",
-        highlight: { elementId: 'gift-shop-button', type: 'rect', padding: 8 },
+        text: "Build Your Run with Packs\n\nChoose a Free Pack Every Ante Increase",
+        highlight: { elementId: 'hud-ante', type: 'rect', padding: 8 },
         scrim: 'none',
         completionType: 'custom',
         scope: 'session',
@@ -208,29 +208,6 @@ export const ATLANTIC_CITY_TUTORIAL_STEPS: TutorialStep[] = [
             context.deal === 1 &&
             context.cash >= context.ante
         )
-    },
-    {
-        id: 'comp_tickets',
-        text: "Open Side Hands with Comp Tickets\n\nOne Ticket Opens Each Side · Further Cards Are Free",
-        highlight: { elementId: 'hud-comps', type: 'rect', padding: 6 },
-        scrim: 'dim',
-        completionType: 'click',
-        scope: 'session',
-        autoTrigger: true,
-        waitForEventId: 'total_comps_calculated',
-        condition: (context: any) => context.phase === 'casino_payout' && context.deal === 1
-    },
-    {
-        id: 'spend_comps',
-        text: "Spend Cash for Upgrades\n\nShop Refreshes When the Ante Increases",
-        highlight: { elementId: 'gift-shop-score', type: 'rect', padding: 12 },
-        scrim: 'none',
-        completionType: 'click',
-        scope: 'session',
-        autoTrigger: true,
-        startDelayMs: 500,
-        waitForEventId: 'gift_shop_animated_in',
-        condition: (context: any) => context.phase === 'gift_shop' && context.deal === 1
     },
     {
         id: 'keep_playing',
@@ -244,34 +221,6 @@ export const ATLANTIC_CITY_TUTORIAL_STEPS: TutorialStep[] = [
             context.phase === 'entering_casino' &&
             context.deal === 2
         )
-    },
-    {
-        id: 'gift_shop_table_actions',
-        text: "Relics Change the Rules\n\nBuy Them with Cash · Unlock More Slots",
-        highlight: { elementId: 'gift-shop-control', type: 'rect', padding: 12 },
-        scrim: 'dim',
-        completionType: 'click',
-        scope: 'session',
-        autoTrigger: true,
-        blockInput: false,
-        messagePosition: 'left',
-        waitForEventId: 'gift_shop_animated_in',
-        completeOnEventId: 'relic_purchased',
-        condition: (context: any) => context.phase === 'gift_shop' && context.deal === 2
-    },
-    {
-        id: 'gift_shop_raise_intro',
-        text: "Buy a Raise Pack\n\nChoose 1 of 3 · Permanent Bonuses and Tradeoffs",
-        highlight: { elementId: 'gift-shop-raises', type: 'rect', padding: 12 },
-        scrim: 'dim',
-        completionType: 'click',
-        scope: 'session',
-        autoTrigger: true,
-        blockInput: false,
-        messagePosition: 'left',
-        waitForEventId: 'gift_shop_animated_in',
-        completeOnEventId: 'relic_purchased',
-        condition: (context: any) => context.phase === 'gift_shop' && context.deal === 3
     },
     {
         id: 'casino_3_redraw_intro',
@@ -308,7 +257,7 @@ export const ATLANTIC_CITY_TUTORIAL_STEPS: TutorialStep[] = [
     },
     {
         id: 'lost_all_hands',
-        text: "You Lost Every Hand\n\nNo Tickets Returned This Deal",
+        text: "You Lost Every Hand\n\nTry a Different Strategy Next Round",
         completionType: 'click',
         scope: 'session',
         autoTrigger: false,

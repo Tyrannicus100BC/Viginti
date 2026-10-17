@@ -1,3 +1,4 @@
+import { finishOpeningPack } from './fixtures';
 import { describe, it, expect } from 'vitest';
 import { processAction, createInitialState, getValidActions } from '../engine';
 import type { GameState } from '../GameState';
@@ -19,7 +20,7 @@ describe('Table Actions', () => {
             seed,
             globalTutorialsCompleted: TUTORIAL_STEPS.map(s => s.id)
         });
-        return nextState;
+        return finishOpeningPack(nextState);
     }
 
     function dealHand(state: GameState): GameState {

@@ -75,7 +75,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
         type: 'message',
         display: {
             id: 'welcome',
-            text: "Welcome to Viginti\n\nPay the Cash Ante to Deal\nWin or Viginti Earns One Comp Ticket",
+            text: "Welcome to Viginti\n\nPay the Cash Ante to Deal\nOpen a Free Pack Every Ante Increase",
             completionType: 'click',
             scrim: 'none',
             blockInput: true,
@@ -115,7 +115,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
         type: 'message',
         display: {
             id: 'player_hands',
-            text: "Start in the Center Hand\n\nOpen Each Side Hand for One Comp Ticket",
+            text: "Start in the Center Hand\n\nPlay Any of Your Three Hands for Free",
             highlight: { elementId: 'player-hands-zone', type: 'rect', padding: 10 },
             completionType: 'click',
         },
@@ -199,7 +199,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
         type: 'message',
         display: {
             id: 'win_money_first',
-            text: "Winning Hands Earn Cash\n\nWin or Viginti Also Earns One Comp Ticket",
+            text: "Winning Hands Earn Cash\n\nUse It to Pay the Next Ante",
             completionType: 'click',
             scrim: 'none',
         },
@@ -217,7 +217,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
         type: 'message',
         display: {
             id: 'hud_debt',
-            text: "Spend Your Winnings in the Gift Shop",
+            text: "Keep Enough Cash for the Next Ante",
             highlight: { elementId: 'hud-cash', type: 'rect', padding: 6 },
             scrim: 'none',
             completionType: 'click',
@@ -231,7 +231,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
         type: 'message',
         display: {
             id: 'hud_draws',
-            text: "Cash Keeps You Playing\n\nPay the Ante to Deal · It Increases Every Five Hands",
+            text: "Cash Keeps You Playing\n\nPay the Ante to Deal · It Increases Every Four Rounds",
             highlight: { elementId: 'hud-ante', type: 'rect', padding: 6 },
             scrim: 'none',
             completionType: 'custom',
@@ -249,8 +249,8 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
         type: 'message',
         display: {
             id: 'next_casino_after_first_win',
-            text: "Visit the Gift Shop\n\nCome Back Whenever You Like",
-            highlight: { elementId: 'gift-shop-button', type: 'rect', padding: 8 },
+            text: "Build Your Run with Packs\n\nChoose a Free Pack Every Ante Increase",
+            highlight: { elementId: 'hud-ante', type: 'rect', padding: 8 },
             scrim: 'none',
             completionType: 'custom',
         },
@@ -260,39 +260,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
             state.phase === 'deal_over' &&
             state.deal === 1 && 
             state.cash >= state.ante,
-        completeCondition: (state, events) => events.some(e => e.type === 'shop_entered' || e.type === 'deal_started'),
-    },
-    {
-        id: 'comp_tickets',
-        type: 'message',
-        display: {
-            id: 'comp_tickets',
-            text: "Open Side Hands with Comp Tickets\n\nOne Ticket Opens Each Side · Further Cards Are Free",
-            highlight: { elementId: 'hud-comps', type: 'rect', padding: 6 },
-            scrim: 'dim',
-            completionType: 'click',
-        },
-        scope: 'global',
-        triggerCondition: (state, events) => 
-            isAtlanticCity(state) &&
-            state.phase === 'deal_over' &&
-            events.some(e => e.type === 'comps_earned'),
-    },
-    {
-        id: 'spend_comps',
-        type: 'message',
-        display: {
-            id: 'spend_comps',
-            text: "Spend Cash for Upgrades\n\nShop Refreshes When the Ante Increases",
-            highlight: { elementId: 'gift-shop-score', type: 'rect', padding: 12 },
-            scrim: 'none',
-            completionType: 'click',
-        },
-        scope: 'global',
-        triggerCondition: (state, events) => 
-            isAtlanticCity(state) &&
-            state.phase === 'gift_shop' &&
-            events.some(e => e.type === 'shop_entered'),
+        completeCondition: (state, events) => events.some(e => e.type === 'deal_started'),
     },
     {
         id: 'keep_playing',
@@ -309,53 +277,11 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
         completeCondition: (state, events) => events.some(e => e.type === 'card_placed'),
     },
     {
-        id: 'gift_shop_table_actions',
-        type: 'message',
-        display: {
-            id: 'gift_shop_table_actions',
-            text: "Relics Change the Rules\n\nBuy Them with Cash · Unlock More Slots",
-            highlight: { elementId: 'gift-shop-control', type: 'rect', padding: 12 },
-            scrim: 'dim',
-            completionType: 'click',
-            blockInput: false,
-            messagePosition: 'left',
-        },
-        scope: 'global',
-        triggerCondition: (state, events) => 
-            isAtlanticCity(state) &&
-            state.phase === 'gift_shop' && 
-            state.deal === 2 &&
-            events.some(e => e.type === 'shop_entered'),
-        completeCondition: (state, events) => events.some(e => e.type === 'item_purchased'),
-        allowedActions: ['buy_shop_item'],
-    },
-    {
-        id: 'gift_shop_raise_intro',
-        type: 'message',
-        display: {
-            id: 'gift_shop_raise_intro',
-            text: "Open a Pack\n\nChoose Upgrades for This Run · Skip to Pass",
-            highlight: { elementId: 'gift-shop-raises', type: 'rect', padding: 12 },
-            scrim: 'dim',
-            completionType: 'click',
-            blockInput: false,
-            messagePosition: 'left',
-        },
-        scope: 'global',
-        triggerCondition: (state, events) => 
-            isAtlanticCity(state) &&
-            state.phase === 'gift_shop' && 
-            state.deal === 3 &&
-            events.some(e => e.type === 'shop_entered'),
-        completeCondition: (state, events) => events.some(e => e.type === 'item_purchased'),
-        allowedActions: ['buy_shop_item'],
-    },
-    {
         id: 'lost_all_hands',
         type: 'message',
         display: {
             id: 'lost_all_hands',
-            text: "You Lost Every Hand\n\nNo Tickets Returned This Deal",
+            text: "You Lost Every Hand\n\nTry a Different Strategy Next Round",
             completionType: 'click',
         },
         scope: 'global',

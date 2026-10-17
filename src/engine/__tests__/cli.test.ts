@@ -1,3 +1,4 @@
+import { finishOpeningPack } from './fixtures';
 /**
  * CLI Simulator tests.
  *
@@ -33,7 +34,7 @@ function startGame(seed = 42): GameState {
             globalTutorialsCompleted: TUTORIAL_STEPS.map(s => s.id)
         }
     );
-    return nextState;
+    return finishOpeningPack(nextState);
 }
 
 // ─── Tests ──────────────────────────────────────────────
@@ -140,18 +141,9 @@ describe('CLI Simulator', () => {
             expect(output).toContain('Dealer');
         });
 
-        it('renders gift shop with items', () => {
-            const state = startGame();
-            const completedDeal = {
-                ...state,
-                phase: 'deal_over' as const,
-                totalScore: 100,
-                targetScore: 20,
-                comps: 10,
-            };
-            const shopResult = processAction(completedDeal, { type: 'enter_gift_shop' });
-            const output = renderState(shopResult.nextState);
-            expect(output).toContain('Gift Shop');
+        it('renders free pack rewards', () => {
+            const state = { ...startGame(), phase: 'pack_choice' as const, offeredPacks: ['raise_basic' as const] };
+            expect(renderState(state)).toContain('Free pack reward');
         });
     });
 
@@ -168,26 +160,8 @@ describe('CLI Simulator', () => {
             expect(describeAction({ type: 'place_card', handIndex: 2 })).toContain('Hand 3');
         });
 
-        it('describes buy_shop_item with state', () => {
-            const state = startGame();
-            const completedDeal = {
-                ...state,
-                phase: 'deal_over' as const,
-                totalScore: 100,
-                targetScore: 20,
-                comps: 10,
-            };
-            const shopResult = processAction(completedDeal, { type: 'enter_gift_shop' });
-            const shopState = shopResult.nextState;
-            const item = shopState.shopItems[0];
-            if (item) {
-                const desc = describeAction(
-                    { type: 'buy_shop_item', itemId: item.id },
-                    shopState
-                );
-                expect(desc).toContain('Buy');
-                expect(desc).toContain('$');
-            }
+        it('describes opening a pack', () => {
+            expect(describeAction({ type: 'open_pack', packId: 'raise_basic' })).toContain('Basic Raise Pack');
         });
 
         it('describes all action types without throwing', () => {

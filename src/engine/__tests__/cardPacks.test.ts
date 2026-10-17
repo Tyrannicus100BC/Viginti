@@ -5,48 +5,39 @@ import type { PlayerAction } from '../PlayerAction';
 import { SeededRNG } from '../rng';
 import { TUTORIAL_STEPS } from '../tutorial/definitions';
 import { useGameBridge } from '../../store/gameBridge';
-import { getPackDefinition, isPackItem, PACKS, PACK_ITEM_TYPES, type PackId } from '../../logic/packs';
+import { getPackDefinition, PACKS, type PackId } from '../../logic/packs';
 import { applyPackCard, changeProbability, generatePackCard, generatePackCardChoices, getPackCard, type ProbabilityChange } from '../../logic/packCards';
 import { drawCardFromProbabilities } from '../../logic/deck';
 import { RelicManager } from '../../logic/relics/manager';
 
 const act = (state: GameState, action: PlayerAction) => processAction(state, action).nextState;
-const shop = (seed = 17) => act(act(createInitialState(), {
+const shop = (seed = 17) => act(createInitialState(), {
     type: 'start_game', cityId: 'atlantic_city', gamblerId: 'newbie', seed,
     globalTutorialsCompleted: TUTORIAL_STEPS.map(step => step.id),
-}), { type: 'enter_gift_shop' });
+});
 const open = (packId: PackId, overrides: Partial<GameState> = {}) => {
-    const pack = getPackDefinition(packId);
-    const initial = { ...shop(), cash: 1000, ...overrides, shopItems: [{ id: 'pack', type: PACK_ITEM_TYPES[pack.family], packId: pack.id, cost: pack.cost, nameOverride: pack.name }] };
-    return { initial, state: act(initial, { type: 'buy_shop_item', itemId: 'pack' }) };
+    const initial = { ...shop(), cash: 1000, ...overrides, offeredPacks: [packId] };
+    return { initial, state: act(initial, { type: 'open_pack', packId }) };
 };
 
 describe('Card packs', () => {
-    it('stocks two distinct random families drawn from Raise, Deck and Relic', () => {
-        const families = new Set<string>();
+    it('offers three different pack families reproducibly', () => {
         for (let seed = 1; seed <= 60; seed++) {
             const state = shop(seed);
-            const packs = state.shopItems.filter(isPackItem);
-            expect(packs).toHaveLength(2);
-            expect(state.shopItems.filter(item => item.type === 'Relic')).toHaveLength(4);
-            const offered = packs.map(item => getPackDefinition(item.packId).family);
-            expect(new Set(offered).size).toBe(2);
-            offered.forEach(family => families.add(family));
+            expect(state.offeredPacks.map(id => getPackDefinition(id).family)).toEqual(['raise', 'deck', 'relic']);
             expect(shop(seed)).toEqual(state);
         }
-        expect([...families].sort()).toEqual(['deck', 'raise', 'relic']);
     });
 
     it.each(PACKS.filter(pack => pack.family !== 'raise'))('completes $name with resumable choices', pack => {
         const { initial, state: opened } = open(pack.id);
         let state = opened;
-        expect(state.cash).toBe(1000 - pack.cost);
+        expect(state.cash).toBe(1000);
         expect(state.pendingPackChoices).toHaveLength(pack.offerCount);
         expect(new Set(state.pendingPackChoices).size).toBe(pack.offerCount);
         expect(getValidActions(state)).toEqual([...state.pendingPackChoices.map(cardId => ({ type: 'choose_pack_card', cardId })), { type: 'skip_pack' }]);
-        const blocked: PlayerAction[] = [{ type: 'leave_shop' }, { type: 'restock_shop' }, { type: 'buy_relic_slot' },
-            { type: 'buy_shop_item', itemId: 'pack' }, { type: 'enhance_card', cardId: 'test', enhancement: { type: 'chip', value: 5 } },
-            { type: 'destroy_card', cardId: 'test' }, { type: 'choose_pack_card', cardId: 'fake' }];
+        const blocked: PlayerAction[] = [{ type: 'finish_pack' }, { type: 'open_pack', packId: pack.id },
+            { type: 'deal' }, { type: 'choose_pack_card', cardId: 'fake' }];
         for (let pick = 0; pick < pack.pickCount; pick++) {
             blocked.forEach(action => expect(act(state, action)).toEqual(state));
             expect(useGameBridge.getState().loadGameState(JSON.stringify(state))).toBe(true);
@@ -56,7 +47,7 @@ describe('Card packs', () => {
             const previous = state;
             state = act(loaded, { type: 'choose_pack_card', cardId });
             expect(state.rngState).toBe(previous.rngState);
-            expect(state.cash).toBe(1000 - pack.cost);
+            expect(state.cash).toBe(1000);
             if (pack.family === 'deck') {
                 expect(state.deckProbabilities).toEqual(applyPackCard(previous.deckProbabilities, getPackCard(cardId)!));
                 expect(state.inventory).toEqual(initial.inventory);
@@ -69,18 +60,18 @@ describe('Card packs', () => {
         }
         expect(state.pendingPack).toBeNull();
         expect(state.pendingPackChoices).toEqual([]);
-        expect(act(state, { type: 'buy_shop_item', itemId: 'pack' })).toEqual(state);
+        expect(act(state, { type: 'open_pack', packId: pack.id })).toEqual(state);
     });
 
     it.each(PACKS)('can skip all choices in $name without refunding or applying effects', pack => {
         const { initial, state } = open(pack.id);
         const result = processAction(state, { type: 'skip_pack' });
         expect(result.events).toEqual([{ type: 'pack_skipped' }]);
-        expect(result.nextState).toMatchObject({ pendingPack: null, pendingPackChoices: [], pendingRaiseChoices: [], cash: 1000 - pack.cost });
+        expect(result.nextState).toMatchObject({ pendingPack: null, pendingPackChoices: [], pendingRaiseChoices: [], cash: 1000 });
         expect(result.nextState.inventory).toEqual(initial.inventory);
         expect(result.nextState.deckProbabilities).toEqual(initial.deckProbabilities);
         expect(result.nextState.handUpgrades).toEqual(initial.handUpgrades);
-        expect(result.nextState.shopItems[0].purchased).toBe(true);
+        expect(result.nextState.offeredPacks).toEqual([]);
         expect(act(result.nextState, { type: 'skip_pack' })).toEqual(result.nextState);
     });
 
@@ -97,15 +88,15 @@ describe('Card packs', () => {
     });
 
     it('blocks relic choices at capacity and permits skipping, including after filling the last slot', () => {
-        const inventory = RelicManager.getAllRelics().slice(0, 4).map(relic => ({ id: relic.id, state: { ...relic.properties } }));
+        const inventory = RelicManager.getAllRelics().slice(0, 6).map(relic => ({ id: relic.id, state: { ...relic.properties } }));
         const full = open('relic_mega', { inventory }).state;
         expect(full.pendingPackChoices.every(id => !inventory.some(owned => owned.id === id))).toBe(true);
         expect(getValidActions(full)).toEqual([{ type: 'skip_pack' }]);
         expect(act(full, { type: 'choose_pack_card', cardId: full.pendingPackChoices[0] })).toEqual(full);
-        expect(act(act(full, { type: 'skip_pack' }), { type: 'leave_shop' }).phase).toBe('entering_casino');
-        const oneSlot = open('relic_mega', { inventory: inventory.slice(0, 3) }).state;
+        expect(act(act(full, { type: 'skip_pack' }), { type: 'finish_pack' }).phase).toBe('entering_casino');
+        const oneSlot = open('relic_mega', { inventory: inventory.slice(0, 5) }).state;
         const picked = act(oneSlot, { type: 'choose_pack_card', cardId: oneSlot.pendingPackChoices[0] });
-        expect(picked.inventory).toHaveLength(4);
+        expect(picked.inventory).toHaveLength(6);
         expect(getValidActions(picked)).toEqual([{ type: 'skip_pack' }]);
         expect(act(picked, { type: 'skip_pack' }).inventory).toEqual(picked.inventory);
     });
@@ -127,7 +118,7 @@ describe('Card packs', () => {
         expect(getValidActions(state)).toEqual([{ type: 'skip_pack' }]);
         expect(useGameBridge.getState().loadGameState(JSON.stringify(state))).toBe(true);
         expect(useGameBridge.getState().gameState.pendingPack).toEqual(state.pendingPack);
-        expect(act(state, { type: 'leave_shop' })).toEqual(state);
+        expect(act(state, { type: 'finish_pack' })).toEqual(state);
         expect(act(state, { type: 'skip_pack' }).pendingPack).toBeNull();
     });
 
@@ -165,7 +156,6 @@ describe('Card packs', () => {
         expect(useGameBridge.getState().loadGameState(JSON.stringify(legacy))).toBe(true);
         const loaded = useGameBridge.getState().gameState;
         expect(loaded.pendingPack).toEqual({ packId: 'deck_jumbo', picksRemaining: 1 });
-        expect(loaded.shopItems[0]).toMatchObject({ type: 'DeckPack', packId: 'deck_jumbo', nameOverride: 'Jumbo Deck Pack' });
         expect(act(loaded, { type: 'choose_pack_card', cardId: 'special_v1_0_0' }).deckProbabilities.specialWeights).toContainEqual({ type: 'chip', chance: 0.05 });
         expect(getPackCard('deck_v1_1_6.9')?.family).toBe('deck');
         for (const id of ['deck_v2_2_0', 'deck_v2_1_0.1', 'special_v1_1_0.0', 'special_v1_0_99']) expect(getPackCard(id)).toBeUndefined();

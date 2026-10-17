@@ -44,7 +44,6 @@ export interface ScoringDetail {
   count: number; // specialized count (e.g. number of pairs)
   chips: number; // Total chips from this criterion
   multiplier: number; // Total multiplier from this criterion
-  compTickets?: number; // Awarded once by this scoring criterion
   cardIds?: string[]; // IDs of cards that contributed to this criterion
   sourceRelicId?: string; // ID of the relic that triggered this, used for UI highlights
   matches?: ScoringMatch[];

@@ -1,10 +1,8 @@
 import React, { useState } from 'react';
-import { useGameBridge } from '../store/gameBridge';
 import { useGameStore } from '../store/gameStore';
 import { RelicManager } from '../logic/relics/manager';
 import { RelicTooltip } from './RelicTooltip';
 import { getRelicRarityFrameColor } from '../logic/relics/rarity';
-import { getRelicSellCashValue } from '../logic/rewards/generator';
 import { getRelicSide, getSideSlotCount, type RelicSide } from '../logic/relics/inventory';
 import type { RelicInstance } from '../logic/relics/types';
 
@@ -17,11 +15,10 @@ interface RelicInventoryProps {
 export const RelicInventory: React.FC<RelicInventoryProps> = ({
     inventoryKind, hiddenEntry = null, pendingHiddenRelicId = null
 }) => {
-    const { inventory, relicSlots, activeRelicId, isSellingMode, sellRelic, rewardRelicSell } = useGameStore();
+    const { inventory, relicSlots, activeRelicId } = useGameStore();
     const entries = (inventory as RelicInstance[]).filter((_, index) => getRelicSide(index) === inventoryKind);
     const slotCount = Math.max(entries.length, getSideSlotCount(inventoryKind, relicSlots));
     const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-    const [sellingId, setSellingId] = useState<string | null>(null);
     const right = inventoryKind === 'right';
     const hovered = hoveredIndex === null ? null : entries[hoveredIndex];
     const hoveredConfig = hovered ? RelicManager.getRelicConfig(hovered.id) : null;
@@ -41,31 +38,18 @@ export const RelicInventory: React.FC<RelicInventoryProps> = ({
                     border: '2px solid rgba(192, 192, 192, 0.35)', background: 'rgba(0, 0, 0, 0.12)' }} />;
             const active = activeRelicId === instance.id || instance.state?.armed;
             const hidden = (hiddenEntry?.id === instance.id && hiddenEntry.index === index) || pendingHiddenRelicId === instance.id;
-            const selling = sellingId === instance.id;
             return <div key={instance.id}
                 data-inventory-row="true" data-inventory-kind={inventoryKind}
                 data-relic-id={instance.id} data-inventory-index={index}
                 onMouseEnter={() => setHoveredIndex(index)} onMouseLeave={() => setHoveredIndex(null)}
-                onClick={() => {
-                    if (!isSellingMode || sellingId) return;
-                    rewardRelicSell(instance.id);
-                    setSellingId(instance.id);
-                    setTimeout(() => {
-                        // Locate by ID at completion so another sale cannot shift this index.
-                        const absoluteIndex = (useGameBridge.getState().gameState.inventory as RelicInstance[]).findIndex(entry => entry.id === instance.id);
-                        if (absoluteIndex !== -1) sellRelic(instance.id, absoluteIndex);
-                        setSellingId(null);
-                        setHoveredIndex(null);
-                    }, 300);
-                }}
                 style={{
                     height: 40, display: 'flex', flexDirection: right ? 'row-reverse' : 'row',
                     alignItems: 'center', position: 'relative', gap: 10,
-                    cursor: isSellingMode ? 'pointer' : 'help', pointerEvents: 'auto',
+                    cursor: 'help', pointerEvents: 'auto',
                     zIndex: hoveredIndex === index ? 100 : active ? 10 : 1,
                     transform: active ? 'scale(1.05)' : 'scale(1)',
                     transition: 'transform 0.3s, opacity 0.3s',
-                    opacity: hidden || selling ? 0 : 1, visibility: hidden ? 'hidden' : 'visible'
+                    opacity: hidden ? 0 : 1, visibility: hidden ? 'hidden' : 'visible'
                 }}>
                 <div data-inventory-icon="true" style={{
                     width: 40, height: 40, borderRadius: '50%', flexShrink: 0,
@@ -87,9 +71,8 @@ export const RelicInventory: React.FC<RelicInventoryProps> = ({
         })}
         {hovered && hoveredConfig && <RelicTooltip relic={hoveredConfig} displayValues={hovered.state}
             isRightAligned={right} layout="horizontal" direction={right ? 'rtl' : 'ltr'}
-            sellPrice={isSellingMode ? getRelicSellCashValue(hovered.id) : undefined}
             style={{ position: 'absolute', top: hoveredIndex! * 50 - 11,
                 ...(right ? { right: -21 } : { left: -21 }), pointerEvents: 'none', zIndex: 50,
-                opacity: sellingId === hovered.id ? 0 : 1 }} />}
+                opacity: 1 }} />}
     </div>;
 };

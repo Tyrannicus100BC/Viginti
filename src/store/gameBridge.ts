@@ -1,6 +1,9 @@
+import { generatePackOffers } from '../engine/actions/packActions';
+import { SeededRNG } from '../engine/rng';
+import { INITIAL_RELIC_SLOTS } from '../logic/relics/inventory';
 import { normalizeRelicInstance } from '../logic/relics/state';
 import { normalizeDeckProbabilities } from '../logic/specialCards';
-import { getPackDefinition, isPackItem, PACK_ITEM_TYPES, type PendingPack } from '../logic/packs';
+import { getPackDefinition, type PackId, type PendingPack } from '../logic/packs';
 import { RelicManager } from '../logic/relics/manager';
 /**
  * GameBridge — Zustand store that wraps the pure game engine.
@@ -17,7 +20,7 @@ import { RelicManager } from '../logic/relics/manager';
 
 import { create } from 'zustand';
 import { BASE_ANTE, HANDS_PER_ANTE } from '../engine/economy';
-import type { GameState, GamePhase, ShopItem, RewardSummary, InteractionMode } from '../engine/GameState';
+import type { GameState, GamePhase, InteractionMode } from '../engine/GameState';
 import type { PlayerAction } from '../engine/PlayerAction';
 import type { GameEvent } from '../engine/GameEvent';
 import { processAction, getValidActions, createInitialState } from '../engine/engine';
@@ -51,18 +54,14 @@ function isActionEquivalent(a: PlayerAction, b: PlayerAction): boolean {
             return a.cardId === b.cardId && a.handIndex === b.handIndex && (a as any).target === (b as any).target;
         case 'select_table_action_draw_card':
             return a.drawIndex === b.drawIndex;
-        case 'buy_shop_item':
-            return a.itemId === b.itemId;
+        case 'debug_open_pack':
+            return a.packId === (b as Extract<PlayerAction, { type: 'debug_open_pack' }>).packId;
+        case 'open_pack':
+            return a.packId === (b as Extract<PlayerAction, { type: 'open_pack' }>).packId;
         case 'choose_pack_card':
             return a.cardId === (b as Extract<PlayerAction, { type: 'choose_pack_card' }>).cardId;
         case 'choose_raise':
             return (a as any).raiseId === (b as any).raiseId;
-        case 'sell_relic':
-            return a.relicId === b.relicId && a.index === b.index;
-        case 'enhance_card':
-            return a.cardId === b.cardId;
-        case 'destroy_card':
-            return a.cardId === b.cardId;
         case 'acknowledge_tutorial':
             return a.stepId === b.stepId;
         default:
@@ -118,7 +117,6 @@ interface UIState {
     isProcessingEvents: boolean;
     
     // UI Modes
-    isSellingMode: boolean;
     debugEnabled: boolean;
     debugLedger: DebugLedgerEntry[];
 
@@ -163,7 +161,6 @@ interface GameBridgeState extends UIState {
     continueAnteIncrease: () => void;
 
     /** Toggle selling mode */
-    toggleSellingMode: (enabled?: boolean) => void;
 
     /** Toggle debug mode */
     toggleDebug: () => void;
@@ -193,11 +190,9 @@ interface GameBridgeState extends UIState {
     readonly interactionMode: InteractionMode;
     readonly totalScore: number;
     readonly targetScore: number;
-    readonly comps: number;
     readonly cash: number;
     readonly ante: number;
     readonly handsUntilAnteIncrease: number;
-    readonly shopDealsAtLastFreeRestock: number;
     readonly dealsTaken: number;
     readonly handsRemaining: number;
     readonly inventory: readonly RelicInstance[];
@@ -205,13 +200,10 @@ interface GameBridgeState extends UIState {
     readonly pendingRaiseChoices: readonly string[];
     readonly pendingPackChoices: readonly string[];
     readonly pendingPack: PendingPack | null;
+    readonly offeredPacks: readonly PackId[];
     readonly handUpgrades: import('../logic/handScoring').HandUpgrades;
     readonly tableActionCharges: Readonly<Record<string, number>>;
     readonly tableActionHeldCards: Readonly<Record<string, Card | null>>;
-    readonly shopItems: readonly ShopItem[];
-    readonly shopHasNewStock: boolean;
-    readonly giftShopRestockCost: number;
-    readonly shopRewardSummary: RewardSummary | null;
     readonly runningSummary: { readonly chips: number; readonly mult: number } | null;
     readonly selectedCityId: string | null;
     readonly activeTableActionId: string | null;
@@ -243,7 +235,6 @@ const INITIAL_UI: UIState = {
     activeTutorialId: null,
     animationSpeed: 1,
     isProcessingEvents: false,
-    isSellingMode: false,
     debugEnabled: getDebugSettingsEnabled(),
     debugLedger: [],
     vigintiSoundKey: 0,
@@ -269,11 +260,9 @@ export const useGameBridge = create<GameBridgeState>((set, get) => {
         interactionMode: gs.interactionMode,
         totalScore: gs.totalScore,
         targetScore: gs.targetScore,
-        comps: gs.comps,
         cash: gs.cash,
         ante: gs.ante,
         handsUntilAnteIncrease: gs.handsUntilAnteIncrease,
-        shopDealsAtLastFreeRestock: gs.shopDealsAtLastFreeRestock,
         dealsTaken: gs.dealsTaken,
         handsRemaining: gs.handsRemaining,
         inventory: gs.inventory,
@@ -281,13 +270,10 @@ export const useGameBridge = create<GameBridgeState>((set, get) => {
         pendingRaiseChoices: gs.pendingRaiseChoices,
         pendingPackChoices: gs.pendingPackChoices,
         pendingPack: gs.pendingPack,
+        offeredPacks: gs.offeredPacks,
         handUpgrades: gs.handUpgrades ?? {},
         tableActionCharges: gs.tableActionCharges,
         tableActionHeldCards: gs.tableActionHeldCards,
-        shopItems: gs.shopItems,
-        shopHasNewStock: gs.shopHasNewStock,
-        giftShopRestockCost: gs.giftShopRestockCost,
-        shopRewardSummary: gs.shopRewardSummary,
         runningSummary: gs.runningSummary,
         selectedCityId: gs.selectedCityId,
         activeTableActionId: gs.activeTableActionId,
@@ -330,6 +316,7 @@ export const useGameBridge = create<GameBridgeState>((set, get) => {
                     // This handles the "interpretation of the click" problem.
                     const valid = getValidActions(gameState);
                     const isInfra = [
+                        'debug_open_pack',
                         'debug_win', 
                         'debug_undo',
                         'debug_victory',
@@ -533,11 +520,6 @@ export const useGameBridge = create<GameBridgeState>((set, get) => {
 
         setAnimationSpeed: (speed) => set({ animationSpeed: speed }),
         continueAnteIncrease: () => set({ anteIncrease: null }),
-
-        toggleSellingMode: (enabled) => set(state => ({ 
-            isSellingMode: enabled !== undefined ? enabled : !state.isSellingMode 
-        })),
-
         toggleDebug: () => set(state => {
             const next = !state.debugEnabled;
             setDebugSettingsEnabled(next);
@@ -604,8 +586,18 @@ export const useGameBridge = create<GameBridgeState>((set, get) => {
                     .filter((instance: RelicInstance) => RelicManager.getRelicConfig(instance.id))
                     .map(normalizeRelicInstance);
                 const actionRelics = inventory.filter(instance => RelicManager.getRelicConfig(instance.id)?.tableAction);
+                // Drop the retired economy while retaining earned cards and relics.
+                const migratedState = { ...rawState };
+                for (const key of ['comps', 'shopItems', 'shopHasNewStock', 'shopStockInitialized',
+                    'shopDealsAtLastFreeRestock', 'shopReturnPhase', 'giftShopRestockCost', 'shopRewardSummary']) {
+                    delete migratedState[key];
+                }
+                const rng = new SeededRNG(rawState.rngState);
+                const offeredPacks = rawState.offeredPacks ?? (rawState.phase === 'gift_shop' &&
+                    !rawState.pendingPack && !rawState.pendingRaiseChoices?.length && !rawState.pendingPackChoices?.length
+                    ? generatePackOffers(rng) : []);
                 const nextGameState = {
-                    ...rawState,
+                    ...migratedState,
                     deckProbabilities: normalizeDeckProbabilities(rawState.deckProbabilities),
                     inventory,
                     tableActionCharges: Object.fromEntries(actionRelics.map(instance => {
@@ -613,7 +605,13 @@ export const useGameBridge = create<GameBridgeState>((set, get) => {
                         return [instance.id, rawState.tableActionCharges?.[instance.id] ?? action.maxCharges];
                     })),
                     tableActionHeldCards: Object.fromEntries(actionRelics.map(instance => [instance.id, rawState.tableActionHeldCards?.[instance.id] ?? null])),
-                    relicSlots: Math.max(4, inventory.length, rawState.relicSlots ?? 4),
+                    relicSlots: INITIAL_RELIC_SLOTS,
+                    playerHands: rawState.playerHands.map((hand: PlayerHand) => ({ ...hand, isInactive: false })),
+                    phase: rawState.phase === 'gift_shop' ? 'pack_choice' : rawState.phase,
+                    offeredPacks,
+                    rngState: offeredPacks !== rawState.offeredPacks && offeredPacks.length ? rng.getState() : rawState.rngState,
+                    packReturnPhase: rawState.packReturnPhase ?? rawState.shopReturnPhase ?? 'deal_over',
+                    debugPackReturn: rawState.debugPackReturn ?? null,
                     pendingRaiseChoices: rawState.pendingRaiseChoices ?? [],
                     pendingPackChoices: getPackDefinition(rawState.pendingPack?.packId).family === 'relic'
                         ? (rawState.pendingPackChoices ?? []).filter((id: string) => RelicManager.getRelicConfig(id))
@@ -624,19 +622,8 @@ export const useGameBridge = create<GameBridgeState>((set, get) => {
                     } : null,
                     ante: rawState.ante ?? BASE_ANTE,
                     handsUntilAnteIncrease: rawState.handsUntilAnteIncrease ?? HANDS_PER_ANTE,
-                    shopHasNewStock: rawState.shopHasNewStock ?? false,
                     handUpgrades: rawState.handUpgrades ?? {},
-                    // Imported shops use the same stock presentation as new runs.
-                    shopItems: (rawState.shopItems ?? []).filter((item: ShopItem) =>
-                        !['Relic', 'Control', 'Score'].includes(item.type) || RelicManager.getRelicConfig(item.id)
-                    ).map((item: ShopItem) => {
-                        if (item.type === 'Control' || item.type === 'Score') return { ...item, type: 'Relic' };
-                        if (item.type === 'Raise' || isPackItem(item)) {
-                            const pack = getPackDefinition(item.packId);
-                            return { ...item, type: PACK_ITEM_TYPES[pack.family], packId: pack.id, cost: item.type === 'Raise' ? pack.cost : item.cost, nameOverride: pack.name };
-                        }
-                        return item;
-                    }),
+
                 };
 
                 const isScoring = nextGameState.phase === 'scoring';

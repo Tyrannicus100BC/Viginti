@@ -17,12 +17,11 @@ interface HandTypeDefinition {
     mult: number;
     description: string;
     chipCards: boolean;
-    compTickets?: number;
     variant?: { id: 'viginti' | 'bust'; name: string; icon?: string; chips: number; mult: number };
 }
 
 export const HAND_TYPES: readonly HandTypeDefinition[] = [
-    { id: 'win', name: 'Win', icon: '/hands/win.svg', chips: 10, mult: 0, compTickets: 1, description: 'Beat the dealer. Exactly 21 has a higher base payout. Win or Viginti earns +1 comp ticket.', chipCards: false, variant: { id: 'viginti', name: '21', icon: '/hands/viginti.svg', chips: 20, mult: 0.1 } },
+    { id: 'win', name: 'Win', icon: '/hands/win.svg', chips: 10, mult: 0, description: 'Beat the dealer. Exactly 21 has a higher base payout.', chipCards: false, variant: { id: 'viginti', name: '21', icon: '/hands/viginti.svg', chips: 20, mult: 0.1 } },
     { id: 'loss', name: 'Lose', icon: '/hands/lose.svg', chips: -10, mult: 0, description: 'Lose to the dealer. Busts have a larger base penalty. A push has no outcome payout.', chipCards: false, variant: { id: 'bust', name: 'Bust', icon: '/hands/bust.svg', chips: -20, mult: -0.1 } },
     { id: 'pair', name: 'Pair', icon: '/hands/pair.svg', chips: 0, mult: 0.1, description: 'Every two cards of the same rank. Three of a kind contains three pairs.', chipCards: true },
     { id: 'straight', name: 'Straight', icon: '/hands/straight.svg', chips: 10, mult: 0, description: 'Every separate run of two or more ranks. Aces can be high or low.', chipCards: true },
@@ -240,7 +239,6 @@ export function evaluateBaseHands(cards: Card[], isWin: boolean, blackjackValue:
             count: 1,
             chips: (variant ? hand.variant!.chips : hand.chips) + (hand.chipCards ? group.reduce((sum, card) => sum + RANK_VALUES[card.rank], 0) : 0),
             multiplier: variant ? hand.variant!.mult : hand.mult,
-            ...(hand.compTickets ? { compTickets: hand.compTickets } : {}),
             cardIds: group.map(card => card.id),
         });
     };

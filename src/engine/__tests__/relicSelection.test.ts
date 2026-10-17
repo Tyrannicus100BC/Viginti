@@ -47,40 +47,18 @@ describe.each(Object.entries(generators))('%s relic rarity selection', (_, gener
     });
 });
 
-describe('relic pack shop exclusions', () => {
-    it.each(['relic_basic', 'relic_jumbo', 'relic_mega'] as const)('%s excludes relics currently for sale when purchased', packId => {
+describe('relic pack ownership exclusions', () => {
+    it.each(['relic_basic', 'relic_jumbo', 'relic_mega'] as const)('%s excludes owned relics and costs no cash', packId => {
         const pack = getPackDefinition(packId);
         const inventory = [{ id: allRelics[0].id, state: {} }];
-        // Stock relics that this seed would otherwise put in the pack.
-        const shelfIds = generateRelicPackChoices(new SeededRNG(42), 2, inventory);
-        const state = {
-            ...createInitialState(), phase: 'gift_shop' as const, cash: 1000, rngState: 42, inventory,
-            shopItems: [
-                ...shelfIds.map(id => ({ id, type: 'Relic' as const, cost: 40 })),
-                { id: 'pack', type: 'RelicPack' as const, packId, cost: pack.cost },
-            ],
-        };
-        const opened = processAction(state, { type: 'buy_shop_item', itemId: 'pack' }).nextState;
+        const state = { ...createInitialState(), phase: 'pack_choice' as const, cash: 0, rngState: 42, inventory, offeredPacks: [packId] };
+        const opened = processAction(state, { type: 'open_pack', packId }).nextState;
         expect(opened.pendingPackChoices).toHaveLength(pack.offerCount);
         expect(new Set(opened.pendingPackChoices).size).toBe(pack.offerCount);
-        for (const id of [...shelfIds, inventory[0].id]) expect(opened.pendingPackChoices).not.toContain(id);
-        expect(opened.cash).toBe(1000 - pack.cost);
+        expect(opened.pendingPackChoices).not.toContain(inventory[0].id);
+        expect(opened.cash).toBe(0);
         expect(opened.pendingPack?.picksRemaining).toBe(pack.pickCount);
-        expect(processAction(state, { type: 'buy_shop_item', itemId: 'pack' }).nextState).toEqual(opened);
-    });
-
-    it('keeps sold shelf relics eligible when no longer owned', () => {
-        const [forSale, sold, ...owned] = allRelics;
-        const state = {
-            ...createInitialState(), phase: 'gift_shop' as const, cash: 1000,
-            inventory: owned.map(relic => ({ id: relic.id, state: {} })),
-            shopItems: [
-                { id: forSale.id, type: 'Relic' as const, cost: 40 },
-                { id: sold.id, type: 'Relic' as const, cost: 40, purchased: true },
-                { id: 'pack', type: 'RelicPack' as const, packId: 'relic_basic' as const, cost: 40 },
-            ],
-        };
-        expect(processAction(state, { type: 'buy_shop_item', itemId: 'pack' }).nextState.pendingPackChoices).toEqual([sold.id]);
+        expect(processAction(state, { type: 'open_pack', packId }).nextState).toEqual(opened);
     });
 });
 

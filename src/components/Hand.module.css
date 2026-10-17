@@ -556,7 +556,4 @@
     line-height: 2.25rem;
 }
 
-.itemComps { flex: 1; color: #c084fc; text-align: right; font-weight: bold; white-space: nowrap; }
-.itemComps.isViginti { color: #ffd700; }
-
-.scoringItem:not(.hasComps) .itemName { flex: 3; }
+.scoringItem .itemName { flex: 3; }

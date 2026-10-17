@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <title>Lose: card marked with a cross</title>
+
+  <g transform="rotate(-9 30 32)">
+    <rect x="13" y="6" width="34" height="49" rx="5" fill="#fff7e8" stroke="#243545" stroke-width="2.5"/>
+    <path d="M20 13H25M20 18H23M35 43H40M37 48H40" stroke="#243545" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M23 24L37 38M37 24L23 38" stroke="#ef655d" stroke-width="5.5" stroke-linecap="round"/>
+  </g>
+</svg>

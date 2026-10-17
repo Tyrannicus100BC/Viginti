@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <title>Bust: a broken card</title>
+
+  <g stroke="#243545" stroke-width="2.5" stroke-linejoin="round">
+    <path d="M16 6H44Q49 6 49 11V27L36 22L39 31L27 26L16 31L11 26V11Q11 6 16 6Z" fill="#fff7e8" transform="rotate(-8 30 20)"/>
+    <path d="M15 36L27 31L38 36L35 27L49 33V53Q49 58 44 58H20Q15 58 15 53Z" fill="#fff7e8" transform="rotate(9 32 43)"/>
+  </g>
+  <path d="M12 29L25 33L30 28L37 35L50 30" stroke="#ef655d" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M4 19L1 15M56 20L61 16M5 44L1 47M55 45L61 49" stroke="#ef655d" stroke-width="3" stroke-linecap="round"/>
+  <path d="M20 14H26M20 19H24M37 47H43M39 52H43" stroke="#243545" stroke-width="2.5" stroke-linecap="round"/>
+</svg>

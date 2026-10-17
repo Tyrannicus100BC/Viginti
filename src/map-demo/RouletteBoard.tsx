@@ -124,7 +124,6 @@ export const RouletteBoard: React.FC<RouletteBoardProps> = ({ onClose }) => {
         targetScore,
         totalScore,
         handsRemaining,
-        comps,
         dealer,
         playerHands,
         drawnCards,
@@ -537,10 +536,6 @@ export const RouletteBoard: React.FC<RouletteBoardProps> = ({ onClose }) => {
                 <div className={styles.stat}>
                     <span className={styles.statLabel}>Deals</span>
                     <span className={styles.statValue}>{handsRemaining}</span>
-                </div>
-                <div className={styles.stat}>
-                    <span className={styles.statLabel}>Comps</span>
-                    <span className={styles.statValue}>₵{comps}</span>
                 </div>
             </header>
 
