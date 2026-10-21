@@ -1,4 +1,4 @@
-import { getPackDefinition } from '../logic/packs';
+import { advanceChallenges, completeChallenges, getHandChallengeProgress } from './challenges';
 import { canAcquireRelic, INITIAL_RELIC_SLOTS } from '../logic/relics/inventory';
 /**
  * Game Engine — the main entry point for processing player actions.
@@ -21,7 +21,7 @@ import { GAMBLER_DEFINITIONS } from '../logic/gamblers/definitions';
 import { CITY_DEFINITIONS } from '../logic/cities/definitions';
 // RelicManager access is now via relicEngine.ts
 import { drawCardFromProbabilities } from '../logic/deck';
-import { STARTING_CASH, BASE_ANTE, getNextAnte, HANDS_PER_ANTE, canPlayHand } from './economy';
+import { STARTING_CASH, BASE_ANTE, canPlayHand } from './economy';
 import { getBlackjackScore, evaluateHandScore } from '../logic/scoring';
 import {
     executeValueHook,
@@ -40,7 +40,7 @@ import {
     processSelectTableActionCard,
     processSelectTableActionDrawCard,
 } from './actions/tableActions';
-import { generatePackOffers, processDebugOpenPack, processOpenPack, processFinishPack, processChooseRaise, processChoosePackCard, processSkipPack } from './actions/packActions';
+import { generatePackOffers, processBeginChallengeRewards, processDebugOpenPack, processOpenPack, processFinishPack, processChooseRaise, processChoosePackCard, processSkipPack } from './actions/packActions';
 import {
     checkTutorialTriggers,
     handleTutorialAction,
@@ -299,7 +299,7 @@ export function getValidActions(state: GameState): PlayerAction[] {
         case 'pack_choice': {
             if (state.pendingPack) {
                 state.pendingPackChoices.forEach(cardId => {
-                    if (getPackDefinition(state.pendingPack?.packId).family !== 'relic' || canAcquireRelic(cardId, state.inventory, state.relicSlots)) {
+                    if (!getRelicConfig(cardId) || canAcquireRelic(cardId, state.inventory, state.relicSlots)) {
                         actions.push({ type: 'choose_pack_card', cardId });
                     }
                 });
@@ -307,6 +307,7 @@ export function getValidActions(state: GameState): PlayerAction[] {
                 actions.push({ type: 'skip_pack' });
             } else if (state.offeredPacks.length) {
                 state.offeredPacks.forEach(packId => actions.push({ type: 'open_pack', packId }));
+                actions.push({ type: 'skip_pack' });
             } else {
                 actions.push({ type: 'finish_pack' });
             }
@@ -363,7 +364,9 @@ export function createInitialState(): GameState {
         targetScore: 0,
         cash: STARTING_CASH,
         ante: BASE_ANTE,
-        handsUntilAnteIncrease: HANDS_PER_ANTE,
+        challengeStage: 0,
+        challenges: [],
+        challengeRewards: [],
         phase: 'init',
         dealer: { cards: [], isRevealed: false, blackjackValue: 0 },
         playerHands: [],
@@ -450,7 +453,9 @@ function processStartGame(
         targetScore,
         cash: STARTING_CASH,
         ante: BASE_ANTE,
-        handsUntilAnteIncrease: HANDS_PER_ANTE,
+        challengeStage: 0,
+        challenges: [],
+        challengeRewards: [],
         phase: 'entering_casino',
         deckProbabilities,
         dealer: { cards: [], isRevealed: false, blackjackValue: 0 },
@@ -502,6 +507,9 @@ function processStartGame(
 function processDeal(state: GameState, _forceContinue?: boolean): ActionResult {
     if (state.phase !== 'entering_casino' && state.phase !== 'deal_over') {
         return { nextState: state, events: [] };
+    }
+    if (state.challengeRewards.length) {
+        return processBeginChallengeRewards(state);
     }
     if (state.cash < state.ante) {
         return {
@@ -1001,6 +1009,7 @@ function processScoreRound(state: GameState): ActionResult {
     let runningSummary = state.runningSummary || { chips: 0, mult: 1 };
     let currentInv = state.inventory as RelicInstance[];
     const scoredHands = state.playerHands;
+    let challenges = state.challenges;
 
     // Pre-calculate to count category instances across all scored hands
     const categoryCounts: Record<string, number> = { flush: 0, rank: 0, straight: 0 };
@@ -1098,6 +1107,8 @@ function processScoreRound(state: GameState): ActionResult {
         currentInv = handCompResult.inventory;
 
         events.push({ type: 'scoring_hand_complete', handIndex: i });
+        challenges = advanceChallenges(challenges, getHandChallengeProgress(score));
+        events.push({ type: 'challenges_updated', challenges });
 
         return { ...hand, finalScore: score, resultRevealed: true };
     });
@@ -1138,10 +1149,11 @@ function processScoreRound(state: GameState): ActionResult {
     const newCash = Math.max(0, state.cash + finalScore);
     events.push({ type: 'chip_collection', amount: finalScore, newTotalScore, newCash });
 
-    const increaseDue = state.handsUntilAnteIncrease <= 1;
-    const ante = increaseDue ? getNextAnte(state.ante) : state.ante;
-    const handsUntilAnteIncrease = increaseDue ? HANDS_PER_ANTE : state.handsUntilAnteIncrease - 1;
-    const rng = new SeededRNG(state.rngState);
+    challenges = advanceChallenges(challenges, { rounds: 1, earnings: Math.max(0, finalScore) });
+    const completion = completeChallenges(challenges);
+    events.push({ type: 'challenges_updated', challenges: completion.challenges });
+    const challengeRewards = [...state.challengeRewards, ...completion.rewards];
+    completion.rewards.forEach(reward => events.push({ type: 'challenge_completed', reward }));
     const tableActionCharges = { ...state.tableActionCharges };
     currentInv = currentInv.map(instance => {
         const action = getRelicConfig(instance.id)?.tableAction;
@@ -1155,11 +1167,9 @@ function processScoreRound(state: GameState): ActionResult {
         events.push({ type: 'relic_state_changed', relicId: instance.id, newState: relicState });
         return { ...instance, state: relicState };
     });
-    if (increaseDue) {
-        events.push({ type: 'ante_increased', previousAnte: state.ante, ante, handsUntilAnteIncrease });
-    }
-    const offeredPacks = increaseDue ? generatePackOffers(rng) : [];
-    const nextPhase: GameState['phase'] = increaseDue ? 'pack_choice' : 'deal_over';
+    // Finish scoring at the table. Rewards and ante progression wait for the player.
+    challenges = completion.challenges;
+    const nextPhase = 'deal_over' as const;
 
     events.push({ type: 'phase_changed', from: 'scoring', to: nextPhase });
 
@@ -1170,14 +1180,13 @@ function processScoreRound(state: GameState): ActionResult {
             playerHands: finalHands,
             totalScore: newTotalScore,
             cash: newCash,
-            ante,
-            handsUntilAnteIncrease,
-            offeredPacks,
+            challenges,
+            challengeRewards,
+            offeredPacks: [],
             packReturnPhase: 'deal_over',
             tableActionCharges,
             runningSummary,
             inventory: currentInv,
-            rngState: rng.getState(),
             dealer: { cards: [], isRevealed: false, blackjackValue: 0 },
         },
         events,
@@ -1294,10 +1303,19 @@ function processDebugFillCharges(state: GameState, relicId: string): ActionResul
     };
 }
 
-function processDebugGiveCash(state: GameState, amount: number): ActionResult {
+function processDebugGiveCash(state: GameState, amount = Math.ceil(
+    (state.challenges.find(challenge => challenge.main && challenge.metric === 'earnings')?.target ?? 300) / 3
+)): ActionResult {
+    if (!Number.isFinite(amount)) return { nextState: state, events: [] };
+    const completion = completeChallenges(advanceChallenges(state.challenges, { earnings: Math.max(0, amount) }));
     return {
-        nextState: { ...state, cash: state.cash + amount },
-        events: [],
+        nextState: { ...state, cash: state.cash + amount,
+            challenges: completion.challenges,
+            challengeRewards: [...state.challengeRewards, ...completion.rewards] },
+        events: [
+            { type: 'challenges_updated', challenges: completion.challenges },
+            ...completion.rewards.map(reward => ({ type: 'challenge_completed' as const, reward })),
+        ],
     };
 }
 

@@ -4,11 +4,11 @@ import { pickRandomRelic } from '../relics/selection';
 import type { RelicInstance, RelicRarity } from '../relics/types';
 import type { SeededRNG } from '../../engine/rng';
 import { RAISES, getRaise } from '../handScoring';
-import { rollPackDefinition, isPackItem, PACK_ITEM_TYPES, type PackId } from '../packs';
+import { rollPackDefinition, isPackItem, PACK_ITEM_TYPES, type PackId, type PackItemType } from '../packs';
 
 export interface ShopItem {
     id: string;
-    type: 'Relic' | 'RaisePack' | 'DeckPack' | 'RelicPack' | 'SpecialPack' | 'Control' | 'Score' | 'Raise' | 'TableAction';
+    type: 'Relic' | PackItemType | 'SpecialPack' | 'Control' | 'Score' | 'Raise' | 'TableAction';
     purchased?: boolean;
     cost: number;
     nameOverride?: string;

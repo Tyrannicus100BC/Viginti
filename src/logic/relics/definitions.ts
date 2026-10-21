@@ -112,7 +112,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
         rarity: 'Uncommon',
         categories: ['Relic', 'Cards'],
         description: 'Each winning [9] earns x${bonus_mult}',
-        properties: { bonus_mult: 0.2 },
+        properties: { bonus_mult: 0.1 },
         hooks: Hooks.star_bead_nines,
         icon: '⭐️'
     },
@@ -121,7 +121,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
         rarity: 'Uncommon',
         categories: ['Relic', 'Cards'],
         description: 'Each winning [10] or [4] earns x${bonus_mult}',
-        properties: { bonus_mult: 0.1 },
+        properties: { bonus_mult: 0.05 },
         hooks: Hooks.heart_button_ten_four,
         icon: '🩷'
     },
@@ -130,7 +130,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
         rarity: 'Uncommon',
         categories: ['Relic', 'Cards'],
         description: 'Each winning [King] earns x${bonus_mult}',
-        properties: { bonus_mult: 0.2 },
+        properties: { bonus_mult: 0.1 },
         hooks: Hooks.lucky_acorn_kings,
         icon: '🌰'
     },
@@ -158,7 +158,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
         rarity: 'Uncommon',
         categories: ['Relic', 'Global'],
         description: 'Earn an extra x${amount}, but decays by x${decay_amount} each round',
-        properties: { amount: 0.5, decay_amount: 0.1 },
+        properties: { amount: 0.25, decay_amount: 0.05 },
         hooks: Hooks.faded_tag_bonus,
         icon: '🏷️'
     },
@@ -185,7 +185,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
         rarity: 'Common',
         categories: ['Relic', 'Global'],
         description: 'Earn an extra x${bonus_mult}',
-        properties: { bonus_mult: 0.1 },
+        properties: { bonus_mult: 0.05 },
         hooks: Hooks.robe_slippers_bonus_mult,
         icon: '🧦'
     },
@@ -194,7 +194,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
         rarity: 'Uncommon',
         categories: ['Relic', 'Global'],
         description: 'Earn an extra x${bonus_mult}',
-        properties: { bonus_mult: 0.2 },
+        properties: { bonus_mult: 0.1 },
         hooks: Hooks.robe_slippers_bonus_mult,
         icon: '👘'
     },
@@ -222,7 +222,7 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
         rarity: 'Uncommon',
         categories: ['Relic', 'Meta', 'New'],
         description: 'First hand of 20 is discarded and [Wins] earn x${bonus_mult}',
-        properties: { bonus_mult: 0.1, armed: false },
+        properties: { bonus_mult: 0.05, armed: false },
         hooks: Hooks.safety_net_20,
         icon: '🕸️'
     },

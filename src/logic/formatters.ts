@@ -1,4 +1,18 @@
 
+/** Visual values use color for negatives; signed text is for parsing and plain text. */
+export function formatCash(value: number, includeNegativeSign = false): string {
+    return `${includeNegativeSign && value < 0 ? '−' : ''}$${Math.abs(value).toLocaleString()}`;
+}
+
+/** Display a scoring multiplier as a percentage without floating-point noise. */
+export function formatMultPercent(value: number, includeNegativeSign = false): string {
+    return `${includeNegativeSign && value < 0 ? '−' : ''}${Number((Math.abs(value) * 100).toFixed(6))}%`;
+}
+
+export function formatChipMultiplier(value: number, includeNegativeSign = false): string {
+    return `${includeNegativeSign && value < 0 ? '−' : ''}x${formatMultPercent(value)}`;
+}
+
 export function formatHandChips(chips: number, chipCards: boolean = false, useMarkdown: boolean = false, chipRun?: number): string {
     let parts: string[] = [];
 
@@ -38,17 +52,12 @@ export function formatHandChips(chips: number, chipCards: boolean = false, useMa
 export function formatHandMult(mult: number, multRun?: number, useMarkdown: boolean = false): string {
     let base = '';
     if (mult > 0 && !(mult === 1 && multRun)) { 
-        // Hide x1 if we have a run component, to keep it clean like internal descriptions? 
-        // Or should we show x1?
-        // User's example "Longest [Rank Run] earns {x${per_card_mult} / additional card}" did not show x1.
-        // So let's hide x1 if multRun is present.
-        const val = Number.isInteger(mult) ? mult.toString() : mult.toFixed(1).replace(/\.0$/, '');
-        base = `x${val}`;
+        // Omit the base x100% when only the per-card bonus is relevant.
+        base = formatChipMultiplier(mult);
     }
 
     if (multRun && multRun > 0) {
-        const val = Number.isInteger(multRun) ? multRun.toString() : multRun.toFixed(1).replace(/\.0$/, '');
-        const runStr = `x${val} / additional card`;
+        const runStr = `${formatChipMultiplier(multRun)} / additional card`;
         const formattedRun = useMarkdown ? `{${runStr}}` : runStr;
 
         if (base) {

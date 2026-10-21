@@ -1,8 +1,9 @@
 import React from 'react';
 import styles from './RelicTooltip.module.css';
+import { PackCardDetails } from './PackCardDetails';
 
 import type { Relic } from '../logic/relics/types';
-import { formatHandChips, formatHandMult, formatHandScore } from '../logic/formatters';
+import { formatChipMultiplier, formatHandChips, formatHandMult, formatHandScore } from '../logic/formatters';
 import { getRelicRarityFrameColor, getRelicRarityTextColor } from '../logic/relics/rarity';
 
 interface RelicTooltipProps {
@@ -12,7 +13,7 @@ interface RelicTooltipProps {
     className?: string;
     hideIcon?: boolean;
     isRightAligned?: boolean;
-    layout?: 'vertical' | 'horizontal';
+    layout?: 'vertical' | 'horizontal' | 'card';
     direction?: 'ltr' | 'rtl';
     isFlexible?: boolean;
     sellPrice?: number;
@@ -39,21 +40,14 @@ export const RelicTooltip: React.FC<RelicTooltipProps> = ({
             hand: hand ? {
                 ...hand,
                 chips: hand.chips !== undefined ? formatHandChips(hand.chips, hand.chipCards, true, hand.chipRun) : undefined,
-                mult: hand.mult !== undefined ? formatHandMult(hand.mult, hand.multRun, false) : undefined, // Raw mult usually doesn't need markdown unless explicitly requested? Actually formatHandMult returns text.
-                // Wait, formatHandMult with useMarkdown=false returns "x1 + x0.5 / additional card".
-                // If we use {hand.mult} in description, the renderer might not style it if it doesn't match regex.
-                // But usually hand.mult is used inside {x${hand.mult}}? No, usually {hand.mult} is just the number.
-                // Actually formatHandMult returns string "xN".
-                // If I change formatHandMult behavior, existing usages might look different. I should be careful.
-                // But for the relic descriptions, we rely on {hand.score}.
-                
+                mult: hand.mult !== undefined ? formatHandMult(hand.mult, hand.multRun, false) : undefined,
                 score: hand.chips !== undefined && hand.mult !== undefined 
                     ? formatHandScore(hand.chips, hand.mult, hand.chipCards, undefined, true, hand.chipRun, hand.multRun) 
                     : undefined
             } : undefined
         };
 
-        return text.replace(/\$\{([\w.]+)\}|\{([\w.]+)\}/g, (_, key1, key2) => {
+        return text.replace(/(x)?\$\{([\w.]+)\}|\{([\w.]+)\}/g, (_, multiplierPrefix, key1, key2) => {
             const key = key1 || key2;
             const keys = key.split('.');
             let value = context;
@@ -61,7 +55,8 @@ export const RelicTooltip: React.FC<RelicTooltipProps> = ({
                 if (value === undefined || value === null) break;
                 value = value[k];
             }
-            return value !== undefined ? String(value) : (key1 ? `\${${key1}}` : `{${key2}}`);
+            if (multiplierPrefix && typeof value === 'number') return formatChipMultiplier(value, true);
+            return value !== undefined ? `${multiplierPrefix || ''}${value}` : (key1 ? `${multiplierPrefix || ''}\${${key1}}` : `{${key2}}`);
         });
     };
 
@@ -71,30 +66,34 @@ export const RelicTooltip: React.FC<RelicTooltipProps> = ({
         // 1. <...> (bracketed text for chips/green highlighting)
         // 2. {...} (curly braced text for mult/yellow highlighting)
         // 3. [...] (bracketed text for hand highlighting)
-        // 4. x followed by digits (multipliers)
+        // 4. Percentage multipliers, including their decrease sign
         // 5. $ or + followed by digits, or digits followed by "chips" (chips values)
-        const parts = text.split(/(<[^>]+>|\{[^}]+\}|\[.*?\]|x\d+(?:\.\d+)?|-?\$-?\d+(?:\s*chips?)?|[₵\$\+]{1,2}\d+(?:\s*chips?)?|-?\d+\s*chips?)/gi);
+        const parts = text.split(/(<[^>]+>|\{[^}]+\}|\[.*?\]|[−-]?x\d+(?:\.\d+)?%|[−-]?\$[−-]?\d[\d,]*(?:\s*chips?)?|[₵\$\+]{1,2}\d+(?:\s*chips?)?|[−-]?\d+\s*chips?)/gi);
+        const renderValue = (value: string, positiveClass: string, key: number) => {
+            const isNegative = /^(?:[−-]|\$[−-])/.test(value.trim());
+            const visibleValue = isNegative ? value.replace(/^\s*[−-]|^(\s*\$)[−-]/, '$1') : value;
+            return <span key={key} className={isNegative ? styles.negativeValue : positiveClass}
+                aria-label={isNegative ? value : undefined}>{visibleValue}</span>;
+        };
         
         return parts.map((part, i) => {
             if (part.startsWith('<') && part.endsWith('>')) {
                 const value = part.slice(1, -1);
-                const isNegative = value.trim().startsWith('-') || value.trim().startsWith('$-');
-                return <span key={i} className={isNegative ? styles.negativeValue : styles.chipsValue}>{value}</span>;
+                return renderValue(value, styles.chipsValue, i);
             }
             if (part.startsWith('{') && part.endsWith('}')) {
-                return <span key={i} className={styles.multValue}>{part.slice(1, -1)}</span>;
+                return renderValue(part.slice(1, -1), styles.multValue, i);
             }
             if (part.startsWith('[') && part.endsWith(']')) {
                 return <span key={i} className={styles.handHighlight}>{part.slice(1, -1)}</span>;
             }
-            if (/^x\d/i.test(part)) {
-                return <span key={i} className={styles.multValue}>{part}</span>;
+            if (/^[−-]?x\d/i.test(part)) {
+                return renderValue(part, styles.multValue, i);
             }
             if (
-                /^[₵\$\+\d]/i.test(part.trim()) && (part.trim().startsWith('₵') || part.trim().startsWith('$') || part.trim().startsWith('+') || part.toLowerCase().includes('chips'))
+                /^[−-]?[₵\$\+\d]/i.test(part.trim()) && (part.includes('₵') || part.includes('$') || part.trim().startsWith('+') || part.toLowerCase().includes('chips'))
             ) {
-                const isNegative = part.trim().startsWith('-') || part.trim().startsWith('$-');
-                return <span key={i} className={isNegative ? styles.negativeValue : styles.chipsValue}>{part}</span>;
+                return renderValue(part, styles.chipsValue, i);
             }
             if (part.includes('\n')) {
                 return (
@@ -117,9 +116,18 @@ export const RelicTooltip: React.FC<RelicTooltipProps> = ({
     const rarityFrameColor = getRelicRarityFrameColor(relic.rarity);
     const rarityTextColor = getRelicRarityTextColor(relic.rarity);
 
+    if (layout === 'card') return <PackCardDetails name={relic.handType?.name || relic.name}
+        icon={<span className={`${styles.iconContainer} ${styles.cardIcon}`} data-relic-icon="true" style={{ borderColor: rarityFrameColor }}>
+            {relic.icon && (relic.icon.includes('.') || relic.icon.includes('/'))
+                ? <img src={relic.icon} alt="" className={styles.icon} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                : <span className={styles.placeholderIcon}>{relic.icon || relic.name.substring(0, 2).toUpperCase()}</span>}
+        </span>}>
+        <span className={styles.cardDescription} data-relic-description="true">{renderDescription(relic.description)}</span>
+    </PackCardDetails>;
+
     return (
         <div 
-            className={`${styles.container} ${isHorizontal ? styles.containerHorizontal : ''} ${isFlexible ? styles.flexible : ''} ${className || ''}`} 
+            className={`${styles.container} ${isHorizontal ? styles.containerHorizontal : ''} ${isFlexible ? styles.flexible : ''} ${className || ''}`}
             style={{
                 ...style,
                 flexDirection: isHorizontal ? (isRtl ? 'row-reverse' : 'row') : 'column',

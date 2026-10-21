@@ -15,6 +15,7 @@ import { GamblerSelect } from './components/GamblerSelect';
 import { CitySelect } from './components/CitySelect';
 
 import { PackReward } from './components/PackReward';
+import { ChallengeBoard } from './components/ChallengeBoard';
 import { RelicInventory } from './components/RelicInventory';
 
 import { RelicStore } from './components/RelicStore';
@@ -64,7 +65,6 @@ const MUSIC_FADE_IN_MS = 0;
 const MUSIC_SWITCH_FADE_OUT_MS = 800;
 const MUSIC_VOLUME_SCALE = 0.5;
 const MENU_MUSIC = '/sounds/Music-Menu.mp3';
-const PACK_MUSIC = '/sounds/Music-GiftShop.mp3';
 const GAME_MUSIC_TRACKS = [
     '/sounds/Music-Game-01.mp3',
     '/sounds/Music-Game-02.mp3',
@@ -117,7 +117,6 @@ export default function App() {
         totalScore,
         cash,
         ante,
-        handsUntilAnteIncrease,
         anteIncrease,
         continueAnteIncrease,
 
@@ -143,6 +142,7 @@ export default function App() {
         animationSpeed,
         modifiers,
         inventory,
+        relicSlots,
         dealSummary,
         getProjectedDrawCount,
         // showFinalScore removed
@@ -160,6 +160,7 @@ export default function App() {
         debugPackReturn,
         isProcessingEvents,
         pendingPack,
+        challengeRewards,
         toggleDebug,
         triggerDebugChips,
         cardsPlacedThisTurn,
@@ -247,8 +248,8 @@ export default function App() {
     const musicTrackRef = useRef<string | null>(null);
     const musicFadesRef = useRef<Map<HTMLAudioElement, number>>(new Map());
     const outgoingAudiosRef = useRef<Set<HTMLAudioElement>>(new Set());
-    const phaseRef = useRef(phase);
-    const dealRef = useRef(deal);
+    const isMenuMusic = phase === 'init';
+    const [gameMusicTrackIndex, setGameMusicTrackIndex] = useState(0);
     const musicVolumeRef = useRef(musicVolume);
     const musicMutedRef = useRef(musicMuted);
     const vigintiSoundKey = useGameStore(state => state.vigintiSoundKey);
@@ -347,19 +348,6 @@ export default function App() {
         musicFadesRef.current.set(audio, requestAnimationFrame(tick));
     };
 
-    const getGameMusicForDeal = (casinoDeal: number) => {
-        const total = GAME_MUSIC_TRACKS.length;
-        const safeDeal = Math.max(1, casinoDeal || 1);
-        const index = (safeDeal - 1) % total;
-        return GAME_MUSIC_TRACKS[index];
-    };
-
-    const getDesiredMusicTrack = (currentPhase: string, casinoDeal: number) => {
-        if (currentPhase === 'init') return MENU_MUSIC;
-        if (currentPhase === 'pack_choice' || currentPhase === 'casino_payout') return PACK_MUSIC;
-        return getGameMusicForDeal(casinoDeal);
-    };
-
     const getScaledMusicVolume = (rawVolume: number, isMuted: boolean) => {
         if (isMuted) return 0;
         return Math.max(0, Math.min(1, rawVolume * MUSIC_VOLUME_SCALE));
@@ -374,14 +362,6 @@ export default function App() {
             return audio.src.endsWith(track);
         }
     };
-
-    useEffect(() => {
-        phaseRef.current = phase;
-    }, [phase]);
-
-    useEffect(() => {
-        dealRef.current = deal;
-    }, [deal]);
 
     useEffect(() => {
         musicVolumeRef.current = musicVolume;
@@ -409,22 +389,9 @@ export default function App() {
             const currentMusic = musicRef.current;
             if (!currentMusic) return;
 
-            const desiredTrack = getDesiredMusicTrack(phaseRef.current, dealRef.current);
             const desiredVolume = getScaledMusicVolume(musicVolumeRef.current, musicMutedRef.current);
-            const hasDesiredTrackLoaded = isAudioOnTrack(currentMusic, desiredTrack);
             
             if (desiredVolume <= 0) {
-                return;
-            }
-
-            if (musicTrackRef.current !== desiredTrack || !hasDesiredTrackLoaded) {
-                stopMusicFade(currentMusic);
-                musicTrackRef.current = desiredTrack;
-                currentMusic.src = desiredTrack;
-                currentMusic.currentTime = 0;
-                setMusicOutputVolume(currentMusic, 0);
-                playMusic(currentMusic);
-                fadeMusicTo(currentMusic, 0, desiredVolume, MUSIC_FADE_IN_MS);
                 return;
             }
 
@@ -464,13 +431,17 @@ export default function App() {
         const currentMusic = musicRef.current;
         if (!currentMusic) return;
 
-        const desiredTrack = getDesiredMusicTrack(phase, deal);
+        const desiredTrack = isMenuMusic ? MENU_MUSIC : GAME_MUSIC_TRACKS[gameMusicTrackIndex];
         const desiredVolume = getScaledMusicVolume(musicVolume, musicMuted);
         const hasDesiredTrackLoaded = isAudioOnTrack(currentMusic, desiredTrack);
 
         const startNext = () => {
             const nextMusic = new Audio();
-            nextMusic.loop = true;
+            nextMusic.loop = isMenuMusic;
+            nextMusic.onended = () => {
+                if (musicRef.current !== nextMusic || isMenuMusic) return;
+                setGameMusicTrackIndex(index => (index + 1) % GAME_MUSIC_TRACKS.length);
+            };
             nextMusic.preload = 'auto';
             nextMusic.src = desiredTrack;
             nextMusic.currentTime = 0;
@@ -524,7 +495,7 @@ export default function App() {
 
         // Different track - Crossfade
         createAndPlayNextTrack();
-    }, [phase, deal, audioUnlocked, musicMuted, musicVolume]);
+    }, [isMenuMusic, gameMusicTrackIndex, audioUnlocked, musicMuted, musicVolume]);
 
     useEffect(() => {
         sfxEngine.setSfxVolume(sfxVolume);
@@ -1157,7 +1128,7 @@ export default function App() {
     }, [drawTutorialReady, canDraw]);
 
     const isTotalWinningsVisible = (phase === 'scoring' || phase === 'deal_over') && !!dealSummary && runningSummary && runningSummary.chips > 0;
-    const showPotLabels = phase === 'scoring' || phase === 'deal_over';
+    const showPotLabels = (phase === 'scoring' || phase === 'deal_over') && runningSummary !== null;
     const totalWinningsSoundPlayedRef = useRef(false);
 
     useEffect(() => {
@@ -1198,9 +1169,10 @@ export default function App() {
     };
 
     const handleDealAdvanceAction = React.useCallback(() => {
+        if (isProcessingEvents) return;
         if (phase === 'entering_casino') dealFirstHand();
         else nextDeal();
-    }, [phase, dealFirstHand, nextDeal]);
+    }, [phase, dealFirstHand, nextDeal, isProcessingEvents]);
 
     if (phase === 'init') {
         // const canStartRun = isCityUnlocked(selectedCityId) && isGamblerUnlocked(selectedGamblerId);
@@ -1241,6 +1213,11 @@ export default function App() {
                     >
                         Start Run
                     </button>
+                    {debugEnabled && (
+                        <a href="/balance" target="_blank" rel="noreferrer" className={styles.debugMenuButton} style={{ marginTop: 10 }}>
+                            Balance Lab ↗
+                        </a>
+                    )}
                     {debugEnabled && (
                         <button
                             className={styles.debugMenuButton}
@@ -1405,21 +1382,16 @@ export default function App() {
         }
     };
 
-    // Logic for pot placement relative to the game board (800px max)
-    // The user's "1/3 and 1/4 across the screen" refers to the literal coordinates of the play board.
-    const boardWidth = 800; // The canonical 800px coordinate system
-
-    // "1/3 across" means the pot is at 1/3 (266px) and 2/3 (533px) of the width.
-    // Offset from center (400px) = 400 - 266 = 133.
+    // Keep the score components inside the board and below the final total.
+    const boardWidth = 800;
     const defaultOffset = boardWidth / 6;
-
-    // "1/4 across" means the pot is at 1/4 (200px) and 3/4 (600px) of the width.
-    // Offset from center (400px) = 400 - 200 = 200.
-    const scoringOffset = boardWidth / 4;
+    const scoringOffset = 150;
 
     // Apply the offset based on whether total winnings are displayed
-    const hasMult = !!runningSummary && runningSummary.mult > 1.05;
+    // Match PhysicsPot's visibility threshold, including the smallest 5% bonus.
+    const hasMult = !!runningSummary && runningSummary.mult > 1;
     const currentPotOffset = hasMult ? (isTotalWinningsVisible ? scoringOffset : defaultOffset) : 0;
+    const currentPotY = POT_TOP_Y + (isTotalWinningsVisible ? 80 : 0);
 
     // Calculate stable center X
     const centerX = viewportWidth / 2;
@@ -1463,25 +1435,26 @@ export default function App() {
                     className={`${styles.header} ${isOverlayMode ? styles.headerCentered : ''} ${(isOverlayMode && deal === 1 && !hasSettledFirstOverlay) ? styles.noTransition : ''}`}
                     style={isOverlayMode ? { top: 460 } : {}}
                 >
-                    <div id="hud-increase" className={styles.stat}>
-                        <span className={styles.statLabel}>Increase</span>
-                        <span className={styles.statValue}>{handsUntilAnteIncrease}</span>
-                    </div>
-                    <div id="hud-ante" className={styles.stat}>
-                        <span className={styles.statLabel}>Ante</span>
-                        <span className={styles.statValue}>${ante.toLocaleString()}</span>
+                    <div id="hud-round" className={styles.stat}>
+                        <span className={styles.statLabel}>Round</span>
+                        <span className={styles.statValue}>
+                            {dealsTaken.toLocaleString()}
+                        </span>
                     </div>
                     <div id="hud-cash" className={styles.stat}>
                         <span className={styles.statLabel}>
                             {debugEnabled && !isOverlayMode ? <button
                                 className={`${styles.manageDebugBtn} ${styles.cashDebugButton}`}
-                                aria-label="Debug: add $100 cash" title="Add $100 (debug)"
+                                aria-label="Debug: add one third of the cash challenge target" title="Add ⅓ of the cash goal, rounded up (debug)"
                                 onClick={event => { event.stopPropagation(); triggerDebugChips(); }}
                             >Cash</button> : 'Cash'}
                         </span>
                         <span className={styles.statValue}>${cash.toLocaleString()}</span>
                     </div>
-
+                    <div id="hud-ante" className={styles.stat}>
+                        <span className={styles.statLabel}>Ante</span>
+                        <span className={styles.statValue}>${ante.toLocaleString()}</span>
+                    </div>
                 </header>
 
                 <div className={styles.rightButtons}>
@@ -1507,7 +1480,8 @@ export default function App() {
                     totalValue={runningSummary?.chips ?? 0}
                     variant="chips"
                     isCollecting={isCollectingChips}
-                    center={{ x: centerX - currentPotOffset, y: POT_TOP_Y }}
+                    center={{ x: centerX - currentPotOffset, y: currentPotY }}
+                    isFinalScore={!!isTotalWinningsVisible}
                     labelId="total-winnings"
                     onCollectionComplete={() => { }}
                     onItemArrived={() => { }}
@@ -1524,7 +1498,8 @@ export default function App() {
                     totalValue={runningSummary?.mult ?? 0}
                     variant="multiplier"
                     isCollecting={isCollectingChips}
-                    center={{ x: centerX + currentPotOffset, y: POT_TOP_Y }}
+                    center={{ x: centerX + currentPotOffset, y: currentPotY }}
+                    isFinalScore={!!isTotalWinningsVisible}
                     onCollectionComplete={() => { }}
                     onItemArrived={() => { }}
                     labelPrefix="x"
@@ -1559,27 +1534,27 @@ export default function App() {
             <div className={styles.gameWrapper} ref={gameWrapperRef}>
                 <div className={styles.sidebarsContainer}>
                     <div className={styles.leftSidebar}>
-                        <RelicInventory inventoryKind="left"
-                        />
-                        {debugEnabled && (
-                            <button
-                                className={`${styles.manageDebugBtn} ${styles.relicDebugBtn}`}
-                                onClick={() => setShowRelicStore(true)}
-                            >
-                                RELICS
-                            </button>
-                        )}
+                        <div className={styles.sidebarHeading}>
+                            {debugEnabled ? <button type="button"
+                                className={`${styles.zoneLabel} ${styles.manageDebugBtn} ${styles.headingDebugButton}`}
+                                aria-label={`Manage relics, ${inventory.length} of ${relicSlots}`}
+                                onClick={event => { event.stopPropagation(); setShowRelicStore(true); }}
+                            >Relics {inventory.length} of {relicSlots}</button> :
+                                <span className={styles.zoneLabel}>Relics {inventory.length} of {relicSlots}</span>}
+                        </div>
+                        <RelicInventory inventoryKind="left" />
                     </div>
                     <div className={styles.sidebar}>
-                        <RelicInventory inventoryKind="right"
-                        />
-                        {debugEnabled && <button
-                            className={`${styles.manageDebugBtn} ${styles.relicDebugBtn} ${styles.packDebugButton}`}
-                            aria-label="Debug packs"
-                            disabled={isProcessingEvents || !!pendingPack || !!debugPackReturn ||
-                                !['entering_casino', 'deal_over', 'playing', 'pack_choice'].includes(phase)}
-                            onClick={() => setShowDebugPacks(true)}
-                        >PACKS</button>}
+                        <div className={`${styles.sidebarHeading} ${styles.sidebarHeadingRight}`}>
+                            {debugEnabled ? <button type="button"
+                                className={`${styles.zoneLabel} ${styles.manageDebugBtn} ${styles.headingDebugButton}`}
+                                id="challenges-label" aria-label="Debug packs"
+                                disabled={isProcessingEvents || !!pendingPack || !!debugPackReturn ||
+                                    !['entering_casino', 'deal_over', 'playing', 'pack_choice'].includes(phase)}
+                                onClick={event => { event.stopPropagation(); setShowDebugPacks(true); }}
+                            >Challenges</button> : <span id="challenges-label" className={styles.zoneLabel}>Challenges</span>}
+                        </div>
+                        <ChallengeBoard />
                     </div>
                 </div>
 
@@ -1597,7 +1572,7 @@ export default function App() {
                 <div className={styles.board}>
                     <div className={styles.topContent}>
                         <div id="dealer-hand-zone" className={`${styles.dealerZone} ${!areHandsVisible || !dealerVisible ? styles.dealerZoneHidden : ''}`}>
-                            <div style={{ display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'center', gap: 20, marginBottom: 10 }}>
+                            <div className={styles.dealerHeading}>
                                 {debugEnabled && (
                                     <button 
                                         className={styles.subtleDebugBtn} 
@@ -2028,9 +2003,11 @@ export default function App() {
                                             e.stopPropagation();
                                             handleDealAdvanceAction();
                                         }}
-                                        disabled={isInitialDeal}
+                                        disabled={isInitialDeal || isProcessingEvents}
                                     >
-                                        Deal ${ante}
+                                        {(phase === 'deal_over' || phase === 'entering_casino') && challengeRewards.length
+                                            ? `Open ${challengeRewards.length === 1 ? 'Pack' : `Packs (${challengeRewards.length})`}`
+                                            : `Deal $${ante}`}
                                     </button>
                                 </div>
                             ) : (
@@ -2070,7 +2047,7 @@ export default function App() {
                 )
             )}
 
-            {phase === 'pack_choice' && <PackReward key={debugPackReturn ? 'debug-pack' : 'reward-pack'} />}
+            {phase === 'pack_choice' && <PackReward key={debugPackReturn ? 'debug-pack' : challengeRewards[0]?.id ?? 'opening-pack'} />}
             {showHandScores && <HandScores upgrades={handUpgrades} onClose={() => { playClickDown(); setShowHandScores(false); }} />}
 
             {showDebugPacks && <DebugPacks onClose={() => setShowDebugPacks(false)} />}

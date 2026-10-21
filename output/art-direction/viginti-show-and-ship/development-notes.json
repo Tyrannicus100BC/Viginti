@@ -1,0 +1,142 @@
+{
+  "show": {
+    "fiction": [
+      [
+        "The immediate premise",
+        "You remember applying to be on television. You remember the promise of prize money. You do not remember agreeing to this many episodes. You are tonight's only contestant, playing all three hands at one enormous console. The host is delighted to have you. The host is always delighted."
+      ],
+      [
+        "Why keep playing?",
+        "At first: win money, beat the dealer and enjoy the ludicrous show. Once the seams begin to show: stay solvent long enough to understand the production. Keeping the current cash/ante loop earns your place in the contestant chair. The host says a player who cannot pay the next ante is eliminated, but always answers practical follow-up questions with a cheerful transition."
+      ],
+      [
+        "What losing means",
+        "A failed run earns a lavish thank-you, a fanfare and an instruction to remain seated. The feed cuts before showing where an eliminated contestant goes. A new run returns to the familiar chair. This supports the present retry loop without committing to death, a supernatural afterlife or a simulation. If a larger story is built, the fate of eliminated contestants deserves a real answer."
+      ],
+      [
+        "The host",
+        "Keep the smiling sunburst as a working mascot, not a locked character design. A painted cardboard face that keeps smiling after the performance stops can be more effective than an expensive monster. A hidden producer voice offers occasional corrections through a speaker. Their relationship can supply warmth, incompetence and tension without a large cast."
+      ]
+    ],
+    "layers": [
+      [
+        "Three layers of discovery",
+        "1. A playable, funny card show with silly prizes.<br/>2. A functioning production whose cues behave incorrectly: the same cough in every applause track, a sponsor wrapper with no sponsor, a host insisting every appearance is your first.<br/>3. A personal question: are you still a guest, or have you become part of the machinery that keeps the show alive?"
+      ],
+      [
+        "One suggestive contradiction at a time",
+        "The audience seats are empty, but the applause is lively. The decorative lights stop, but the camera tally remains red. The APPLAUSE lamp stays on while everybody is silent. These should be occasional authored cues attached to ordinary play, never a continuous collection of haunted props. Let players notice the mismatch before anyone explains it."
+      ],
+      [
+        "Keep the truth open, not the situation",
+        "We can postpone deciding whether the network is coercive, abandoned, automated or something stranger. We should not postpone the basic contract: you came for a prize, the show controls elimination, and you want to know what happens next. This is a stronger foundation than starting with an unexplained room and assuming atmosphere alone will provide motivation."
+      ],
+      [
+        "Why the wrong Latin survives",
+        "The network commissioned twenty bulbs for a game about twenty-one. Someone taped on a +1. The announcer still pronounces VIGINTI with ludicrous authority. It is a production mistake everyone has built their work around, not a new mathematical rule or a puzzle the player has to solve."
+      ]
+    ],
+    "craft": [
+      [
+        "Assets",
+        "A single console, modular plywood flats, one camera silhouette, a little audience riser and a cutout host. Build a small reusable family of absurd prize trophies. Use authored vector graphics for cards, signs, prize labels and sponsor wrappers; rasterize into controlled atlases. Model only visible mechanical depth. Keep rough cardboard backs, tape and stage braces at the edges."
+      ],
+      [
+        "Three.js recipe",
+        "Start with MeshToonMaterial and a nearest-sampled three-band gradient. Add chosen silhouette outlines with inverted hulls or an outline pass. Halftone belongs in selected shadow bands, not over every surface. Use warm spotlights for the performance and a separate cold backstage light. Composite bloom from marquee lamps and indicators only; cream cards and typography remain clear."
+      ],
+      [
+        "A reusable performance state",
+        "One event-driven production controller selects: on-air, commercial break, payout, or between-takes. It coordinates marquee intensity, host hinge pose, camera tally, applause and music. The card game remains authoritative. These states are proposed presentation work, not new betting rules. A hidden producer can be a short bank of authored lines; no live dialogue service is necessary."
+      ]
+    ],
+    "feel": [
+      [
+        "Juice with a job",
+        "Hover lifts a card and tilts its corner. Pressing DRAW compresses a large key before the shoe flicks a card out. Placement gets a short spring and a papery clap. Scoring rows illuminate their own bay. A completed payout earns a room-wide bulb chase, one musical sting and a bounded burst of instanced paper stars. All large effects follow the result, not every arithmetic step."
+      ],
+      [
+        "Packs are the commercial break",
+        "The current three free choices arrive as sponsor parcels on spring-loaded prize trays: Raise, Deck and Relic. Selecting one opens the familiar card choices. Sponsor language and wrapper design can become stranger over successive ante increases. The packs are still free and the contents still come from the existing engine."
+      ],
+      [
+        "A 20-second unsettling beat",
+        "The last score resolves. The theme tune finishes slightly too early. The room waits. The APPLAUSE light comes on, but no applause follows. The host folds its gloves without losing the printed grin. A backstage work light reveals the backs of the flats. A monitor says PLEASE REMAIN SEATED. The camera remains live. Then one bright button offers another run."
+      ],
+      [
+        "Production risk",
+        "It is easy to make a generic sinister mascot show. The identity should come from television grammar: cues, editing, performer fatigue, sponsor language and the gap between what the viewer sees and what the studio contains. Humour must remain enjoyable on repeated play. A fully voiced branching horror story would multiply the scope; a compact cue vocabulary need not."
+      ]
+    ]
+  },
+  "ship": {
+    "fiction": [
+      [
+        "The immediate premise",
+        "You are on an uneventful deep-space transit. The next useful thing is days or weeks away. There is nobody to call in real time, nothing interesting beyond the window, and a finite number of ways to rearrange the galley. The onboard AI offers to play cards. It has invented a variant, confidently named it VIGINTI, and already printed the label."
+      ],
+      [
+        "Why keep playing?",
+        "Because the game is fun, the journey is long, and the only other intelligence aboard has become a surprisingly irritating friend. You want to beat its record. It wants to prove its latest rules are good. The emotional stake is a shared ritual: one more hand together. This does not require a hostage plot or a secret catastrophe to justify the table."
+      ],
+      [
+        "What losing means",
+        "The recreation credits are pretend. When the bankroll runs out, the AI wins the argument for a minute. Starting a fresh run gives you the ordinary fresh-run balance; the ship is not supplying emergency loans during a run. A paper score summary prints, the AI makes one dry remark, and the game offers the next round of rivalry. No need to turn cash into oxygen or fuel."
+      ],
+      [
+        "How the AI exists physically",
+        "Its face lives on a small ship terminal, not a giant casino sign. A maintenance gripper handles the deck shoe and occasionally overshoots a card by a few millimetres. Magnetic trinkets sit on the rail. A mug, photo, strap and folded cloth establish that someone has been living beside this table. The whole ship can sound alive without the terminal talking all the time."
+      ]
+    ],
+    "relationship": [
+      [
+        "A relationship in short reactions",
+        "At first the AI is a literal-minded host. It grows competitive, then starts making little accommodations that it describes as efficiency improvements. It can be smug about a bust and awkward about a genuinely good hand. Its concern is most effective when expressed through the world: quietly raising the task lamp, waiting to deal while you examine a relic, or recalling an old score."
+      ],
+      [
+        "The name becomes a shared joke",
+        "When corrected about the Latin, the AI says: \"The labels are already printed.\" Later it might concede: \"Twenty was within tolerance.\" Use the joke sparingly. The title remains wrong because both companions now enjoy the argument, not because the AI cannot do basic blackjack arithmetic."
+      ],
+      [
+        "Packs are something it made for you",
+        "Between stretches of play, the AI proposes three new diversions from the recreation archive. Raise, Deck and Relic packs emerge as sealed little printed packets. They are modifications to this intentionally silly pastime, not upgrades to the spacecraft. A relic can look like a spare fuse or a souvenir rocket without affecting propulsion or survival systems."
+      ],
+      [
+        "Quiet does not mean no story",
+        "A destination photograph appears beside the monitor. A recorded message arrives after a long delay. The AI remembers which cheap trophy you kept. These are optional authored environmental beats, not assumed new mechanics. The interesting question is what companionship means to this machine. Making it secretly murderous would be a separate direction and would change the appeal of this version."
+      ]
+    ],
+    "craft": [
+      [
+        "Assets",
+        "Build one compact low-poly galley nook, one fold-down table, a CRT terminal and a two- or three-joint service gripper. Paint 128-256 pixel atlases with deliberate wear and clear silhouette edges. Keep a small shared junk/toy atlas for relics. Use a separate clean card-face atlas with large rank indices. Photos and paper labels carry personal history cheaply."
+      ],
+      [
+        "Three.js recipe",
+        "Use a 640x360 or 960x540 internal scene target as an initial experiment, then nearest-neighbour upscale. Point-filtered low-resolution textures, scene resolution and geometry are independent style choices. Test nearest mip sampling to control shimmer on the tilted table. Add restrained ordered dithering to gradients, baked light and vertex colour. Avoid vertex jitter on cards and buttons."
+      ],
+      [
+        "Lighting and space",
+        "A warm practical lamp gives the table its own island of readability; dim blue cabin fill gives depth. The CRT gets a little emissive glow, not full-screen bloom. Render sparse stars with a background or distant points and very slow orientation drift. A nearly empty window is stronger for this fiction than planet flybys or racing star streaks. Night mode changes the room, not the legibility of the cards."
+      ]
+    ],
+    "feel": [
+      [
+        "A smaller, more physical kind of juice",
+        "The shoe rattles, the gripper transfers a card, and the paper flexes before settling. A payout ticks through a cheap mechanical counter and curls a paper score strip. A good hand makes the AI's mouth briefly asymmetrical. Its fan changes pitch while it computes a suitably dignified response. The environment should feel responsive without performing a full light show."
+      ],
+      [
+        "Sound carries the distance",
+        "Layer ventilation, tiny relay clicks, a quiet hull hum, the deck motor and papery contact sounds. Let silences sit between lines. Music can come from a little recreation speaker instead of an omnipresent score. The AI's voice should have warmth and limits: a small bank of performed or synthesized authored lines, paired with captions where needed."
+      ],
+      [
+        "A character without a live AI dependency",
+        "The fictional onboard AI can be implemented as a deterministic character system keyed to events: first bust, unusual hand, long run, pack choice and idle return. Track a few small relationship flags if desired, then select authored lines and expressions. This keeps the free game playable offline and prevents banter from changing the rules or pacing unpredictably."
+      ],
+      [
+        "Production risk",
+        "The empty journey could become visually inert, and familiar retro space hardware could feel generic. Personal objects, physical card handling and the AI's restraint provide identity. Do not fill every quiet moment with chatter or cosmic spectacle. Prototype a whole minute of idle, hover and dealing to check whether the little shared space is pleasant to inhabit."
+      ]
+    ]
+  }
+}

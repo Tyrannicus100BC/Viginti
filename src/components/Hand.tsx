@@ -1,3 +1,4 @@
+import { formatCash, formatChipMultiplier } from '../logic/formatters';
 
 
 import React, { useEffect, useState, useRef, useLayoutEffect } from 'react';
@@ -329,8 +330,6 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
     hand.cards.length > 0;
   const overlayFanDepthPx = Math.max(0, visualCards.length - 1);
   const useOverlayScrim = isDealerHand && showOverlay;
-  const formatDollarValue = (value: number) => value < 0 ? `-$${Math.abs(value)}` : `$${value}`;
-  const formatMultiplierValue = (value: number) => `${value < 0 ? '−' : ''}x${Math.abs(value).toFixed(1)}`;
 
   return (
     <div
@@ -364,12 +363,12 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
               </div>
               <div className={`${styles.itemChips} ${item.id === 'viginti' ? styles.isViginti : ''} ${(scoringRowValues[idx]?.chips ?? 0) < 0 ? styles.isNegative : ''}`}>
                 <span className={(scoringRowValues[idx]?.chips !== undefined && visibleScoringRowIndices.length > idx) ? styles.visible : ''}>
-                  {(scoringRowValues[idx]?.chips ?? 0) === 0 ? '-' : formatDollarValue(scoringRowValues[idx]?.chips ?? 0)}
+                  {(scoringRowValues[idx]?.chips ?? 0) === 0 ? '-' : formatCash(scoringRowValues[idx]?.chips ?? 0)}
                 </span>
               </div>
               <div className={styles.itemMult + ((scoringRowValues[idx]?.mult ?? 0) < 0 ? ' ' + styles.isNegative : '')}>
                 <span className={(scoringRowValues[idx]?.mult !== undefined && visibleScoringRowIndices.length > idx) ? styles.visible : ''}>
-                  {(scoringRowValues[idx]?.mult ?? 0) === 0 ? '-' : formatMultiplierValue(scoringRowValues[idx]?.mult ?? 0)}
+                  {(scoringRowValues[idx]?.mult ?? 0) === 0 ? '-' : formatChipMultiplier(scoringRowValues[idx]?.mult ?? 0)}
                 </span>
               </div>
             </div>

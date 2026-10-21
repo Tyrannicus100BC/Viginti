@@ -75,15 +75,6 @@
     /* occupies space but is invisible */
 }
 
-/* Add spacing between stats using margin instead of gap */
-.stat+.stat {
-    margin-left: 24px;
-}
-
-.headerCentered .stat+.stat {
-    margin-left: clamp(12px, 3vw, 40px);
-}
-
 .statHidden {
     opacity: 0;
     pointer-events: none;
@@ -808,8 +799,8 @@
     backdrop-filter: blur(10px);
     border-radius: 12px;
     border: 1px solid #333;
-    display: flex;
-    justify-content: space-around;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     align-items: center;
     padding: 0 20px;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
@@ -830,10 +821,6 @@
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
     justify-content: center;
     z-index: 1001;
-}
-
-.headerCentered .stat+.stat {
-    margin-left: 60px;
 }
 
 .dealerMessage {
@@ -1309,5 +1296,31 @@
     margin: -2px -8px;
     vertical-align: baseline;
 }
-.packDebugButton { align-self: flex-end; }
-.packDebugButton:disabled { opacity: .35; cursor: default; }
+
+/* Shared heading height keeps the side inventories aligned with Dealer. */
+.dealerHeading, .sidebarHeading {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    height: 22px;
+    margin-bottom: 10px;
+    flex-shrink: 0;
+}
+.dealerHeading { justify-content: center; gap: 20px; }
+.sidebarHeadingRight { justify-content: flex-end; }
+.sidebarHeading > .zoneLabel { margin-bottom: 0; }
+.sidebar:hover, .sidebar:focus-within, .leftSidebar:hover, .leftSidebar:focus-within { z-index: 101; }
+
+.headingDebugButton {
+    width: auto;
+    padding: 2px 8px;
+    margin: 0 -8px;
+    font-family: inherit;
+    font-size: 0.8rem;
+    letter-spacing: 2px;
+    line-height: 1.5;
+    opacity: 1;
+    pointer-events: auto;
+}
+.headingDebugButton:disabled { opacity: .35; cursor: default; }
+.headingDebugButton:focus-visible { outline: 1px solid #a7b9c6; outline-offset: 3px; }

@@ -175,7 +175,7 @@ export const EVENT_DEFINITIONS: RouletteEvent[] = [
         id: 'random_card_modifier',
         type: 'Random',
         label: 'Card modifier',
-        description: 'You are given two options from this list. choose 1\nAdd 1 to the value of 2 cards\n2 Kings count as a 1\nCard provides 20 chips in scoring hand\nCard provides +1 mult for every same suited card in hand\nPair mult +2 \nhand still scores if busted',
+        description: 'You are given two options from this list. choose 1\nAdd 1 to the value of 2 cards\n2 Kings count as a 1\nCard provides 20 chips in scoring hand\nCard provides x100% mult for every same suited card in hand\nPair mult x200% \nhand still scores if busted',
         casinoAvailability: [1, 2, 3, 4, 5],
         builderChipCost: 0,
         availableAtBuilder: true,

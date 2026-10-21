@@ -4,9 +4,9 @@ import type { PlayerHand } from '../types';
 export const STARTING_CASH = 100;
 export const BASE_ANTE = 50;
 export const ANTE_INCREASE_RATE = 0.5;
-export const HANDS_PER_ANTE = 4;
+export const ANTE_INCREASE_BONUS = 25;
 /** Round each compounded increase to the nearest $5 (halfway rounds up). */
-export const getNextAnte = (ante: number) => Math.round(ante * (1 + ANTE_INCREASE_RATE) / 5) * 5;
+export const getNextAnte = (ante: number) => Math.round((ante * (1 + ANTE_INCREASE_RATE) + ANTE_INCREASE_BONUS) / 5) * 5;
 export const ENHANCE_CASH_COSTS = [10, 30, 50, 70];
 export const getRemovalCashCost = (removalCount: number) => 20 + removalCount * 20;
 

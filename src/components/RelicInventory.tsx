@@ -32,10 +32,9 @@ export const RelicInventory: React.FC<RelicInventoryProps> = ({
             const instance = entries[index];
             const config = instance && RelicManager.getRelicConfig(instance.id);
             if (!instance || !config) return <div key={'empty_' + index}
-                aria-label={'Empty relic slot ' + (index * 2 + (right ? 2 : 1))}
+                aria-label={'Empty relic slot ' + (index + 1)} aria-hidden="true"
                 data-empty-relic-slot="true"
-                style={{ width: 40, height: 40, boxSizing: 'border-box', borderRadius: '50%',
-                    border: '2px solid rgba(192, 192, 192, 0.35)', background: 'rgba(0, 0, 0, 0.12)' }} />;
+                style={{ width: 40, height: 40, visibility: 'hidden' }} />;
             const active = activeRelicId === instance.id || instance.state?.armed;
             const hidden = (hiddenEntry?.id === instance.id && hiddenEntry.index === index) || pendingHiddenRelicId === instance.id;
             return <div key={instance.id}

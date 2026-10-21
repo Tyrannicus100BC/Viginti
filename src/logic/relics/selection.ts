@@ -1,12 +1,12 @@
+import { PACK_RARITY_WEIGHTS, type PackQuality } from '../packs';
 import type { RelicConfig, RelicRarity } from './types';
 
-const RARITY_WEIGHTS: Record<RelicRarity, number> = { Common: 70, Uncommon: 25, Rare: 5 };
 const RARITIES: RelicRarity[] = ['Common', 'Uncommon', 'Rare'];
 
 /** Roll rarity first, then pick uniformly within it, regardless of catalogue size. */
-export function pickRandomRelic(candidates: readonly RelicConfig[], nextRandom: () => number): RelicConfig | undefined {
+export function pickRandomRelic(candidates: readonly RelicConfig[], nextRandom: () => number, quality: PackQuality = 'average'): RelicConfig | undefined {
     const pools = RARITIES.map(rarity => ({
-        weight: RARITY_WEIGHTS[rarity],
+        weight: PACK_RARITY_WEIGHTS[quality][rarity],
         relics: candidates.filter(relic => relic.rarity === rarity),
     })).filter(pool => pool.relics.length > 0);
     if (!pools.length) return undefined;

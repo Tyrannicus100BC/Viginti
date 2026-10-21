@@ -161,7 +161,7 @@ describe('CLI Simulator', () => {
         });
 
         it('describes opening a pack', () => {
-            expect(describeAction({ type: 'open_pack', packId: 'raise_basic' })).toContain('Basic Raise Pack');
+            expect(describeAction({ type: 'open_pack', packId: 'raise_basic' })).toContain('Raise Pack');
         });
 
         it('describes all action types without throwing', () => {

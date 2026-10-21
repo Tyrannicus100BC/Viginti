@@ -1,0 +1,84 @@
+/* Mirror the relic inventory: 40px circles, 10px gaps, and no panel chrome. */
+.board {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    align-items: flex-end;
+    pointer-events: none;
+    position: relative;
+    isolation: isolate;
+    z-index: 2000;
+}
+.challenge {
+    --progress-color: #7bbaad;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    height: 40px;
+    max-width: 100%;
+    color: #ecf0f1;
+    pointer-events: auto;
+    cursor: help;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+.main { --progress-color: #eabd58; }
+.goal { font-size: 0.9rem; font-weight: bold; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.icon {
+    position: relative;
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: #2c3e50;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+.ring { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+.ring circle { fill: none; stroke-width: 3px; }
+.track { stroke: rgba(192, 192, 192, 0.35); }
+.fill { stroke: var(--progress-color); transition: stroke-dashoffset 0.3s ease; }
+.art { position: absolute; inset: 7px; display: flex; align-items: center; justify-content: center; color: #ecf0f1; }
+.art svg, .art img { width: 100%; height: 100%; object-fit: contain; }
+.dollar { font-size: 22px; font-weight: bold; line-height: 1; }
+.mainMarker {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #182632;
+    color: #eabd58;
+    font-size: 10px;
+    line-height: 12px;
+    text-align: center;
+}
+.completed { opacity: 0.55; }
+.completed .art { color: #7bbaad; }
+@media (prefers-reduced-motion: reduce) {
+    .fill { transition: none; }
+}
+
+.challenge:focus-visible { outline: 1px solid #a7b9c6; outline-offset: 4px; border-radius: 4px; }
+/* Match the relic hover frame, with its icon anchored to the right edge. */
+.board .tooltip {
+    --progress-color: #7bbaad;
+    position: absolute;
+    right: -21px;
+    width: 540px;
+    flex-direction: row-reverse;
+    pointer-events: none;
+    z-index: 50;
+}
+.tooltip.main { --progress-color: #eabd58; }
+.tooltip .tooltipHeader { flex-direction: row-reverse; text-align: right; align-self: flex-start; }
+.tooltipSubtitle { right: 0; color: var(--progress-color); }
+.tooltipDescription { white-space: pre-line; text-align: right; padding-top: 0; }
+
+/* Keep the row in the grid after its reward leaves, without restoring its contents. */
+.vacant { visibility: hidden; pointer-events: none; }
+
+/* Acquired goals can grow beyond the original three slots. Keep their tooltips outside the scroll area. */
+.rows { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; width: 100%; max-height: 290px; overflow-y: auto; overflow-x: hidden; padding: 5px 6px 5px 0; margin: -5px -6px -5px 0; pointer-events: auto; scrollbar-width: thin; scrollbar-color: #526477 transparent; }
+.rows .challenge { flex-shrink: 0; }

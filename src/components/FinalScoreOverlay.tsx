@@ -1,3 +1,4 @@
+import { formatMultPercent } from '../logic/formatters';
 import React, { useEffect, useRef } from 'react';
 import styles from './FinalScoreOverlay.module.css';
 import { fireConfetti } from '../utils/confetti';
@@ -37,21 +38,21 @@ export const FinalScoreOverlay: React.FC<FinalScoreOverlayProps> = ({ chips, mul
             <div className={styles.scoreBox} onClick={onContinue}>
                 <div className={styles.statGroup}>
                     <span className={styles.label}>Chips</span>
-                    <span className={`${styles.value} ${styles.chips}`}>{chips}</span>
+                    <span className={`${styles.value} ${styles.chips}`} style={chips < 0 ? { color: '#ff4444' } : undefined}>{Math.abs(chips)}</span>
                 </div>
 
                 <div className={styles.operator}>X</div>
 
                 <div className={styles.statGroup}>
                     <span className={styles.label}>Mult</span>
-                    <span className={`${styles.value} ${styles.mult}`}>{mult.toFixed(1)}</span>
+                    <span className={`${styles.value} ${styles.mult}`} style={mult < 0 ? { color: '#ff4444' } : undefined}>{formatMultPercent(mult)}</span>
                 </div>
 
                 <div className={styles.operator}>=</div>
 
                 <div className={styles.statGroup}>
                     <span className={styles.label}>Total</span>
-                    <span className={`${styles.value} ${styles.total}`}>{totalScore}</span>
+                    <span className={`${styles.value} ${styles.total}`} style={totalScore < 0 ? { color: '#ff4444' } : undefined}>{Math.abs(totalScore)}</span>
                 </div>
             </div>
         </div>

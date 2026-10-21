@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { getPackDefinition } from '../logic/packs';
+import { formatChipMultiplier, formatMultPercent } from '../logic/formatters';
+import { getPackDefinition, describePackChoices } from '../logic/packs';
 import { canPlayHand } from './economy';
 /**
  * Viginti CLI Simulator
@@ -33,14 +34,14 @@ const SUIT_SYMBOLS: Record<string, string> = {
 export function renderCard(card: Card): string {
     if (!card.isFaceUp) return '??';
     if (card.type === 'chip') return `$${card.chips}`;
-    if (card.type === 'mult') return `x${card.mult}`;
+    if (card.type === 'mult') return formatChipMultiplier(card.mult ?? 0, true);
     if (card.type === 'score') return `⊖${card.chips}`;
     const suit = SUIT_SYMBOLS[card.suit] ?? card.suit;
     const rank = card.rank === 'none' ? '?' : card.rank;
     let str = `${rank}${suit}`;
     if (card.specialEffect) {
         const eff = card.specialEffect;
-        str += eff.type === 'chip' ? `(+$${eff.value})` : eff.type === 'mult' ? `(+x${eff.value})` : `(+★${eff.value})`;
+        str += eff.type === 'chip' ? `(+$${eff.value})` : eff.type === 'mult' ? `(+${formatChipMultiplier(eff.value, true)})` : `(+★${eff.value})`;
     }
     return str;
 }
@@ -73,7 +74,7 @@ export function renderState(state: GameState): string {
     lines.push('');
     lines.push(`═══════════════════════════════════════════════`);
     lines.push(`  ${cityName}  |  Deal ${state.deal}  |  Phase: ${state.phase}`);
-    lines.push(`  Cash: $${state.cash ?? 0}  |  Ante: $${state.ante}  |  Increase: ${state.handsUntilAnteIncrease}  |  Deals: ${state.dealsTaken ?? 0}`);
+    lines.push(`  Cash: $${state.cash ?? 0}  |  Ante: $${state.ante}  |  Deals: ${state.dealsTaken ?? 0}`);
     // Note: Deck/Discard are calculated from probabilities or currently not tracked as distinct piles in this engine version.
     lines.push(`═══════════════════════════════════════════════`);
 
@@ -106,7 +107,7 @@ export function renderState(state: GameState): string {
     // Running summary
     if (state.runningSummary) {
         const { chips, mult } = state.runningSummary;
-        lines.push(`  Running: $${chips} × ${mult} = ${Math.floor(chips * mult)}`);
+        lines.push(`  Running: $${chips} × ${formatMultPercent(mult, true)} = ${Math.floor(chips * mult)}`);
         lines.push('');
     }
 
@@ -148,7 +149,7 @@ export function describeAction(action: PlayerAction, _state?: GameState): string
         case 'complete_deal_early':
             return 'Complete deal early';
         case 'open_pack':
-            return `Open ${getPackDefinition(action.packId).name}`;
+            return `Open ${getPackDefinition(action.packId).name} (${describePackChoices(getPackDefinition(action.packId))})`;
         case 'finish_pack':
             return 'Return to the table';
         case 'choose_raise':
@@ -246,7 +247,7 @@ export const greedyStrategy: Strategy = (state, actions) => {
 export function createLLMStrategy(model: string, profile: string): Strategy {
     return async (state, actions) => {
         const systemPrompt = `You are an expert card game player playing "Viginti", a blackjack-inspired rogue-like.
-Your goal is to keep playing as long as possible and grow your winnings. Choose one of three free packs at the start and whenever the ante increases. Dealing costs the cash ante and starts the center hand; both side hands are always free. You lose when you try to deal without enough cash for the ante. The ante rises by 50% every four completed rounds (rounded to the nearest $5). Six relic slots are permanently available. Packs are the only upgrade source.
+Your goal is to keep playing as long as possible and grow your winnings. Choose one of three free packs at the start and after completing a challenge. Dealing costs the cash ante and starts the center hand; both side hands are always free. You lose when you try to deal without enough cash for the ante. Complete either Main challenge (rounds or earnings) to earn a major pack upgrade, refresh all challenges, and raise the ante by 50% (rounded to the nearest $5). Side challenges earn minor pack upgrades without raising the ante. Six relic slots are permanently available. Packs are the only upgrade source.
 Current Play Profile: ${profile}
 
 You MUST follow the play profile strictly.
@@ -259,7 +260,8 @@ Respond ONLY in JSON format: {"reasoning": "...", "actionIndex": 0}`;
             totalScore: state.totalScore,
             cash: state.cash,
             ante: state.ante,
-            handsUntilAnteIncrease: state.handsUntilAnteIncrease,
+            challenges: state.challenges,
+            challengeRewards: state.challengeRewards,
             dealsTaken: state.dealsTaken,
             handsRemaining: state.handsRemaining,
             inventory: state.inventory.map(r => {
@@ -576,7 +578,8 @@ async function runJsonMode(cityId: string) {
                 totalScore: state.totalScore,
                 cash: state.cash,
                 ante: state.ante,
-                handsUntilAnteIncrease: state.handsUntilAnteIncrease,
+                challenges: state.challenges,
+                challengeRewards: state.challengeRewards,
                 dealsTaken: state.dealsTaken,
                 handsRemaining: state.handsRemaining,
                 dealer: {

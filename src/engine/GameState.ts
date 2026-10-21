@@ -6,6 +6,7 @@
 import type { Card, PlayerHand, DealerHand, HandScore } from '../types';
 import type { RelicInstance } from '../logic/relics/types';
 import type { HandUpgrades } from '../logic/handScoring';
+import type { Challenge, ChallengeReward } from './challenges';
 import type { PackId, PendingPack } from '../logic/packs';
 
 // ─── Phase ──────────────────────────────────────────────
@@ -105,7 +106,9 @@ export interface GameState {
     readonly targetScore: number;
     readonly cash: number; // Spendable bankroll
     readonly ante: number;
-    readonly handsUntilAnteIncrease: number;
+    readonly challengeStage: number;
+    readonly challenges: readonly Challenge[];
+    readonly challengeRewards: readonly ChallengeReward[];
 
     // === Table State ===
     readonly phase: GamePhase;

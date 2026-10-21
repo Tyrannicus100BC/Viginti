@@ -81,6 +81,7 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
             ante: event.ante,
             anteIncrease: null,
             deal: event.deal,
+            dealsTaken: event.deal,
             isInitialDeal: true,
             isDealerPlaying: false,
             scoringHandIndex: -1,
@@ -526,21 +527,40 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
 
     async ante_increased(event, config) {
         if (event.type !== 'ante_increased') return;
-        // Let the final score and cash collection finish before the interstitial.
+        // Let the final pack close before showing the ante interstitial.
         await wait(200, config);
         config.updateUI({
             ante: event.ante,
-            handsUntilAnteIncrease: event.handsUntilAnteIncrease,
             anteIncrease: { previousAnte: event.previousAnte, ante: event.ante },
         });
         if (!config.headless) await config.waitForAnteContinue?.();
         config.updateUI({ anteIncrease: null });
     },
 
+    async challenges_updated(event, config) {
+        if (event.type === 'challenges_updated') config.updateUI({
+            challenges: event.challenges,
+            ...(event.challenges.every(challenge => !challenge.completed) ? { departedChallengeIds: [] } : {}),
+        });
+    },
+
     // === Charge Changes ===
 
     async charge_gained(_event, _config) {
         // UI updates table action charges reactively from game state
+    },
+
+    async round_dismissed(event, config) {
+        if (event.type !== 'round_dismissed') return;
+        config.updateUI({
+            playerHands: event.playerHands,
+            dealer: { cards: [], isRevealed: false, blackjackValue: 0 },
+            drawnCards: [], selectedDrawIndex: null, runningSummary: null, dealSummary: null,
+            scoringHandIndex: -1, visibleScoringRowIndices: {}, scoringRowValues: {}, scoringCriteria: {},
+            activeHighlightIds: null, activeRelicId: null, allWinnersEnlarged: false,
+            isCollectingChips: false, isDealerPlaying: false, dealerVisible: false,
+            dealerMessage: null, dealerMessageExiting: false,
+        });
     },
 
     // === Phase Transitions ===

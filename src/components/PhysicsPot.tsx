@@ -1,3 +1,4 @@
+import { formatCash, formatChipMultiplier } from '../logic/formatters';
 import React, { useEffect, useState, useRef } from 'react';
 import styles from './PhysicsPot.module.css';
 
@@ -11,6 +12,7 @@ interface PhysicsPotProps {
   labelPrefix?: string; // '$' or 'x'
   labelId?: string;
   forceHide?: boolean;
+  isFinalScore?: boolean;
 }
 
 export const PhysicsPot: React.FC<PhysicsPotProps> = ({
@@ -22,7 +24,8 @@ export const PhysicsPot: React.FC<PhysicsPotProps> = ({
   onItemArrived,
   labelPrefix = '$',
   labelId,
-  forceHide = false
+  forceHide = false,
+  isFinalScore = false
 }) => {
 const [isPulsing, setIsPulsing] = useState(false);
   const prevValueRef = useRef(totalValue);
@@ -66,16 +69,16 @@ const [isPulsing, setIsPulsing] = useState(false);
       }}
     >
       <div 
-        className={`${styles.potTotal} ${isPulsing ? styles.pulse : ''}`}
+        className={`${styles.potTotal} ${isPulsing ? styles.pulse : ''} ${isFinalScore ? styles.scoreComponent : ''}`}
         id={labelId}
         style={{ 
           left: center.x, 
           top: center.y - 140, 
-          color: variant === 'chips' ? '#44ff44' : '#ffd700' 
+          color: totalValue < 0 ? '#ff4444' : variant === 'chips' ? '#44ff44' : '#ffd700'
         }}
       >
         <div className={styles.potValue}>
-          {labelPrefix === '$' ? `$${totalValue.toLocaleString()}` : `x${totalValue.toFixed(1)}`}
+          {labelPrefix === '$' ? formatCash(totalValue) : formatChipMultiplier(totalValue)}
         </div>
       </div>
     </div>

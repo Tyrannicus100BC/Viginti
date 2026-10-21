@@ -25,7 +25,7 @@ describe('permanent hand scoring and Raises', () => {
     it('uses the tuned base payouts for patterns and outcome variants', () => {
         expect(getHandPayout('win')).toMatchObject({ chips: 10, mult: 0, variant: { chips: 20, mult: 0.1 } });
         expect(getHandPayout('loss')).toMatchObject({ chips: -10, mult: 0, variant: { chips: -20, mult: -0.1 } });
-        expect(evaluateHandScore(cards, false).criteria.find(row => row.id === 'pair')).toMatchObject({ chips: 14, multiplier: 0.1 });
+        expect(evaluateHandScore(cards, false).criteria.find(row => row.id === 'pair')).toMatchObject({ chips: 19, multiplier: 0.05 });
         const twentyOne: Card[] = [{ id: 'ace', rank: 'A', suit: 'hearts' }, { id: 'king', rank: 'K', suit: 'clubs' }];
         expect(evaluateHandScore(twentyOne, true).criteria[0]).toMatchObject({ id: 'viginti', chips: 20, multiplier: 0.1 });
         expect(evaluateHandScore([...cards, { id: 'king', rank: 'K', suit: 'spades' }], false).criteria[0]).toMatchObject({ id: 'bust', chips: -20, multiplier: -0.1 });
@@ -34,14 +34,14 @@ describe('permanent hand scoring and Raises', () => {
     it('lists only relevant raise effects individually, including duplicates and penalties', () => {
         const upgrades = { raise_v2_1_pair_cash_1_bonus: 1, raise_v2_1_pair_cash_2_trade: 1, raise_v2_0_pair_mult_1_bonus: 1 };
         expect(getHandRaiseChanges('pair', upgrades).map(({ stat, value }) => ({ stat, value }))).toEqual([
-            { stat: 'chips', value: 10 }, { stat: 'chips', value: 15 }, { stat: 'mult', value: 0.1 },
+            { stat: 'chips', value: 10 }, { stat: 'chips', value: 15 }, { stat: 'mult', value: 0.05 },
         ]);
-        expect(getHandRaiseChanges('flush', upgrades).map(change => change.value)).toEqual([-0.1]);
+        expect(getHandRaiseChanges('flush', upgrades).map(change => change.value)).toEqual([-0.05]);
         expect(getHandRaiseChanges('win', upgrades)).toEqual([]);
         const repeated = { raise_pair_combo: 2, unknown_raise: 3, raise_flush_cash: 1 };
         expect(getHandRaiseChanges('pair', repeated).map(({ occurrence, stat, value }) => ({ occurrence, stat, value }))).toEqual([
-            { occurrence: 0, stat: 'chips', value: 20 }, { occurrence: 0, stat: 'mult', value: 0.5 },
-            { occurrence: 1, stat: 'chips', value: 20 }, { occurrence: 1, stat: 'mult', value: 0.5 },
+            { occurrence: 0, stat: 'chips', value: 20 }, { occurrence: 0, stat: 'mult', value: 0.25 },
+            { occurrence: 1, stat: 'chips', value: 20 }, { occurrence: 1, stat: 'mult', value: 0.25 },
         ]);
         for (const hand of HAND_TYPES) {
             const changes = getHandRaiseChanges(hand.id, repeated);
@@ -63,24 +63,24 @@ describe('permanent hand scoring and Raises', () => {
     it('adds mixed and repeated Raises alongside card relic bonuses', () => {
         const upgrades = { raise_pair_combo: 2, raise_pair_mult: 1, raise_flush_cash: 3 };
         const payout = getHandPayout('pair', upgrades);
-        expect(payout).toMatchObject({ chips: 40, mult: 1.6, count: 3 });
+        expect(payout).toMatchObject({ chips: 45, mult: 0.8, count: 3 });
         const score = evaluateHandScore(cards, true, false, [], 0, undefined, 'win', upgrades);
         expect(score.criteria.find(row => row.id === 'pair')).toMatchObject({ chips: 14 + payout.chips, multiplier: payout.mult });
         const bead = RelicManager.getRelicConfig('star_bead')!;
         const nines = cards.map(card => ({ ...card, rank: '9' as const }));
         const withRelic = evaluateHandScore(nines, true, false, [{ id: bead.id, state: { ...bead.properties } }], 0, undefined, 'win', upgrades);
         expect(withRelic.criteria.find(row => row.id === 'pair')).toMatchObject({ chips: 18 + payout.chips, multiplier: payout.mult });
-        expect(withRelic.criteria.find(row => row.id === 'win')?.multiplier).toBe(0.4);
+        expect(withRelic.criteria.find(row => row.id === 'win')?.multiplier).toBe(0.2);
         expect(getHandPayout('pair', upgrades)).toEqual(payout);
     });
 
     it('applies Win and Lose Raises to 21 and bust while pushes retain no outcome payout', () => {
         const upgrades = { raise_win_combo: 1, raise_loss_combo: 1 };
         const twentyOne: Card[] = [{ id: 'ace', rank: 'A', suit: 'hearts' }, { id: 'king', rank: 'K', suit: 'clubs' }];
-        expect(evaluateHandScore(twentyOne, true, false, [], 0, undefined, 'win', upgrades).criteria[0]).toMatchObject({ id: 'viginti', chips: 40, multiplier: 0.6 });
+        expect(evaluateHandScore(twentyOne, true, false, [], 0, undefined, 'win', upgrades).criteria[0]).toMatchObject({ id: 'viginti', chips: 40, multiplier: 0.35 });
         const bust = [...twentyOne, { id: 'extra', rank: 'K' as const, suit: 'spades' as const }];
         bust.push({ id: 'another', rank: 'K', suit: 'diamonds' });
-        expect(evaluateHandScore(bust, false, false, [], 0, undefined, 'bust', upgrades).criteria[0]).toMatchObject({ id: 'bust', chips: 0, multiplier: 0.4 });
+        expect(evaluateHandScore(bust, false, false, [], 0, undefined, 'bust', upgrades).criteria[0]).toMatchObject({ id: 'bust', chips: 0, multiplier: 0.15 });
         expect(evaluateHandScore(cards, false, false, [], 0, undefined, 'push', upgrades).criteria.some(row => row.id === 'loss' || row.id === 'win')).toBe(false);
     });
 
@@ -88,7 +88,7 @@ describe('permanent hand scoring and Raises', () => {
         const triple = [...cards, { id: 'c', rank: '7' as const, suit: 'spades' as const }];
         const pairs = evaluateHandScore(triple, true, false, [], 0, undefined, 'win', { raise_pair_combo: 1 }).criteria.filter(row => row.id === 'pair');
         expect(pairs).toHaveLength(3);
-        expect(pairs.every(row => row.chips === 34 && row.multiplier === 0.6)).toBe(true);
+        expect(pairs.every(row => row.chips === 39 && row.multiplier === 0.3)).toBe(true);
     });
 
     it('stacks pack upgrades without using slots or mutating previous state', () => {
@@ -101,7 +101,7 @@ describe('permanent hand scoring and Raises', () => {
             state = act(state, { type: 'choose_raise', raiseId: 'raise_pair_mult' });
         }
         expect(state.handUpgrades.raise_pair_mult).toBe(25);
-        expect(getHandPayout('pair', state.handUpgrades).mult).toBe(12.6);
+        expect(getHandPayout('pair', state.handUpgrades).mult).toBe(6.3);
         expect(state.inventory).toEqual(original.inventory);
         expect(original.handUpgrades).toEqual({});
         expect(state.cash).toBe(original.cash);
@@ -125,9 +125,9 @@ describe('permanent hand scoring and Raises', () => {
         const state: GameState = { ...stocked(), phase: 'scoring', cash: 0, handUpgrades: upgrades, runningSummary: { chips: 0, mult: 1 },
             playerHands: [{ id: 0, cards, blackjackValue: 14, isBust: false, isHeld: true, outcome: 'loss' }] };
         const result = processAction(state, { type: 'score_round' });
-        // Lose −$10, Pair $14 + $20, starting 1× plus 0.6×.
-        expect(result.nextState.cash).toBe(38);
-        expect(result.nextState.playerHands[0].finalScore?.criteria.find(row => row.id === 'pair')).toMatchObject({ chips: 34, multiplier: 0.6 });
+        // Lose −$10, Pair $14 + $5 + $20, starting 100% plus 30%.
+        expect(result.nextState.cash).toBe(37);
+        expect(result.nextState.playerHands[0].finalScore?.criteria.find(row => row.id === 'pair')).toMatchObject({ chips: 39, multiplier: 0.3 });
         expect(result.nextState.handUpgrades).toEqual(upgrades);
     });
 

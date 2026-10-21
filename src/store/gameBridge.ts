@@ -1,3 +1,5 @@
+import { createChallenges, CHALLENGE_ROUNDS } from '../engine/challenges';
+import type { Challenge, ChallengeReward } from '../engine/challenges';
 import { generatePackOffers } from '../engine/actions/packActions';
 import { SeededRNG } from '../engine/rng';
 import { INITIAL_RELIC_SLOTS } from '../logic/relics/inventory';
@@ -19,7 +21,7 @@ import { RelicManager } from '../logic/relics/manager';
  */
 
 import { create } from 'zustand';
-import { BASE_ANTE, HANDS_PER_ANTE } from '../engine/economy';
+import { BASE_ANTE } from '../engine/economy';
 import type { GameState, GamePhase, InteractionMode } from '../engine/GameState';
 import type { PlayerAction } from '../engine/PlayerAction';
 import type { GameEvent } from '../engine/GameEvent';
@@ -105,6 +107,8 @@ interface UIState {
     scoringCriteria: Record<number, any[]>;
     activeHighlightIds: string[] | null;
     dealSummary: { totalChips: number; totalMult: number; finalScore: number } | null;
+
+    departedChallengeIds: string[];
 
     // Active highlights
     activeRelicId: string | null;
@@ -192,7 +196,8 @@ interface GameBridgeState extends UIState {
     readonly targetScore: number;
     readonly cash: number;
     readonly ante: number;
-    readonly handsUntilAnteIncrease: number;
+    readonly challenges: readonly Challenge[];
+    readonly challengeRewards: readonly ChallengeReward[];
     readonly dealsTaken: number;
     readonly handsRemaining: number;
     readonly inventory: readonly RelicInstance[];
@@ -223,6 +228,7 @@ const INITIAL_UI: UIState = {
     allWinnersEnlarged: false,
     dealerVisible: false,
     anteIncrease: null,
+    departedChallengeIds: [],
     dealerMessage: null,
     dealerMessageExiting: false,
     scoringHandIndex: -1,
@@ -262,7 +268,8 @@ export const useGameBridge = create<GameBridgeState>((set, get) => {
         targetScore: gs.targetScore,
         cash: gs.cash,
         ante: gs.ante,
-        handsUntilAnteIncrease: gs.handsUntilAnteIncrease,
+        challenges: gs.challenges,
+        challengeRewards: gs.challengeRewards,
         dealsTaken: gs.dealsTaken,
         handsRemaining: gs.handsRemaining,
         inventory: gs.inventory,
@@ -351,6 +358,7 @@ export const useGameBridge = create<GameBridgeState>((set, get) => {
                             set({
                                 gameState: prevGameState,
                                 ...flattenGameState(prevGameState),
+                                departedChallengeIds: [],
                                 debugLedger: debugLedger.slice(0, -1),
                                 // Reset UI flags to match newly restored state (best effort)
                                 isInitialDeal: false,
@@ -588,7 +596,7 @@ export const useGameBridge = create<GameBridgeState>((set, get) => {
                 const actionRelics = inventory.filter(instance => RelicManager.getRelicConfig(instance.id)?.tableAction);
                 // Drop the retired economy while retaining earned cards and relics.
                 const migratedState = { ...rawState };
-                for (const key of ['comps', 'shopItems', 'shopHasNewStock', 'shopStockInitialized',
+                for (const key of ['handsUntilAnteIncrease', 'comps', 'shopItems', 'shopHasNewStock', 'shopStockInitialized',
                     'shopDealsAtLastFreeRestock', 'shopReturnPhase', 'giftShopRestockCost', 'shopRewardSummary']) {
                     delete migratedState[key];
                 }
@@ -621,7 +629,10 @@ export const useGameBridge = create<GameBridgeState>((set, get) => {
                         picksRemaining: rawState.pendingPack?.picksRemaining ?? 1,
                     } : null,
                     ante: rawState.ante ?? BASE_ANTE,
-                    handsUntilAnteIncrease: rawState.handsUntilAnteIncrease ?? HANDS_PER_ANTE,
+                    challengeStage: rawState.challengeStage ?? 0,
+                    challenges: rawState.challenges ?? createChallenges(rawState.challengeStage ?? 0, rawState.ante ?? BASE_ANTE).map(challenge => challenge.metric === 'rounds'
+                        ? { ...challenge, progress: Math.max(0, Math.min(CHALLENGE_ROUNDS, CHALLENGE_ROUNDS - (rawState.handsUntilAnteIncrease ?? CHALLENGE_ROUNDS))) } : challenge),
+                    challengeRewards: rawState.challengeRewards ?? [],
                     handUpgrades: rawState.handUpgrades ?? {},
 
                 };
@@ -634,6 +645,7 @@ export const useGameBridge = create<GameBridgeState>((set, get) => {
                 set({
                     gameState: nextGameState,
                     ...flattenGameState(nextGameState),
+                    departedChallengeIds: [],
                     // Reset UI flags to sensible defaults for the new state
                     isInitialDeal: false,
                     anteIncrease: null,

@@ -1,3 +1,4 @@
+import type { Challenge, ChallengeReward } from './challenges';
 import type { PackId } from '../logic/packs';
 /**
  * Game event types — the structured log of everything that happens as a result of actions.
@@ -9,7 +10,7 @@ import type { PackId } from '../logic/packs';
  * but contain NO timing information — timing is the presentation layer's job.
  */
 
-import type { Card, HandScore, ScoringDetail } from '../types';
+import type { Card, HandScore, PlayerHand, ScoringDetail } from '../types';
 import type { GamePhase, RewardSummary } from './GameState';
 import type { TutorialDisplayConfig, TutorialScope } from './tutorial/types';
 
@@ -60,8 +61,11 @@ export type GameEvent =
     | { type: 'scoring_hand_complete'; handIndex: number }
     | { type: 'summary_update'; chips: number; mult: number }
     | { type: 'deal_scoring_complete'; totalChips: number; totalMult: number; finalScore: number }
-    | { type: 'ante_increased'; previousAnte: number; ante: number; handsUntilAnteIncrease: number }
+    | { type: 'ante_increased'; previousAnte: number; ante: number }
+    | { type: 'challenges_updated'; challenges: readonly Challenge[] }
+    | { type: 'challenge_completed'; reward: ChallengeReward }
     | { type: 'dealer_fade_out' }
+    | { type: 'round_dismissed'; playerHands: readonly PlayerHand[] }
 
     | { type: 'chip_collection'; amount: number; newTotalScore: number; newCash: number }
 

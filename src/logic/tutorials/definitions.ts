@@ -60,7 +60,7 @@ export const shouldPromptStandNow = (context: any, options?: StandPromptOptions)
 export const ATLANTIC_CITY_TUTORIAL_STEPS: TutorialStep[] = [
     {
         id: 'welcome',
-        text: "Welcome to Viginti\n\nPay the Cash Ante to Deal\nOpen a Free Pack Every Ante Increase",
+        text: "Welcome to Viginti\n\nPay the Cash Ante to Deal\nComplete Challenges to Earn Free Packs",
         completionType: 'click',
         scope: 'session',
         scrim: 'none',
@@ -182,7 +182,7 @@ export const ATLANTIC_CITY_TUTORIAL_STEPS: TutorialStep[] = [
     },
     {
         id: 'hud_draws',
-        text: "Cash Keeps You Playing\n\nPay the Ante to Deal · It Increases Every Four Rounds",
+        text: "Cash Keeps You Playing\n\nPay the Ante to Deal · Complete Either Main Challenge to Raise It",
         highlight: { elementId: 'hud-ante', type: 'rect', padding: 6 },
         scrim: 'none',
         completionType: 'custom',
@@ -197,7 +197,7 @@ export const ATLANTIC_CITY_TUTORIAL_STEPS: TutorialStep[] = [
     },
     {
         id: NEXT_CASINO_TUTORIAL_ID,
-        text: "Build Your Run with Packs\n\nChoose a Free Pack Every Ante Increase",
+        text: "Build Your Run with Packs\n\nSide Challenges Earn Minor Packs · Main Challenges Earn Major Packs",
         highlight: { elementId: 'hud-ante', type: 'rect', padding: 8 },
         scrim: 'none',
         completionType: 'custom',

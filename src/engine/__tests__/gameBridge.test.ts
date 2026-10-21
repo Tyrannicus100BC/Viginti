@@ -1,3 +1,4 @@
+import { getPackDefinition } from '../../logic/packs';
 /**
  * GameBridge integration tests.
  *
@@ -260,15 +261,17 @@ describe('GameBridge', () => {
         expect(getBridge().playerHands[0].cards).toHaveLength(2);
     });
 
-    it('loads older debug snapshots with safe defaults for the new ante fields', () => {
+    it('loads older debug snapshots with safe defaults for the ante and challenge fields', () => {
         startGame(42);
         const snapshot: Record<string, unknown> = { ...getBridge().gameState };
         delete snapshot.ante;
-        delete snapshot.handsUntilAnteIncrease;
+        delete snapshot.challenges;
+        delete snapshot.challengeStage;
+        delete snapshot.challengeRewards;
         delete snapshot.shopHasNewStock;
         expect(getBridge().loadGameState(JSON.stringify(snapshot))).toBe(true);
         expect(getBridge().ante).toBe(50);
-        expect(getBridge().handsUntilAnteIncrease).toBe(4);
+        expect(getBridge().challenges.find(challenge => challenge.metric === 'rounds')?.progress).toBe(0);
         expect(getBridge().anteIncrease).toBe(null);
     });
 
@@ -298,6 +301,71 @@ describe('GameBridge', () => {
         expect(getBridge().loadGameState(JSON.stringify(migrated))).toBe(true);
         expect(getBridge().offeredPacks).toEqual(originalOffers);
         expect(getBridge().gameState.rngState).toBe(originalRng);
+    });
+
+    it('migrates the old ante countdown into survival progress and does not restart it on reload', () => {
+        startGame();
+        const legacy = { ...getBridge().gameState, challenges: undefined, challengeStage: undefined,
+            challengeRewards: undefined, handsUntilAnteIncrease: 2, ante: 240 };
+        expect(getBridge().loadGameState(JSON.stringify(legacy))).toBe(true);
+        expect(getBridge().challenges.find(challenge => challenge.metric === 'rounds')?.progress).toBe(2);
+        expect(getBridge().challenges.find(challenge => challenge.metric === 'earnings')?.target).toBe(1440);
+        expect(getBridge().gameState).not.toHaveProperty('handsUntilAnteIncrease');
+        expect(getBridge().loadGameState(JSON.stringify(getBridge().gameState))).toBe(true);
+        expect(getBridge().challenges.find(challenge => challenge.metric === 'rounds')?.progress).toBe(2);
+    });
+
+    it('preserves progress and multiple pending challenge rewards across import', () => {
+        startGame();
+        const earned = processAction({ ...getBridge().gameState, phase: 'scoring', playerHands: [],
+            runningSummary: { chips: 500, mult: 1 } }, { type: 'score_round' }).nextState;
+        const saved = { ...earned, challengeRewards: [...earned.challengeRewards,
+            { id: '0-pairs', tier: 'minor', title: 'Pair Collector' }] };
+        expect(getBridge().loadGameState(JSON.stringify(saved))).toBe(true);
+        expect(getBridge().challengeRewards).toEqual(saved.challengeRewards);
+        expect(getBridge().challenges).toEqual(saved.challenges);
+        expect(getBridge().phase).toBe('deal_over');
+        dispatch({ type: 'deal' });
+        dispatch({ type: 'open_pack', packId: getBridge().offeredPacks[0] });
+        dispatch({ type: 'skip_pack' });
+        dispatch({ type: 'finish_pack' });
+        expect(getBridge().phase).toBe('pack_choice');
+        expect(getBridge().challengeRewards).toMatchObject([{ tier: 'minor' }]);
+        expect(getBridge().offeredPacks.every(id => getPackDefinition(id).pickCount === 1)).toBe(true);
+        expect(getBridge().ante).toBe(50);
+        // Reload between queued packs without losing the deferred stage advance.
+        expect(getBridge().loadGameState(JSON.stringify(getBridge().gameState))).toBe(true);
+        dispatch({ type: 'open_pack', packId: getBridge().offeredPacks[0] });
+        dispatch({ type: 'skip_pack' });
+        dispatch({ type: 'finish_pack' });
+        expect(getBridge().phase).toBe('deal_over');
+        expect(getBridge().ante).toBe(100);
+        expect(getBridge().gameState.challengeStage).toBe(1);
+        expect(getBridge().eventLog.filter(event => event.type === 'ante_increased')).toHaveLength(1);
+    });
+
+    it('keeps consumed side goals completed until the board refresh clears their departed rows', () => {
+        startGame();
+        const before = getBridge().gameState;
+        const completed = { ...before, phase: 'deal_over', challenges: before.challenges.map(challenge =>
+            challenge.metric === 'pairs' ? { ...challenge, progress: challenge.target, completed: true } : challenge),
+            challengeRewards: [{ id: '0-pairs', tier: 'minor', title: 'Pair Collector' }] };
+        expect(getBridge().loadGameState(JSON.stringify(completed))).toBe(true);
+        useGameBridge.setState({ departedChallengeIds: ['0-pairs'] });
+        dispatch({ type: 'deal' });
+        dispatch({ type: 'open_pack', packId: getBridge().offeredPacks[0] });
+        dispatch({ type: 'skip_pack' });
+        dispatch({ type: 'finish_pack' });
+        expect(getBridge().departedChallengeIds).toEqual(['0-pairs']);
+        expect(getBridge().challengeRewards).toEqual([]);
+        expect(getBridge().challenges.find(challenge => challenge.id === '0-pairs')?.completed).toBe(true);
+        dispatch({ type: 'debug_give_cash', amount: 300 });
+        dispatch({ type: 'deal' });
+        dispatch({ type: 'open_pack', packId: getBridge().offeredPacks[0] });
+        dispatch({ type: 'skip_pack' });
+        dispatch({ type: 'finish_pack' });
+        expect(getBridge().departedChallengeIds).toEqual([]);
+        expect(getBridge().challenges.every(challenge => !challenge.completed)).toBe(true);
     });
 
 });

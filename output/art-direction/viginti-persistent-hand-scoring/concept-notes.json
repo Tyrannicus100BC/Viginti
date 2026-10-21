@@ -1,0 +1,83 @@
+{
+  "scope": "3D visual concept exploration only. Supersedes the rejected shared hand ledger. No HTML implementation or application changes in this revision.",
+  "spatial_contract": [
+    "Each hand retains one fixed lateral anchor for cards, blackjack total, scoring rows and local contribution subtotal.",
+    "Completed scoring rows remain visible while later hands score and throughout final round review until Deal.",
+    "Current cards rise and desaturate in their own lane; neighbouring card groups and scoring histories stay readable.",
+    "Score strips grow upward into the space vacated by dealer and draw tray, with a shared round tally above all three lanes.",
+    "Local cash and multiplier increments animate toward the shared counters without removing the local evidence.",
+    "Local multiplier values are additive contributions; the shared round multiplier starts at 1.0.",
+    "Final multiplication and collection occur once for the round. No invented independent per-hand payouts.",
+    "Header, six relic slots, Hand Scores, Deck and one bottom main action position retain the simplified table layout."
+  ],
+  "sequence": [
+    {
+      "frame": "images/01-pair-scoring-v2.png",
+      "state": "Middle pair scoring",
+      "hand1": {
+        "cash": 10,
+        "multContribution": 0.1,
+        "complete": true
+      },
+      "hand2": {
+        "cash": 32,
+        "multContribution": 0.2,
+        "complete": false
+      },
+      "hand3": {
+        "cash": 0,
+        "multContribution": 0,
+        "complete": false
+      },
+      "round": {
+        "cash": 42,
+        "mult": 1.3
+      },
+      "runWinnings": 1240,
+      "cashBalance": 250
+    },
+    {
+      "frame": "images/02-last-hand-scoring.png",
+      "state": "Right straight scoring",
+      "hand1": {
+        "cash": 10,
+        "multContribution": 0.1,
+        "complete": true
+      },
+      "hand2": {
+        "cash": 32,
+        "multContribution": 0.4,
+        "complete": true
+      },
+      "hand3": {
+        "cash": 13,
+        "multContribution": 0,
+        "complete": true
+      },
+      "round": {
+        "cash": 55,
+        "mult": 1.5
+      },
+      "runWinnings": 1240,
+      "cashBalance": 250
+    },
+    {
+      "frame": "images/03-final-round-review-v2.png",
+      "state": "Final review after collection",
+      "round": {
+        "cash": 55,
+        "mult": 1.5,
+        "payout": 82
+      },
+      "runWinnings": 1322,
+      "cashBalance": 332
+    }
+  ],
+  "unresolved": [
+    "Row capacity for large hands, many matching groups and relic-triggered rows needs a dedicated high-density study.",
+    "Card lift, curl, row timing and local-to-global transfer choreography require motion concepting before implementation.",
+    "The images establish adjacency and persistence, not a final production UI or measured Three.js performance.",
+    "Generated card pips, decorative relic representations and typography remain illustrative."
+  ],
+  "generation": "Built-in image generation tool; original and refinement prompts saved alongside this file."
+}

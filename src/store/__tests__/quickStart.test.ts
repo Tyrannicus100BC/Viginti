@@ -22,6 +22,7 @@ describe('quick-start URL', () => {
         expect(bridge.phase).toBe('pack_choice');
         expect(bridge.offeredPacks).toHaveLength(3);
         expect(bridge.pendingPack).toBeNull();
+        expect(bridge.challenges).toEqual([]);
         expect(bridge.isProcessingEvents).toBe(false);
         expect(bridge.eventLog.filter(event => event.type === 'phase_changed')).toHaveLength(1);
     });
@@ -30,7 +31,7 @@ describe('quick-start URL', () => {
         expect(startRunFromUrl('?quickstart=1&skippack=1')).toBe(true);
         const bridge = useGameBridge.getState();
         expect(bridge.gameState).toMatchObject({ phase: 'playing', cash: 50, ante: 50,
-            dealsTaken: 1, handsUntilAnteIncrease: 4, inventory: [], handUpgrades: {},
+            dealsTaken: 1, inventory: [], handUpgrades: {},
             offeredPacks: [], pendingPack: null, pendingRaiseChoices: [], pendingPackChoices: [] });
         expect(bridge.phase).toBe('playing');
         expect(bridge.playerHands[1].cards).toHaveLength(1);
@@ -44,15 +45,20 @@ describe('quick-start URL', () => {
         expect(useGameBridge.getState().gameState).toBe(before);
     });
 
-    it('still grants the normal pack reward at the first ante increase', () => {
+    it('waits for a click to redeem the first progression reward', () => {
         startRunFromUrl('?quickstart=1&skippack=1');
         let state = useGameBridge.getState().gameState;
         for (let round = 1; round <= 4; round++) {
             state = processAction({ ...state, phase: 'scoring', playerHands: [],
                 runningSummary: { chips: 0, mult: 1 } }, { type: 'score_round' }).nextState;
         }
-        expect(state).toMatchObject({ phase: 'pack_choice', ante: 75, handsUntilAnteIncrease: 4 });
+        expect(state).toMatchObject({ phase: 'deal_over', ante: 50 });
+        expect(state.challengeRewards).toHaveLength(1);
+        state = processAction(state, { type: 'deal' }).nextState;
+        expect(state).toMatchObject({ phase: 'pack_choice', ante: 50 });
         expect(state.offeredPacks).toHaveLength(3);
+        state = finishOpeningPack(state);
+        expect(state).toMatchObject({ phase: 'deal_over', ante: 100 });
     });
 
     it('does not start twice if bootstrap is called again', () => {

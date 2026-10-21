@@ -1,3 +1,4 @@
+import { rollPackRarity, type PackQuality } from './packs';
 import type { DeckProbabilities, RankWeights, SpecialWeight, SuitWeights } from '../engine/GameState';
 import type { SeededRNG } from '../engine/rng';
 import type { RelicRarity } from './relics/types';
@@ -85,11 +86,11 @@ export function generatePackCard(rng: SeededRNG, rarity: RelicRarity, probabilit
     return buildCard(rarity, indices.sort((a, b) => a - b));
 }
 
-export function generatePackCardChoices(rng: SeededRNG, count: number, probabilities: DeckProbabilities): PackCard[] {
+export function generatePackCardChoices(rng: SeededRNG, count: number, probabilities: DeckProbabilities, quality: PackQuality = 'average'): PackCard[] {
     const choices: PackCard[] = [];
     while (choices.length < count) {
         const roll = rng.next();
-        const card = generatePackCard(rng, roll < 0.7 ? 'Common' : roll < 0.95 ? 'Uncommon' : 'Rare', probabilities);
+        const card = generatePackCard(rng, rollPackRarity(roll, quality), probabilities);
         if (!choices.some(choice => choice.id === card.id)) choices.push(card);
     }
     return choices;

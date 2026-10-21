@@ -63,7 +63,7 @@ export const useGameStore = <T>(selector?: (state: any) => T): any => {
 
         // Debug
         triggerDebugChips: () => {
-             dispatch({ type: 'debug_give_cash', amount: 100 });
+             dispatch({ type: 'debug_give_cash' });
         },
         debugWin: () => dispatch({ type: 'debug_win' }),
         debugUndo: () => dispatch({ type: 'debug_undo' }),

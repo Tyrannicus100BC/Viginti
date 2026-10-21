@@ -31,14 +31,14 @@ describe('relic balance', () => {
     });
 
     it.each([
-        ['star_bead', ['9', '8'], 0.2, 'win'],
-        ['star_bead', ['9', '9'], 0.4, 'win'],
-        ['star_bead', ['9', '8', '4'], 0.2, 'viginti'],
-        ['heart_button', ['10', '4'], 0.2, 'win'],
-        ['heart_button', ['10', '7', '4'], 0.2, 'viginti'],
-        ['lucky_acorn', ['K', '8'], 0.2, 'win'],
-        ['lucky_acorn', ['K', 'K'], 0.4, 'win'],
-        ['lucky_acorn', ['A', 'K'], 0.2, 'viginti'],
+        ['star_bead', ['9', '8'], 0.1, 'win'],
+        ['star_bead', ['9', '9'], 0.2, 'win'],
+        ['star_bead', ['9', '8', '4'], 0.1, 'viginti'],
+        ['heart_button', ['10', '4'], 0.1, 'win'],
+        ['heart_button', ['10', '7', '4'], 0.1, 'viginti'],
+        ['lucky_acorn', ['K', '8'], 0.1, 'win'],
+        ['lucky_acorn', ['K', 'K'], 0.2, 'win'],
+        ['lucky_acorn', ['A', 'K'], 0.1, 'viginti'],
     ] as const)('%s adds its bonus for %s to the outcome row', (id, ranks, bonus, outcomeId) => {
         const cards = ranks.map((rank, index) => card(rank, `${index}`));
         const inventory = [instance(id)];
@@ -62,24 +62,24 @@ describe('relic balance', () => {
         const cards = [card('9'), card('K'), card('2')];
         const score = evaluateHandScore(cards, true, false, inventory, 0, undefined, 'win', { raise_win_mult: 1 });
         expect(score.criteria.map(row => row.id)).toEqual(['viginti', 'flush']);
-        expect(score.criteria[0]).toMatchObject({ id: 'viginti', multiplier: 1 });
+        expect(score.criteria[0]).toMatchObject({ id: 'viginti', multiplier: 0.55 });
     });
 
     it('Faded Tag supplies five rounds of decaying multiplier then expires exactly', () => {
         let inventory = [instance('faded_tag')];
-        for (const amount of [0.5, 0.4, 0.3, 0.2, 0.1]) {
+        for (const amount of [0.25, 0.2, 0.15, 0.1, 0.05]) {
             const before = inventory[0].state.amount;
             const result = executeOnDealCompletion(inventory, 1, 0, 0, { chips: 10, mult: 1 }, []);
             expect(result.runningSummary?.mult).toBeCloseTo(1 + amount);
             expect(inventory[0].state.amount).toBe(before);
             inventory = result.inventory;
-            expect(result.relicsToRemove?.includes('faded_tag')).toBe(amount === 0.1);
+            expect(result.relicsToRemove?.includes('faded_tag')).toBe(amount === 0.05);
         }
         expect(inventory[0].state.amount).toBe(0);
     });
 
     it.each([
-        ['robe_and_slippers_set', 0.2], ['cozy_socks', 0.1],
+        ['robe_and_slippers_set', 0.1], ['cozy_socks', 0.05],
     ] as const)('%s adds a flat %s and activates the owned relic each round', (id, bonus) => {
         const inventory = [instance(id)];
         for (const [wins, losses, vigintis] of [[3, 0, 1], [0, 3, 0]]) {
@@ -109,7 +109,7 @@ describe('relic balance', () => {
 
     it('Cozy Socks stacks with Robe and Slippers as a separate relic', () => {
         const result = executeOnDealCompletion(['cozy_socks', 'robe_and_slippers_set'].map(instance), 1, 2, 0, { chips: 50, mult: 3 }, []);
-        expect(result.runningSummary?.mult).toBeCloseTo(3.3);
+        expect(result.runningSummary?.mult).toBeCloseTo(3.15);
         expect(result.events.filter(event => event.type === 'relic_activated').map(event => event.relicId))
             .toEqual(['cozy_socks', 'robe_and_slippers_set']);
     });
@@ -153,7 +153,7 @@ describe('relic balance', () => {
             const base = evaluateHandScore(winningCards, true);
             const score = evaluateHandScore(winningCards, true, false, trigger.inventory);
             expect(score.criteria.map(row => row.id)).toEqual(base.criteria.map(row => row.id));
-            expect(score.criteria[0].multiplier).toBeCloseTo(base.criteria[0].multiplier + 0.1);
+            expect(score.criteria[0].multiplier).toBeCloseTo(base.criteria[0].multiplier + 0.05);
             const summary = { chips: 50, mult: 2 };
             expect(executeOnScoreRow(trigger.inventory, score.criteria[0].id, score, summary).runningSummary).toEqual(summary);
         }
@@ -168,11 +168,11 @@ describe('relic balance', () => {
             inventory: [instance('lucky_acorn'), safety], runningSummary: { chips: 0, mult: 1 },
             playerHands: [{ id: 1, cards: [card('K'), { ...card('8'), suit: 'spades' }], blackjackValue: 18, isBust: false, isHeld: true, outcome: 'win' }] };
         const result = processAction(state, { type: 'score_round' });
-        expect(result.nextState.cash).toBe(10013);
+        expect(result.nextState.cash).toBe(10011);
         expect(result.events.filter(event => event.type === 'scoring_row_mult')).toEqual([
-            { type: 'scoring_row_mult', handIndex: 0, criterionId: 'win', multiplier: 0.3 },
+            { type: 'scoring_row_mult', handIndex: 0, criterionId: 'win', multiplier: 0.15 },
         ]);
-        expect(result.events).toContainEqual({ type: 'deal_scoring_complete', totalChips: 10, totalMult: 1.3, finalScore: 13 });
+        expect(result.events).toContainEqual({ type: 'deal_scoring_complete', totalChips: 10, totalMult: 1.15, finalScore: 11 });
     });
 
     it('imports the new balance while preserving progress, charge depletion and remaining pack choices', () => {
@@ -190,10 +190,10 @@ describe('relic balance', () => {
         expect(useGameBridge.getState().loadGameState(JSON.stringify(legacy))).toBe(true);
         const loaded = useGameBridge.getState().gameState;
         const states = Object.fromEntries(loaded.inventory.map(relic => [relic.id, relic.state]));
-        expect(states.faded_tag).toEqual({ amount: 0.3, decay_amount: 0.1 });
+        expect(states.faded_tag).toEqual({ amount: 0.25, decay_amount: 0.05 });
         expect(states.faded_bill).toEqual({ amount: 20, decay_amount: 10 });
-        expect(states.lucky_acorn.bonus_mult).toBe(0.2);
-        expect(states.safety_net).toEqual({ bonus_mult: 0.1, armed: true });
+        expect(states.lucky_acorn.bonus_mult).toBe(0.1);
+        expect(states.safety_net).toEqual({ bonus_mult: 0.05, armed: true });
         expect(states.second_chance).toEqual({ extra_draw: 1, pending_bonus: true });
         expect(states.photocopier.draws_taken).toBe(3);
         expect(states.redraw.rounds_since_recharge).toBe(1);

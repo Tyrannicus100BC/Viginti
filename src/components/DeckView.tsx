@@ -1,3 +1,4 @@
+import { formatCash, formatChipMultiplier } from '../logic/formatters';
 import { ENHANCE_CASH_COSTS, getRemovalCashCost } from '../engine/economy';
 import React from 'react';
 import type { Card as CardType, Suit, Rank } from '../types';
@@ -100,10 +101,10 @@ export const DeckView: React.FC<DeckViewProps> = ({
 
         if (card.type === 'chip') {
             style = { color: '#4ade80', WebkitTextStroke: '2px #166534', paintOrder: 'stroke fill' } as React.CSSProperties;
-            content = `$${card.chips}`;
+            content = formatCash(card.chips ?? 0);
         } else if (card.type === 'mult') {
             style = { color: '#facc15', WebkitTextStroke: '2px #854d0e', paintOrder: 'stroke fill' } as React.CSSProperties;
-            content = `x${card.mult}`;
+            content = formatChipMultiplier(card.mult ?? 0);
         } else if (card.type === 'score') {
             style = { color: '#c084fc', WebkitTextStroke: '2px #6b21a8', paintOrder: 'stroke fill' } as React.CSSProperties;
             content = `${card.chips}`;
@@ -111,6 +112,9 @@ export const DeckView: React.FC<DeckViewProps> = ({
             style = { color: '#e74c3c' };
         }
 
+        if (card.type === 'chip' && (card.chips ?? 0) < 0 || card.type === 'mult' && (card.mult ?? 0) < 0) {
+            style = { color: '#ff4444', WebkitTextStroke: '2px #7f1d1d', paintOrder: 'stroke fill' } as React.CSSProperties;
+        }
         const isDestroying = destroyingIds.has(card.id);
         const isSelectable = (mode === 'remove') || (mode === 'enhance' && selectedEnhancement && cash >= currentCost);
 
@@ -135,13 +139,14 @@ export const DeckView: React.FC<DeckViewProps> = ({
                     <div 
                          className={styles.specialIndicator}
                          style={
+                           card.specialEffect.type !== 'score' && card.specialEffect.value < 0 ? { color: '#ff4444', borderColor: '#7f1d1d' } :
                            card.specialEffect.type === 'chip' ? { color: '#4ade80', borderColor: '#166534' } as React.CSSProperties :
                            card.specialEffect.type === 'mult' ? { color: '#facc15', borderColor: '#854d0e' } as React.CSSProperties :
                            card.specialEffect.type === 'score' ? { color: '#c084fc', borderColor: '#6b21a8' } as React.CSSProperties :
                            undefined
                          }
                     >
-                        {card.specialEffect.value}
+                        {card.specialEffect.type === 'mult' ? formatChipMultiplier(card.specialEffect.value) : card.specialEffect.type === 'chip' ? Math.abs(card.specialEffect.value) : card.specialEffect.value}
                     </div>
                 )}
             </div>
@@ -241,7 +246,7 @@ export const DeckView: React.FC<DeckViewProps> = ({
                                     className={`${styles.effectButton} ${selectedEnhancement?.type === 'mult' && selectedEnhancement.value === val ? styles.selected : ''}`}
                                     onClick={() => setSelectedEnhancement({ type: 'mult', value: val })}
                                 >
-                                    x{val}
+                                    {formatChipMultiplier(val)}
                                 </button>
                             ))}
                         </div>

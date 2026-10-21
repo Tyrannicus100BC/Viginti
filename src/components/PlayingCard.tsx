@@ -1,3 +1,4 @@
+import { formatCash, formatChipMultiplier, formatMultPercent } from '../logic/formatters';
 import React from 'react';
 import type { Card as CardType, CardOrigin } from '../types';
 import styles from './Card.module.css';
@@ -137,6 +138,8 @@ export const PlayingCard: React.FC<CardProps> = ({
   const animClass = getAnimClass();
 
   const isRed = card.suit === 'hearts' || card.suit === 'diamonds';
+  const isNegativeValue = card.type === 'chip' && (card.chips ?? 0) < 0 || card.type === 'mult' && (card.mult ?? 0) < 0;
+  const isNegativeEffect = card.specialEffect && card.specialEffect.type !== 'score' && card.specialEffect.value < 0;
 
   // If card is face down, we rotate it 180deg.
   // Unless we are currently animating the "DealAndFlip" which handles rotation internally.
@@ -180,6 +183,7 @@ export const PlayingCard: React.FC<CardProps> = ({
           className={`${styles.face} ${styles.front} ${isRed ? styles.red : styles.black}`}
           data-face="front"
           style={
+            isNegativeValue ? { color: '#ff4444', WebkitTextStroke: '2px #7f1d1d', paintOrder: 'stroke fill' } as React.CSSProperties :
             card.type === 'chip' ? { color: '#4ade80', WebkitTextStroke: '2px #166534', paintOrder: 'stroke fill' } as React.CSSProperties :
               card.type === 'mult' ? { color: '#facc15', WebkitTextStroke: '2px #854d0e', paintOrder: 'stroke fill' } as React.CSSProperties :
                 card.type === 'score' ? { color: '#c084fc', WebkitTextStroke: '2px #6b21a8', paintOrder: 'stroke fill' } as React.CSSProperties :
@@ -188,8 +192,8 @@ export const PlayingCard: React.FC<CardProps> = ({
         >
           <div className={styles.cornerTop}>
             <div className={styles.rank}>
-              {card.type === 'chip' ? `$${card.chips}` :
-                card.type === 'mult' ? `x${card.mult}` :
+              {card.type === 'chip' ? formatCash(card.chips ?? 0) :
+                card.type === 'mult' ? formatChipMultiplier(card.mult ?? 0) :
                   card.type === 'score' ? `${card.chips}` :
                     card.rank}
             </div>
@@ -199,8 +203,8 @@ export const PlayingCard: React.FC<CardProps> = ({
           </div>
           <div className={styles.cornerBottom}>
             <div className={styles.rank}>
-              {card.type === 'chip' ? `$${card.chips}` :
-                card.type === 'mult' ? `x${card.mult}` :
+              {card.type === 'chip' ? formatCash(card.chips ?? 0) :
+                card.type === 'mult' ? formatChipMultiplier(card.mult ?? 0) :
                   card.type === 'score' ? `${card.chips}` :
                     card.rank}
             </div>
@@ -216,8 +220,8 @@ export const PlayingCard: React.FC<CardProps> = ({
               <div className={styles.specialEffect}>
                 <div className={styles.specialSymbol}
                   style={{
-                    color: card.specialEffect.type === 'chip' ? '#166534' : card.specialEffect.type === 'mult' ? '#854d0e' : '#6b21a8',
-                    WebkitTextStroke: card.specialEffect.type === 'chip' ? '1px #6ee7b7' : card.specialEffect.type === 'mult' ? '1px #fde047' : '1px #d8b4fe',
+                    color: isNegativeEffect ? '#7f1d1d' : card.specialEffect.type === 'chip' ? '#166534' : card.specialEffect.type === 'mult' ? '#854d0e' : '#6b21a8',
+                    WebkitTextStroke: isNegativeEffect ? '1px #ff7c7c' : card.specialEffect.type === 'chip' ? '1px #6ee7b7' : card.specialEffect.type === 'mult' ? '1px #fde047' : '1px #d8b4fe',
                     fontSize: card.specialEffect.type === 'chip' ? '1.0rem' : undefined
                   }}
                 >
@@ -225,12 +229,12 @@ export const PlayingCard: React.FC<CardProps> = ({
                 </div>
                 <div className={styles.specialValue}
                   style={{
-                    color: card.specialEffect.type === 'chip' ? '#166534' : card.specialEffect.type === 'mult' ? '#854d0e' : '#6b21a8',
-                    WebkitTextStroke: card.specialEffect.type === 'chip' ? '1px #6ee7b7' : card.specialEffect.type === 'mult' ? '1px #fde047' : '1px #d8b4fe',
+                    color: isNegativeEffect ? '#7f1d1d' : card.specialEffect.type === 'chip' ? '#166534' : card.specialEffect.type === 'mult' ? '#854d0e' : '#6b21a8',
+                    WebkitTextStroke: isNegativeEffect ? '1px #ff7c7c' : card.specialEffect.type === 'chip' ? '1px #6ee7b7' : card.specialEffect.type === 'mult' ? '1px #fde047' : '1px #d8b4fe',
                     paintOrder: 'stroke fill'
                   }}
                 >
-                  {card.specialEffect.value}
+                  {card.specialEffect.type === 'mult' ? formatMultPercent(card.specialEffect.value) : card.specialEffect.type === 'chip' ? Math.abs(card.specialEffect.value) : card.specialEffect.value}
                 </div>
               </div>
 
@@ -238,8 +242,8 @@ export const PlayingCard: React.FC<CardProps> = ({
               <div className={styles.specialEffectTopRight}>
                 <div className={styles.specialSymbol}
                   style={{
-                    color: card.specialEffect.type === 'chip' ? '#166534' : card.specialEffect.type === 'mult' ? '#854d0e' : '#6b21a8',
-                    WebkitTextStroke: card.specialEffect.type === 'chip' ? '1px #6ee7b7' : card.specialEffect.type === 'mult' ? '1px #fde047' : '1px #d8b4fe',
+                    color: isNegativeEffect ? '#7f1d1d' : card.specialEffect.type === 'chip' ? '#166534' : card.specialEffect.type === 'mult' ? '#854d0e' : '#6b21a8',
+                    WebkitTextStroke: isNegativeEffect ? '1px #ff7c7c' : card.specialEffect.type === 'chip' ? '1px #6ee7b7' : card.specialEffect.type === 'mult' ? '1px #fde047' : '1px #d8b4fe',
                     fontSize: card.specialEffect.type === 'chip' ? '1.0rem' : undefined
                   }}
                 >
@@ -247,12 +251,12 @@ export const PlayingCard: React.FC<CardProps> = ({
                 </div>
                 <div className={styles.specialValue}
                   style={{
-                    color: card.specialEffect.type === 'chip' ? '#166534' : card.specialEffect.type === 'mult' ? '#854d0e' : '#6b21a8',
-                    WebkitTextStroke: card.specialEffect.type === 'chip' ? '1px #6ee7b7' : card.specialEffect.type === 'mult' ? '1px #fde047' : '1px #d8b4fe',
+                    color: isNegativeEffect ? '#7f1d1d' : card.specialEffect.type === 'chip' ? '#166534' : card.specialEffect.type === 'mult' ? '#854d0e' : '#6b21a8',
+                    WebkitTextStroke: isNegativeEffect ? '1px #ff7c7c' : card.specialEffect.type === 'chip' ? '1px #6ee7b7' : card.specialEffect.type === 'mult' ? '1px #fde047' : '1px #d8b4fe',
                     paintOrder: 'stroke fill'
                   }}
                 >
-                  {card.specialEffect.value}
+                  {card.specialEffect.type === 'mult' ? formatMultPercent(card.specialEffect.value) : card.specialEffect.type === 'chip' ? Math.abs(card.specialEffect.value) : card.specialEffect.value}
                 </div>
               </div>
             </>

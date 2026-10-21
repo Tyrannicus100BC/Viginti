@@ -75,7 +75,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
         type: 'message',
         display: {
             id: 'welcome',
-            text: "Welcome to Viginti\n\nPay the Cash Ante to Deal\nOpen a Free Pack Every Ante Increase",
+            text: "Welcome to Viginti\n\nPay the Cash Ante to Deal\nComplete Challenges to Earn Free Packs",
             completionType: 'click',
             scrim: 'none',
             blockInput: true,
@@ -231,7 +231,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
         type: 'message',
         display: {
             id: 'hud_draws',
-            text: "Cash Keeps You Playing\n\nPay the Ante to Deal · It Increases Every Four Rounds",
+            text: "Cash Keeps You Playing\n\nPay the Ante to Deal · Complete Either Main Challenge to Raise It",
             highlight: { elementId: 'hud-ante', type: 'rect', padding: 6 },
             scrim: 'none',
             completionType: 'custom',
@@ -249,7 +249,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
         type: 'message',
         display: {
             id: 'next_casino_after_first_win',
-            text: "Build Your Run with Packs\n\nChoose a Free Pack Every Ante Increase",
+            text: "Build Your Run with Packs\n\nSide Challenges Earn Minor Packs · Main Challenges Earn Major Packs",
             highlight: { elementId: 'hud-ante', type: 'rect', padding: 8 },
             scrim: 'none',
             completionType: 'custom',

@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { PACKS, type PackId } from '../logic/packs';
-import { getRelicRarityFrameColor } from '../logic/relics/rarity';
+import { PACKS, PACK_FAMILIES, PACK_QUALITY_LABELS, describePackChoices, type PackId } from '../logic/packs';
 import { useGameBridge } from '../store/gameBridge';
-import { RaisePackArt } from './RaisePackArt';
+import { PACK_FAMILY_COLORS, PACK_FAMILY_LABELS, RaisePackArt } from './RaisePackArt';
 import styles from './DebugPacks.module.css';
 
 export function DebugPacks({ onClose }: { onClose: () => void }) {
@@ -52,16 +51,16 @@ export function DebugPacks({ onClose }: { onClose: () => void }) {
                 <button className={styles.close} aria-label="Close debug packs" onClick={onClose}>×</button>
             </header>
             <div className={styles.families}>
-                {(['raise', 'deck', 'relic'] as const).map(family => <section key={family}>
-                    <h3>{family === 'raise' ? 'Raises' : family === 'deck' ? 'Deck Upgrades' : 'Relics'}</h3>
+                {PACK_FAMILIES.map(family => <section key={family}>
+                    <h3>{PACK_FAMILY_LABELS[family]} Packs</h3>
                     <div className={styles.packs}>
                         {PACKS.filter(pack => pack.family === family).map(pack => <button
                             key={pack.id} type="button" disabled={processing}
-                            className={styles.pack} aria-label={`Open ${pack.name} (debug)`}
-                            style={{ '--pack-color': getRelicRarityFrameColor(pack.rarity) } as CSSProperties}
+                            className={styles.pack} aria-label={`Open ${pack.name}, ${describePackChoices(pack)} (debug)`}
+                            style={{ '--pack-color': PACK_FAMILY_COLORS[family] } as CSSProperties}
                             onClick={() => void open(pack.id)}>
                             <RaisePackArt family={family} />
-                            <strong>{pack.name}</strong>
+                            <strong>{PACK_QUALITY_LABELS[pack.quality]} choices</strong>
                             <span>Choose {pack.pickCount} of {pack.offerCount}</span>
                         </button>)}
                     </div>

@@ -1,3 +1,5 @@
+import { getRaise } from '../../logic/handScoring';
+import { getChallengeCard } from '../../logic/challengeCards';
 import { describe, expect, it } from 'vitest';
 import { createInitialState, getValidActions, processAction } from '../engine';
 import type { GameState } from '../GameState';
@@ -24,13 +26,14 @@ describe('Card packs', () => {
     it('offers three different pack families reproducibly', () => {
         for (let seed = 1; seed <= 60; seed++) {
             const state = shop(seed);
-            expect(state.offeredPacks.map(id => getPackDefinition(id).family)).toEqual(['raise', 'deck', 'relic']);
+            expect(state.offeredPacks).toHaveLength(3);
+            expect(new Set(state.offeredPacks.map(id => getPackDefinition(id).family)).size).toBe(3);
             expect(shop(seed)).toEqual(state);
         }
     });
 
     it.each(PACKS.filter(pack => pack.family !== 'raise'))('completes $name with resumable choices', pack => {
-        const { initial, state: opened } = open(pack.id);
+        const { state: opened } = open(pack.id);
         let state = opened;
         expect(state.cash).toBe(1000);
         expect(state.pendingPackChoices).toHaveLength(pack.offerCount);
@@ -48,11 +51,15 @@ describe('Card packs', () => {
             state = act(loaded, { type: 'choose_pack_card', cardId });
             expect(state.rngState).toBe(previous.rngState);
             expect(state.cash).toBe(1000);
-            if (pack.family === 'deck') {
+            if (getPackCard(cardId)) {
                 expect(state.deckProbabilities).toEqual(applyPackCard(previous.deckProbabilities, getPackCard(cardId)!));
-                expect(state.inventory).toEqual(initial.inventory);
+                expect(state.inventory).toEqual(previous.inventory);
+            } else if (getRaise(cardId)) {
+                expect(state.handUpgrades[cardId]).toBe((previous.handUpgrades[cardId] ?? 0) + 1);
+            } else if (getChallengeCard(cardId)) {
+                expect(state.challenges.at(-1)).toEqual(getChallengeCard(cardId)!.challenge);
             } else {
-                expect(state.inventory).toHaveLength(pick + 1);
+                expect(state.inventory).toHaveLength(previous.inventory.length + 1);
                 expect(state.inventory.at(-1)).toEqual({ id: cardId, state: RelicManager.getRelicConfig(cardId)?.properties ?? {} });
             }
             expect(state.pendingPackChoices).not.toContain(cardId);

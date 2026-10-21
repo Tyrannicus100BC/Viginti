@@ -10,8 +10,8 @@ export const RELIC_RARITY_STYLES: Record<RelicRarity, { frame: string; text: str
         text: '#ffd700'
     },
     Rare: {
-        frame: 'rgba(155, 89, 182, 0.8)',
-        text: '#9b59b6'
+        frame: 'rgba(145, 72, 181, 0.8)',
+        text: '#9148b5'
     }
 };
 

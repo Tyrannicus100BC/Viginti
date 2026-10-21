@@ -5,7 +5,7 @@
 .header h2 span { font-size: 17px; font-weight: 500; color: #a9c6db; }
 .header p { margin: 0; color: #a9c6db; font-size: 15px; }
 .close { display: grid; place-items: center; padding: 0; line-height: 1; flex-shrink: 0; border: 1px solid #526477; border-radius: 7px; background: transparent; color: #c6d9e8; font-size: 26px; width: 36px; height: 36px; cursor: pointer; }
-.families { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+.families { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
 .families h3 { margin: 0 0 14px; color: #c6d9e8; text-transform: uppercase; font-size: 12px; letter-spacing: 2px; }
 .packs { display: grid; gap: 12px; }
 .pack { display: grid; grid-template-columns: 44px minmax(0, 1fr); column-gap: 12px; row-gap: 8px; align-items: center; text-align: left; padding: 16px 14px; border: 1px solid var(--pack-color); border-radius: 10px; background: linear-gradient(135deg, #2c4053, #172533); color: #ecf0f1; font: inherit; cursor: pointer; transition: background 150ms, box-shadow 150ms; }

@@ -1,3 +1,4 @@
+import { formatMultPercent } from '../logic/formatters';
 import React from 'react';
 import { useGameStore } from '../store/gameStore';
 import styles from './RunningTotal.module.css';
@@ -11,12 +12,12 @@ export const RunningTotal: React.FC = () => {
         <div className={styles.container}>
             <div className={styles.item}>
                 <span className={styles.label}>Chips</span>
-                <span className={`${styles.value} ${styles.chips}`}>{runningSummary.chips}</span>
+                <span className={`${styles.value} ${styles.chips}`} style={runningSummary.chips < 0 ? { color: '#ff4444' } : undefined}>{Math.abs(runningSummary.chips)}</span>
             </div>
             <div className={styles.x}>X</div>
             <div className={styles.item}>
                 <span className={styles.label}>Mult</span>
-                <span className={`${styles.value} ${styles.mult}`}>{runningSummary.mult.toFixed(1)}</span>
+                <span className={`${styles.value} ${styles.mult}`} style={runningSummary.mult < 0 ? { color: '#ff4444' } : undefined}>{formatMultPercent(runningSummary.mult)}</span>
             </div>
         </div>
     );

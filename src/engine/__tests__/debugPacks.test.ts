@@ -36,10 +36,11 @@ describe('debug pack opening', () => {
         expect(state.cash).toBe(before.cash);
         expect(state.ante).toBe(before.ante);
         expect(state.dealsTaken).toBe(before.dealsTaken);
-        expect(state.handsUntilAnteIncrease).toBe(before.handsUntilAnteIncrease);
+        expect(state.challenges).toEqual(selected.challenges);
         expect(state.inventory).toEqual(selected.inventory);
         expect(state.handUpgrades).toEqual(selected.handUpgrades);
         expect(state.deckProbabilities).toEqual(selected.deckProbabilities);
+        if (pack.family === 'challenge') expect(state.challenges).toHaveLength(before.challenges.length + pack.pickCount);
         if (pack.family === 'relic') expect(state.inventory).toHaveLength(pack.pickCount);
         if (pack.family === 'raise') expect(Object.keys(state.handUpgrades)).toHaveLength(pack.pickCount);
         if (pack.family === 'deck') expect(state.deckProbabilities).not.toEqual(before.deckProbabilities);
@@ -70,7 +71,7 @@ describe('debug pack opening', () => {
         expect(returned.offeredPacks).toEqual(before.offeredPacks);
         expect(returned.packReturnPhase).toBe(before.packReturnPhase);
         expect(returned.debugPackReturn).toBeNull();
-        expect(getValidActions(returned)).toEqual(before.offeredPacks.map(packId => ({ type: 'open_pack', packId })));
+        expect(getValidActions(returned)).toEqual([...before.offeredPacks.map(packId => ({ type: 'open_pack', packId })), { type: 'skip_pack' }]);
         expect(finishOpeningPack(returned).phase).toBe('entering_casino');
     });
 
@@ -86,7 +87,7 @@ describe('debug pack opening', () => {
         state = act(state, { type: 'choose_raise', raiseId: id });
         state = act(state, { type: 'finish_pack' });
         expect(state).toMatchObject({ phase: 'playing', cash: before.cash,
-            dealsTaken: before.dealsTaken, ante: before.ante, handsUntilAnteIncrease: before.handsUntilAnteIncrease,
+            dealsTaken: before.dealsTaken, ante: before.ante, challenges: before.challenges,
             selectedDrawIndex: before.selectedDrawIndex, interactionMode: 'select_hand', activeTableActionId: 'hold' });
         expect(state.playerHands).toEqual(before.playerHands);
         expect(state.dealer).toEqual(before.dealer);
@@ -100,7 +101,7 @@ describe('debug pack opening', () => {
             state = act(state, { type: 'debug_open_pack', packId: pack.id });
             state = act(state, { type: 'skip_pack' });
             state = act(state, { type: 'finish_pack' });
-            expect(state).toMatchObject({ phase: 'deal_over', cash: 100, ante: 50, dealsTaken: 0, handsUntilAnteIncrease: 4 });
+            expect(state).toMatchObject({ phase: 'deal_over', cash: 100, ante: 50, dealsTaken: 0 });
             expect(getValidActions(state)).toEqual([{ type: 'deal' }]);
         }
     });

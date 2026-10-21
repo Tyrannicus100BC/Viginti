@@ -4,7 +4,6 @@ import { HAND_TYPES, getHandPayout, getHandRaiseChanges, formatRaiseCash, format
 import styles from './HandScores.module.css';
 import { HandIcon } from './HandIcon';
 
-const cash = (amount: number) => `${amount < 0 ? '−' : ''}$${Math.abs(amount)}`;
 type ScoreRow = Omit<ReturnType<typeof getHandPayout>, 'id'> & { id: string; handTypeId: HandTypeId };
 
 function HandScoreRow({ hand, upgrades }: { hand: ScoreRow; upgrades: HandUpgrades }) {
@@ -64,8 +63,8 @@ function HandScoreRow({ hand, upgrades }: { hand: ScoreRow; upgrades: HandUpgrad
         onMouseEnter={open} onMouseLeave={close} onFocus={open} onBlur={close}>
         <HandIcon icon={hand.icon} className={styles.icon} />
         <h3>{hand.name}</h3>
-        <strong className={`${styles.cash} ${hand.chips < 0 ? styles.isNegative : ''}`} aria-label={`${cash(hand.chips)} cash`}>{cash(hand.chips)}</strong>
-        <strong className={styles.mult + (hand.mult < 0 ? ' ' + styles.isNegative : '')} aria-label={formatRaiseMult(hand.mult)}>{formatRaiseMult(hand.mult)}</strong>
+        <strong className={`${styles.cash} ${hand.chips < 0 ? styles.isNegative : ''}`} aria-label={`${formatRaiseCash(hand.chips, true)} cash`}>{formatRaiseCash(hand.chips)}</strong>
+        <strong className={styles.mult + (hand.mult < 0 ? ' ' + styles.isNegative : '')} aria-label={formatRaiseMult(hand.mult, true)}>{formatRaiseMult(hand.mult)}</strong>
         {showTooltip && createPortal(<div ref={tooltip} id={tooltipId} role="tooltip"
             className={styles.raiseTooltip} style={position} onMouseEnter={cancelClose} onMouseLeave={close}>
             <strong className={styles.tooltipTitle}>{hand.name} Raises</strong>

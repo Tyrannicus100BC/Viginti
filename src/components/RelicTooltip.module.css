@@ -188,3 +188,8 @@
     z-index: 2;
     pointer-events: none;
 }
+
+.cardIcon { width: 60px; height: 60px; border-radius: 14px; }
+.cardIcon .placeholderIcon { font-size: 32px; }
+.cardDescription { font-size: 13px; }
+.cardDescription :is(.chipsValue, .multValue, .negativeValue) { white-space: normal; }
