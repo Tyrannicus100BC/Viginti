@@ -8,8 +8,8 @@ import styles from './ChallengeBoard.module.css';
 function ChallengeTooltip({ challenge, id, offset }: { challenge: Challenge; id: string; offset: number }) {
     const tier = challenge.rewardTier ?? (challenge.main ? 'major' : 'minor');
     const description = challenge.main
-        ? 'Complete either Main for a major pack.\nAnte and goals update after all packs.'
-        : `Complete for a ${tier} pack.\n${challenge.source === 'pack' ? 'This extra goal carries across ante changes.' : 'Keep the ante and other goal progress.'}`;
+        ? 'Survive four rounds for a major pack.\nThe ante increases after rewards.'
+        : `Complete for a ${tier} pack.\n${challenge.source === 'pack' ? 'This extra goal carries across ante changes.' : 'Your next challenge appears after collecting the reward and returning to the table.'}`;
     return <div id={id} role="tooltip"
         className={`${tooltipStyles.container} ${tooltipStyles.containerHorizontal} ${styles.tooltip} ${challenge.main ? styles.main : ''}`}
         style={{ top: Math.max(-11, offset - 11) }}>
@@ -30,7 +30,12 @@ function ChallengeTooltip({ challenge, id, offset }: { challenge: Challenge; id:
 }
 
 export function ChallengeBoard() {
-    const challenges = useGameBridge(state => state.challenges);
+    const allChallenges = useGameBridge(state => state.challenges);
+    // Retain the completed goal's row until the reward queue returns to the table.
+    // Replacement goals can accrue progress internally while that row is still present.
+    const pendingReplacements = new Set(allChallenges.filter(challenge => challenge.completed)
+        .map(challenge => `${challenge.id}-next`));
+    const challenges = allChallenges.filter(challenge => !pendingReplacements.has(challenge.id));
     const rewards = useGameBridge(state => state.challengeRewards);
     const departed = useGameBridge(state => state.departedChallengeIds);
     const openedRewardId = useGameBridge(state => state.pendingPack && !state.gameState.debugPackReturn ? state.challengeRewards[0]?.id : null);

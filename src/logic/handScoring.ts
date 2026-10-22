@@ -250,7 +250,7 @@ export function getHandPayout(id: HandTypeId, upgrades: HandUpgrades = {}) {
     } : undefined };
 }
 
-export function evaluateBaseHands(cards: Card[], isWin: boolean, blackjackValue: number, outcome?: 'win' | 'loss' | 'bust' | 'push' | null, upgrades: HandUpgrades = {}): ScoringDetail[] {
+export function evaluateBaseHands(cards: Card[], isWin: boolean, blackjackValue: number, outcome?: 'win' | 'loss' | 'bust' | 'push' | null, upgrades: HandUpgrades = {}, bustLimit = 21): ScoringDetail[] {
     if (!cards.length) return [];
     const criteria: ScoringDetail[] = [];
     const add = (id: HandTypeId, group: Card[], variant?: 'viginti' | 'bust') => {
@@ -264,19 +264,26 @@ export function evaluateBaseHands(cards: Card[], isWin: boolean, blackjackValue:
             cardIds: group.map(card => card.id),
         });
     };
-    if (blackjackValue > 21 || outcome === 'bust') add('loss', cards, 'bust');
+    if (blackjackValue > bustLimit || outcome === 'bust') add('loss', cards, 'bust');
     else if (isWin) add('win', cards, blackjackValue === 21 ? 'viginti' : undefined);
     else if (outcome === 'loss') add('loss', cards);
 
+    for (const pattern of getHandPatterns(cards)) add(pattern.id, pattern.cards);
+    return criteria;
+}
+
+/** Match card patterns independently of outcome, upgrades, or scoring bonuses. */
+export function getHandPatterns(cards: readonly Card[]): { id: 'pair' | 'straight' | 'flush'; cards: Card[] }[] {
+    const patterns: { id: 'pair' | 'straight' | 'flush'; cards: Card[] }[] = [];
     const standard = cards.filter(card => !card.type || card.type === 'standard');
     for (let i = 0; i < standard.length; i++) {
         for (let j = i + 1; j < standard.length; j++) {
-            if (standard[i].rank === standard[j].rank) add('pair', [standard[i], standard[j]]);
+            if (standard[i].rank === standard[j].rank) patterns.push({ id: 'pair', cards: [standard[i], standard[j]] });
         }
     }
     for (const suit of ['hearts', 'diamonds', 'clubs', 'spades']) {
         const group = standard.filter(card => card.suit === suit);
-        if (group.length >= 2) add('flush', group);
+        if (group.length >= 2) patterns.push({ id: 'flush', cards: group });
     }
     const runs = new Map<string, Card[]>();
     for (const lowAce of [false, true]) {
@@ -296,7 +303,7 @@ export function evaluateBaseHands(cards: Card[], isWin: boolean, blackjackValue:
     }
     const allRuns = [...runs.values()];
     for (const run of allRuns) {
-        if (!allRuns.some(other => other.length > run.length && run.every(card => other.some(candidate => candidate.id === card.id)))) add('straight', run);
+        if (!allRuns.some(other => other.length > run.length && run.every(card => other.some(candidate => candidate.id === card.id)))) patterns.push({ id: 'straight', cards: run });
     }
-    return criteria;
+    return patterns;
 }

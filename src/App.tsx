@@ -1,6 +1,9 @@
+import type { RelicInstance } from './logic/relics/types';
+import { getBoss, getBustLimit } from './engine/bosses';
 import { canPlayHand } from './engine/economy';
 import React, { useState, useRef, useEffect } from 'react';
 import styles from './App.module.css';
+import { useGameBridge } from './store/gameBridge';
 import { useGameStore } from './store/gameStore';
 import { fireConfetti } from './utils/confetti';
 import { PlayingCard } from './components/PlayingCard';
@@ -163,6 +166,8 @@ export default function App() {
         challengeRewards,
         toggleDebug,
         triggerDebugChips,
+        debugAdvanceRound,
+        debugAdvanceAnte,
         cardsPlacedThisTurn,
         getProjectedPlaceCount,
 
@@ -193,8 +198,12 @@ export default function App() {
         deckProbabilities,
     } = useGameStore();
 
-    const { scale, viewportWidth, viewportHeight } = useLayout();
+    const { scale, viewportWidth, viewportHeight, referencePanelsFit: canDockReferencePanels } = useLayout();
 
+    const anteNumber = useGameBridge(state => state.gameState.challengeStage + 1);
+    const boss = useGameBridge(state => getBoss(state.gameState));
+    const bustLimit = useGameBridge(state => getBustLimit(state.gameState));
+    const passiveRelicCount = inventory.filter((instance: RelicInstance) => !RelicManager.getRelicConfig(instance.id)?.tableAction).length;
     const tableActionSlots = inventory.flatMap(instance => {
         const config = RelicManager.getRelicConfig(instance.id);
         if (!config?.tableAction) return [];
@@ -214,6 +223,30 @@ export default function App() {
     const [showDebugLog, setShowDebugLog] = useState(false);
     const [showDebugLoad, setShowDebugLoad] = useState(false);
     const [isSelectingDebugCard, setIsSelectingDebugCard] = useState(false);
+    const [deckDockOpen, setDeckDockOpen] = useState(true);
+    const [handScoresDockOpen, setHandScoresDockOpen] = useState(true);
+    const deckIsOpen = showDeck || (canDockReferencePanels && deckDockOpen);
+    const handScoresIsOpen = canDockReferencePanels ? handScoresDockOpen : showHandScores;
+
+    const closeDeck = () => {
+        playClickDown();
+        setShowDeck(false);
+        setIsSelectingDebugCard(false);
+        if (canDockReferencePanels) setDeckDockOpen(false);
+    };
+    const closeHandScores = () => {
+        playClickDown();
+        setShowHandScores(false);
+        if (canDockReferencePanels) setHandScoresDockOpen(false);
+    };
+
+    const [referencePanelsWereDocked, setReferencePanelsWereDocked] = useState(canDockReferencePanels);
+    // Collapse temporary popups on resize, retaining each dock's open/closed preference.
+    if (referencePanelsWereDocked !== canDockReferencePanels) {
+        setReferencePanelsWereDocked(canDockReferencePanels);
+        setShowHandScores(false);
+        if (!isSelectingDebugCard) setShowDeck(false);
+    }
     const [swapAnimation, setSwapAnimation] = useState<SwapAnimation | null>(null);
     const [holdPickupAnimation, setHoldPickupAnimation] = useState<HoldPickupAnimation | null>(null);
     const [hiddenDrawCardIds, setHiddenDrawCardIds] = useState<string[]>([]);
@@ -1021,7 +1054,7 @@ export default function App() {
     const hasPlayableHandForActions = playerHands.some(h => !h.isBust && !h.isHeld && h.blackjackValue !== 21 && h.cards.length > 0);
     const hasSurrenderTarget = playerHands.some(h => !h.isBust && !h.isHeld && h.blackjackValue !== 21 && h.cards.length > 0);
     const hasDiscardPlayerTargets = playerHands.some(h => !h.isBust && h.blackjackValue !== 21 && h.cards.length > 0);
-    const hasDiscardDealerTargets = hasDealerFaceUpCard && dealer.blackjackValue < 21;
+    const hasDiscardDealerTargets = hasDealerFaceUpCard && dealer.blackjackValue < bustLimit;
     const hasHoldPlacementTargets = playerHands.some(h => canPlayHand(h));
     const hasSwitchTargets = hasDealerFaceUpCard && playerHands.some(h => !h.isBust && h.blackjackValue !== 21 && h.cards.length > 0);
     const dealerSelectableCardIds = (interactionMode === 'select_card' && activeTableActionId === 'discard' && hasDiscardDealerTargets)
@@ -1347,13 +1380,14 @@ export default function App() {
         id: -1,
         cards: dealer.cards,
         isHeld: true,
-        isBust: dealer.blackjackValue > 21,
+        isBust: dealer.blackjackValue > bustLimit,
         blackjackValue: dealer.blackjackValue
     };
 
     // Click anywhere to draw a card or advance to next deal
     const handleGlobalClick = (e: React.MouseEvent) => {
-        if (showDeck || showHandScores || showRelicStore || showDebugPacks) return;
+        if ((!canDockReferencePanels && (showDeck || showHandScores)) ||
+            (showDeck && isSelectingDebugCard) || showRelicStore || showDebugPacks) return;
         if (isTutorialInputLocked()) return;
 
         // Ignore clicks on buttons or interactive elements
@@ -1388,8 +1422,8 @@ export default function App() {
     const scoringOffset = 150;
 
     // Apply the offset based on whether total winnings are displayed
-    // Match PhysicsPot's visibility threshold, including the smallest 5% bonus.
-    const hasMult = !!runningSummary && runningSummary.mult > 1;
+    // Match PhysicsPot: only the neutral 100% multiplier is hidden.
+    const hasMult = !!runningSummary && runningSummary.mult !== 1;
     const currentPotOffset = hasMult ? (isTotalWinningsVisible ? scoringOffset : defaultOffset) : 0;
     const currentPotY = POT_TOP_Y + (isTotalWinningsVisible ? 80 : 0);
 
@@ -1424,9 +1458,14 @@ export default function App() {
         >
             <div className={styles.topNavContainer}>
 
-                <HandScoresButton onClick={() => {
+                <HandScoresButton expanded={handScoresIsOpen} onClick={() => {
+                        if (handScoresIsOpen) {
+                            closeHandScores();
+                            return;
+                        }
                         playClick();
-                        setShowHandScores(true);
+                        if (canDockReferencePanels) setHandScoresDockOpen(true);
+                        else setShowHandScores(true);
                     }} />
 
 
@@ -1436,7 +1475,15 @@ export default function App() {
                     style={isOverlayMode ? { top: 460 } : {}}
                 >
                     <div id="hud-round" className={styles.stat}>
-                        <span className={styles.statLabel}>Round</span>
+                        <span className={styles.statLabel}>
+                            {debugEnabled && !isOverlayMode ? <button type="button"
+                                className={`${styles.manageDebugBtn} ${styles.hudDebugButton}`}
+                                aria-label="Debug: advance round" title="Advance one round (debug)"
+                                disabled={isProcessingEvents || !!pendingPack || !!debugPackReturn ||
+                                    !['entering_casino', 'playing', 'deal_over'].includes(phase)}
+                                onClick={event => { event.stopPropagation(); debugAdvanceRound(); }}
+                            >Round</button> : 'Round'}
+                        </span>
                         <span className={styles.statValue}>
                             {dealsTaken.toLocaleString()}
                         </span>
@@ -1444,24 +1491,39 @@ export default function App() {
                     <div id="hud-cash" className={styles.stat}>
                         <span className={styles.statLabel}>
                             {debugEnabled && !isOverlayMode ? <button
-                                className={`${styles.manageDebugBtn} ${styles.cashDebugButton}`}
-                                aria-label="Debug: add one third of the cash challenge target" title="Add ⅓ of the cash goal, rounded up (debug)"
+                                className={`${styles.manageDebugBtn} ${styles.hudDebugButton}`}
+                                aria-label="Debug: add cash" title="Add cash (debug)"
                                 onClick={event => { event.stopPropagation(); triggerDebugChips(); }}
                             >Cash</button> : 'Cash'}
                         </span>
                         <span className={styles.statValue}>${cash.toLocaleString()}</span>
                     </div>
                     <div id="hud-ante" className={styles.stat}>
-                        <span className={styles.statLabel}>Ante</span>
+                        <span className={styles.statLabel}>
+                            {debugEnabled && !isOverlayMode ? <button type="button"
+                                className={`${styles.manageDebugBtn} ${styles.hudDebugButton}`}
+                                aria-label="Debug: advance ante" title="Advance to the next ante (debug)"
+                                disabled={isProcessingEvents || !!pendingPack || !!debugPackReturn ||
+                                    !['entering_casino', 'playing', 'deal_over'].includes(phase)}
+                                onClick={event => { event.stopPropagation(); debugAdvanceAnte(); }}
+                            >{boss ? `Boss Ante ${anteNumber}` : 'Ante'}</button> : boss ? `Boss Ante ${anteNumber}` : 'Ante'}
+                        </span>
                         <span className={styles.statValue}>${ante.toLocaleString()}</span>
                     </div>
                 </header>
+                {boss && <div className={styles.bossRule} role="status"><strong>{boss.name}</strong> · Bust above {bustLimit}<span>Player & dealer · 4 rounds</span></div>}
 
                 <div className={styles.rightButtons}>
                     <DeckButton 
+                        expanded={deckIsOpen}
                         onClick={() => {
+                            if (deckIsOpen) {
+                                closeDeck();
+                                return;
+                            }
                             playClick();
-                            setShowDeck(true);
+                            if (canDockReferencePanels) setDeckDockOpen(true);
+                            else setShowDeck(true);
                         }} 
                         className={isReshuffling ? styles.reshuffleAnim : ''}
                         title={isReshuffling ? "Reshuffling..." : "Deck"}
@@ -1537,10 +1599,10 @@ export default function App() {
                         <div className={styles.sidebarHeading}>
                             {debugEnabled ? <button type="button"
                                 className={`${styles.zoneLabel} ${styles.manageDebugBtn} ${styles.headingDebugButton}`}
-                                aria-label={`Manage relics, ${inventory.length} of ${relicSlots}`}
+                                aria-label={`Manage relics, ${passiveRelicCount} of ${relicSlots}`}
                                 onClick={event => { event.stopPropagation(); setShowRelicStore(true); }}
-                            >Relics {inventory.length} of {relicSlots}</button> :
-                                <span className={styles.zoneLabel}>Relics {inventory.length} of {relicSlots}</span>}
+                            >Relics {passiveRelicCount} of {relicSlots}</button> :
+                                <span className={styles.zoneLabel}>Relics {passiveRelicCount} of {relicSlots}</span>}
                         </div>
                         <RelicInventory inventoryKind="left" />
                     </div>
@@ -2021,7 +2083,7 @@ export default function App() {
 
             </div>
 
-            {showDeck && (
+            {deckIsOpen && (
                 isSelectingDebugCard ? (
                     <ChooseCardView
                         onClose={() => {
@@ -2037,18 +2099,16 @@ export default function App() {
                     />
                 ) : (
                     <DeckView
+                        docked={canDockReferencePanels}
                         probabilities={deckProbabilities}
                         activeCards={activeCards}
-                        onClose={() => {
-                            playClickDown();
-                            setShowDeck(false);
-                        }}
+                        onClose={closeDeck}
                     />
                 )
             )}
 
             {phase === 'pack_choice' && <PackReward key={debugPackReturn ? 'debug-pack' : challengeRewards[0]?.id ?? 'opening-pack'} />}
-            {showHandScores && <HandScores upgrades={handUpgrades} onClose={() => { playClickDown(); setShowHandScores(false); }} />}
+            {handScoresIsOpen && <HandScores docked={canDockReferencePanels} upgrades={handUpgrades} onClose={closeHandScores} />}
 
             {showDebugPacks && <DebugPacks onClose={() => setShowDebugPacks(false)} />}
 

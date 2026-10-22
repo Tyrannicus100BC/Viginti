@@ -26,7 +26,7 @@ describe('relic slots and raise packs', () => {
     });
 
     it.each(PACKS.filter(pack => pack.family === 'raise'))('opens $name for free and applies exactly its allowed picks', pack => {
-        const initial = { ...shop(), offeredPacks: [pack.id] };
+        const initial = { ...shop(), pendingPack: null, pendingPackChoices: [], offeredPacks: [pack.id] };
         let state = act(initial, { type: 'open_pack', packId: pack.id });
         expect(state.pendingRaiseChoices).toHaveLength(pack.offerCount);
         for (let pick = 0; pick < pack.pickCount; pick++) {

@@ -7,7 +7,7 @@ import type { PlayerAction } from '../PlayerAction';
 import { SeededRNG } from '../rng';
 import { TUTORIAL_STEPS } from '../tutorial/definitions';
 import { useGameBridge } from '../../store/gameBridge';
-import { getPackDefinition, PACKS, type PackId } from '../../logic/packs';
+import { PACKS, type PackId } from '../../logic/packs';
 import { applyPackCard, changeProbability, generatePackCard, generatePackCardChoices, getPackCard, type ProbabilityChange } from '../../logic/packCards';
 import { drawCardFromProbabilities } from '../../logic/deck';
 import { RelicManager } from '../../logic/relics/manager';
@@ -18,16 +18,17 @@ const shop = (seed = 17) => act(createInitialState(), {
     globalTutorialsCompleted: TUTORIAL_STEPS.map(step => step.id),
 });
 const open = (packId: PackId, overrides: Partial<GameState> = {}) => {
-    const initial = { ...shop(), cash: 1000, ...overrides, offeredPacks: [packId] };
+    const initial = { ...shop(), cash: 1000, ...overrides, pendingPack: null, pendingRaiseChoices: [], pendingPackChoices: [], offeredPacks: [packId] };
     return { initial, state: act(initial, { type: 'open_pack', packId }) };
 };
 
 describe('Card packs', () => {
-    it('offers three different pack families reproducibly', () => {
+    it('opens the major reward reproducibly', () => {
         for (let seed = 1; seed <= 60; seed++) {
             const state = shop(seed);
-            expect(state.offeredPacks).toHaveLength(3);
-            expect(new Set(state.offeredPacks.map(id => getPackDefinition(id).family)).size).toBe(3);
+            expect(state.offeredPacks).toEqual([]);
+            expect(state.pendingPack?.packId).toBe('mixed_major');
+            expect(state.pendingPackChoices).toHaveLength(6);
             expect(shop(seed)).toEqual(state);
         }
     });
@@ -95,7 +96,7 @@ describe('Card packs', () => {
     });
 
     it('blocks relic choices at capacity and permits skipping, including after filling the last slot', () => {
-        const inventory = RelicManager.getAllRelics().slice(0, 6).map(relic => ({ id: relic.id, state: { ...relic.properties } }));
+        const inventory = RelicManager.getAllRelics().filter(relic => !relic.tableAction).slice(0, 6).map(relic => ({ id: relic.id, state: { ...relic.properties } }));
         const full = open('relic_mega', { inventory }).state;
         expect(full.pendingPackChoices.every(id => !inventory.some(owned => owned.id === id))).toBe(true);
         expect(getValidActions(full)).toEqual([{ type: 'skip_pack' }]);

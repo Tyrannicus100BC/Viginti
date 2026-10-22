@@ -13,7 +13,7 @@ import { getRelicRarityFrameColor, getRelicRarityTextColor } from '../logic/reli
 import { sfxEngine } from '../utils/sfxEngine';
 import { PACK_FAMILY_COLORS, PACK_FAMILY_LABELS, RaisePackArt } from './RaisePackArt';
 import { HandIcon } from './HandIcon';
-import { getPackDefinition, PACK_QUALITY_LABELS, type PackId, type PendingPack } from '../logic/packs';
+import { getPackDefinition, getTargetedPackReward, PACK_QUALITY_LABELS, type PackId, type PendingPack } from '../logic/packs';
 import { useLayout } from './ResponsiveLayout';
 import styles from './RaisePackChoice.module.css';
 
@@ -75,11 +75,15 @@ function PackReveal({ choices, pendingPack, sourceRect, onComplete }: {
     const [stage, setStage] = useState<RevealStage>('growing');
     const [selected, setSelected] = useState<string | null>(null);
     const [offers, setOffers] = useState<readonly string[] | null>(null);
-    const { viewportWidth } = useLayout();
+    const { idealWidth, referencePanelsFit } = useLayout();
     const inventory = useGameBridge(state => state.inventory);
     const relicSlots = useGameBridge(state => state.relicSlots);
     const definition = useRef(getPackDefinition(pendingPack?.packId ?? sourceRect?.packId)).current;
-    const familyLabel = PACK_FAMILY_LABELS[definition.family];
+    const progressionPack = useGameBridge(state => !state.gameState.debugPackReturn);
+    const familyLabel = definition.id === 'relic_boss' ? 'Table Action' : PACK_FAMILY_LABELS[definition.family];
+    const rewardTitle = definition.id === 'mixed_major' ? 'Major Reward'
+        : definition.id === 'mixed_minor' ? 'Minor Reward'
+        : definition.id === 'relic_boss' ? 'Boss Reward' : definition.name;
     const picksRemaining = pendingPack?.picksRemaining ?? 1;
     const [finishing, setFinishing] = useState(false);
     const scene = useRef<HTMLDivElement>(null);
@@ -199,7 +203,7 @@ function PackReveal({ choices, pendingPack, sourceRect, onComplete }: {
         sfxEngine.play('cardPlace');
         const card = cards.current.get(id)!;
         const button = isRelic
-            ? document.querySelector<HTMLElement>(`[aria-label="Empty relic slot ${inventory.length + 1}"]`)
+            ? document.querySelector<HTMLElement>(`[aria-label="Empty relic slot ${inventory.filter(instance => !RelicManager.getRelicConfig(instance.id)?.tableAction).length + 1}"]`)
             : document.getElementById(isRaise ? 'hand-scores-button' : getChallengeCard(id) ? 'challenges-label' : 'deck-view-button');
         let flightCard = card;
         try {
@@ -265,6 +269,7 @@ function PackReveal({ choices, pendingPack, sourceRect, onComplete }: {
             await useGameBridge.getState().dispatch(definition.family === 'raise' ? { type: 'choose_raise', raiseId: id } : { type: 'choose_pack_card', cardId: id });
             const bridge = useGameBridge.getState();
             if ([...bridge.pendingRaiseChoices, ...bridge.pendingPackChoices].includes(id)) throw new Error('Pack selection was not accepted');
+            if (getTargetedPackReward(id) && bridge.pendingPack) return;
             if (lastPick) {
                 complete.current();
             } else {
@@ -305,7 +310,9 @@ function PackReveal({ choices, pendingPack, sourceRect, onComplete }: {
     // Let the burst finish naturally even when the cards become selectable.
     const showSparks = stage !== 'growing';
     const showChoices = stage === 'revealing' || stage === 'ready' || stage === 'flying' || stage === 'received';
-    return <div ref={scene} className={styles.scene} data-pack-stage={stage} onClick={event => event.stopPropagation()}>
+    return <div ref={scene} className={styles.scene} data-pack-stage={stage}
+        style={referencePanelsFit ? { left: '50%', width: idealWidth, transform: 'translateX(-50%)' } : undefined}
+        onClick={event => event.stopPropagation()}>
         <div className={`${styles.spotlight} ${finishing ? styles.fadeOut : ''}`} aria-hidden="true" />
         <div className={styles.packPosition}>
             <div ref={pack} className={`${styles.openingPack} ${stage === 'charging' ? styles.chargingPack : ''}`}
@@ -313,9 +320,9 @@ function PackReveal({ choices, pendingPack, sourceRect, onComplete }: {
                 <div className={styles.packSeal} />
                 <span className={styles.openingIdentity}>
                     <RaisePackArt family={definition.family} sparkles />
-                    <strong>{familyLabel} Pack</strong>
+                    <strong>{progressionPack ? definition.name : `${familyLabel} Pack`}</strong>
                 </span>
-                <span className={styles.packDetails}>Choose {definition.pickCount} of {definition.offerCount}<strong>{PACK_QUALITY_LABELS[definition.quality]} choices</strong></span>
+                <span className={styles.packDetails}>Choose {definition.pickCount} of {definition.offerCount}{!progressionPack && <strong>{PACK_QUALITY_LABELS[definition.quality]} choices</strong>}</span>
                 <span className={styles.packBrand}>VIGINTI</span>
             </div>
             {showSparks && !reducedMotion && <div
@@ -338,13 +345,13 @@ function PackReveal({ choices, pendingPack, sourceRect, onComplete }: {
                 })}
             </div>}
         </div>
-        <section className={`${styles.choices} ${finishing ? styles.dismissedChoices : ''} ${definition.offerCount === 5 ? viewportWidth >= 1180 ? styles.fiveWide : styles.fiveCompact : ''}`} role="region" tabIndex={-1} aria-labelledby="raise-pack-title" aria-busy={stage !== 'ready'}>
+        <section className={`${styles.choices} ${definition.offerCount > 3 ? styles.multiRowChoices : ''} ${definition.offerCount === 2 ? styles.twoChoices : ''} ${finishing ? styles.dismissedChoices : ''} ${definition.offerCount === 5 ? styles.fiveCompact : ''}`} role="region" tabIndex={-1} aria-labelledby="raise-pack-title" aria-busy={stage !== 'ready'}>
             <h2 id="raise-pack-title" className={showChoices ? styles.title : styles.hiddenTitle}>
-                Choose Your {definition.family === 'mixed' ? 'Upgrades' : definition.family === 'deck' ? 'Deck Upgrade' : familyLabel}{definition.family !== 'mixed' && definition.pickCount > 1 ? 's' : ''}
-                <span className={styles.pickCount}>{picksRemaining} {picksRemaining === 1 ? 'choice' : 'choices'} remaining</span>
+                {progressionPack ? rewardTitle : <>Choose Your {definition.family === 'mixed' ? 'Upgrades' : definition.family === 'deck' ? 'Deck Upgrade' : familyLabel}{definition.family !== 'mixed' && definition.pickCount > 1 ? 's' : ''}</>}
+                {(!progressionPack || definition.pickCount > 1) && <span className={styles.pickCount}>{picksRemaining} {picksRemaining === 1 ? 'choice' : 'choices'} remaining</span>}
             </h2>
             <p className={styles.srOnly} aria-live="polite">{stage === 'ready' ? `${choices.length} cards available. ${picksRemaining} ${picksRemaining === 1 ? 'choice' : 'choices'} remaining.` : stage === 'received' ? `${familyLabel} added.` : stage === 'flying' ? `Adding your ${familyLabel.toLowerCase()}.` : `Opening your ${definition.family} pack.`}</p>
-            {(definition.family === 'relic' || definition.family === 'mixed') && inventory.length >= relicSlots && <p className={styles.slotStatus}>
+            {(definition.family === 'relic' || definition.family === 'mixed') && inventory.filter(instance => !RelicManager.getRelicConfig(instance.id)?.tableAction).length >= relicSlots && definition.id !== 'relic_boss' && <p className={styles.slotStatus}>
                 Relic slots full. {definition.family === 'mixed' ? 'Choose another card or skip.' : 'Skip to continue.'}
             </p>}
             <div className={styles.options}>
@@ -353,9 +360,10 @@ function PackReveal({ choices, pendingPack, sourceRect, onComplete }: {
                     const upgrade = getPackCard(id);
                     const relic = RelicManager.getRelicConfig(id);
                     const challenge = getChallengeCard(id);
-                    const card = raise ?? upgrade ?? relic ?? challenge;
+                    const targeted = getTargetedPackReward(id);
+                    const card = raise ?? upgrade ?? relic ?? challenge ?? targeted;
                     if (!card) return null;
-                    const cardFamily = raise ? 'raise' : relic ? 'relic' : challenge ? 'challenge' : 'deck';
+                    const cardFamily = targeted?.family ?? (raise ? 'raise' : relic ? 'relic' : challenge ? 'challenge' : 'deck');
                     const consumed = !choices.includes(id);
                     const blocked = !!relic && !canAcquireRelic(id, inventory, relicSlots);
                     return <div key={id} ref={element => { if (element) options.current.set(id, element); else options.current.delete(id); }}
@@ -368,13 +376,13 @@ function PackReveal({ choices, pendingPack, sourceRect, onComplete }: {
                             aria-label={`Select ${card.name} card, ${card.rarity}`}
                             onClick={() => void choose(id)}
                             className={`${styles.card} ${blocked ? styles.blockedCard : ''} ${(raise?.modifiers.length ?? 0) > 3 ? styles.denseCard : ''}`}>
-                            <span className={styles.rarity} style={{ color: getRelicRarityTextColor(card.rarity) }}>{card.rarity}</span>
-                            <span className={styles.cardBody}>
-                                {raise ? <RaiseCard raise={raise} /> : relic ? <RelicTooltip relic={relic} layout="card" displayValues={relic.properties ?? {}} /> : challenge ? <ChallengeOption card={challenge} /> : <UpgradeCard card={upgrade!} />}
-                            </span>
                             <span className={styles.cardType}>
                                 <RaisePackArt family={cardFamily} />
-                                {PACK_FAMILY_LABELS[cardFamily]}
+                                {targeted ? 'Pack' : relic?.tableAction ? 'Table Action' : PACK_FAMILY_LABELS[cardFamily]}
+                            </span>
+                            <span className={styles.rarity} style={{ color: getRelicRarityTextColor(card.rarity) }}>{targeted ? 'TARGETED PACK' : relic?.tableAction ? 'TABLE ACTION' : card.rarity}</span>
+                            <span className={styles.cardBody}>
+                                {targeted ? <PackCardDetails icon={<RaisePackArt family={targeted.family} sparkles />} name={targeted.name}>{targeted.description}</PackCardDetails> : raise ? <RaiseCard raise={raise} /> : relic ? <RelicTooltip relic={relic} layout="card" displayValues={relic.properties ?? {}} /> : challenge ? <ChallengeOption card={challenge} /> : <UpgradeCard card={upgrade!} />}
                             </span>
                             {blocked && <span className={styles.blockedLabel}>Relic slots full</span>}
                         </button>
@@ -399,5 +407,5 @@ export function RaisePackChoice({ sourceRect, onComplete }: { sourceRect: PackSo
     const choices = upgrades.length ? upgrades : raises;
     const pendingPack = useGameBridge(state => state.pendingPack);
     if (!sourceRect && !choices.length && !pendingPack) return null;
-    return <PackReveal choices={choices} pendingPack={pendingPack} sourceRect={sourceRect} onComplete={onComplete} />;
+    return <PackReveal key={pendingPack?.packId ?? sourceRect?.packId} choices={choices} pendingPack={pendingPack} sourceRect={sourceRect} onComplete={onComplete} />;
 }

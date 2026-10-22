@@ -73,7 +73,7 @@ export function generateShopItems(
                     ? !!r.tableAction
                     : config.type === 'Relic' || r.categories.includes(config.type);
 
-                return matchesType && !currentIds.includes(r.id) && !pickedRelicIds.has(r.id);
+                return matchesType && !r.tableAction && !currentIds.includes(r.id) && !pickedRelicIds.has(r.id);
             });
 
             if (config.categories && config.categories.length > 0) {
@@ -90,7 +90,7 @@ export function generateShopItems(
                         ? !!r.tableAction
                         : config.type === 'Relic' || r.categories.includes(config.type);
 
-                    return matchesType && config.specificIds!.includes(r.id) && !currentIds.includes(r.id) && !pickedRelicIds.has(r.id);
+                    return matchesType && !r.tableAction && config.specificIds!.includes(r.id) && !currentIds.includes(r.id) && !pickedRelicIds.has(r.id);
                 });
             }
 

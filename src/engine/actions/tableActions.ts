@@ -1,3 +1,4 @@
+import { getBustLimit } from '../bosses';
 /**
  * Pure table action processing functions.
  * Handles: double_down, surrender, discard, redraw, hold, switch
@@ -51,9 +52,9 @@ function chargeTableActions(
     return newCharges;
 }
 
-function getDealerDisplayValue(dealer: DealerHand, inventory: readonly RelicInstance[]): number {
+function getDealerDisplayValue(dealer: DealerHand, inventory: readonly RelicInstance[], bustLimit = 21): number {
     const visibleCards = dealer.isRevealed ? dealer.cards : dealer.cards.filter(c => c.isFaceUp);
-    return getBlackjackScore(visibleCards, inventory as RelicInstance[]);
+    return getBlackjackScore(visibleCards, inventory as RelicInstance[], true, bustLimit);
 }
 
 function checkAutoStand(hands: readonly PlayerHand[], drawnCards: readonly (Card | null)[]): boolean {
@@ -212,8 +213,8 @@ function processDoubleDown(state: GameState, handIndex: number): ActionResult {
     const invArr = state.inventory as RelicInstance[];
     const isSpecial = card.type === 'chip' || card.type === 'mult' || card.type === 'score';
     const newCards = isSpecial ? [card, ...hand.cards] : [...hand.cards, card];
-    const newVal = getBlackjackScore(newCards, invArr);
-    const isBust = newVal > 21;
+    const newVal = getBlackjackScore(newCards, invArr, false, getBustLimit(state));
+    const isBust = newVal > getBustLimit(state);
 
     const updatedHands = state.playerHands.map((h, idx) => {
         if (idx !== handIndex) return h;
@@ -346,8 +347,8 @@ function processDiscard(
 
         const removedCard = hand.cards[cardIndex];
         const nextCards = hand.cards.filter((_, idx) => idx !== cardIndex);
-        const nextVal = nextCards.length > 0 ? getBlackjackScore(nextCards, invArr) : 0;
-        const isBust = nextVal > 21;
+        const nextVal = nextCards.length > 0 ? getBlackjackScore(nextCards, invArr, false, getBustLimit(state)) : 0;
+        const isBust = nextVal > getBustLimit(state);
 
         const updatedHands = state.playerHands.map((h, idx) => {
             if (idx !== handIndex) return h;
@@ -387,13 +388,13 @@ function processDiscard(
 
     const targetCard = dealer.cards[cardIndex];
     if (!dealer.isRevealed && !targetCard.isFaceUp) return { nextState: state, events: [] };
-    if (dealer.blackjackValue >= 21) return { nextState: state, events: [] };
+    if (dealer.blackjackValue >= getBustLimit(state)) return { nextState: state, events: [] };
 
     const nextDealerCards = dealer.cards.filter((_, idx) => idx !== cardIndex);
     const nextDealer: DealerHand = {
         ...dealer,
         cards: nextDealerCards,
-        blackjackValue: getDealerDisplayValue({ ...dealer, cards: nextDealerCards }, invArr),
+        blackjackValue: getDealerDisplayValue({ ...dealer, cards: nextDealerCards }, invArr, getBustLimit(state)),
     };
 
     events.push({ type: 'charge_spent', relicId, newCharges: Math.max(0, charges - action.chargeCost) });
@@ -517,8 +518,8 @@ function processHoldPlace(state: GameState, handIndex: number): ActionResult {
     const cardToPlace: Card = { ...heldCard, origin: 'draw_pile', animationOffset: 0 };
     const isSpecial = cardToPlace.type === 'chip' || cardToPlace.type === 'mult' || cardToPlace.type === 'score';
     const newCards = isSpecial ? [cardToPlace, ...hand.cards] : [...hand.cards, cardToPlace];
-    const newVal = getBlackjackScore(newCards, invArr);
-    const isBust = newVal > 21;
+    const newVal = getBlackjackScore(newCards, invArr, false, getBustLimit(state));
+    const isBust = newVal > getBustLimit(state);
 
     const updatedHands = state.playerHands.map((h, idx) => {
         if (idx !== handIndex) return h;
@@ -584,8 +585,8 @@ function processSwitch(state: GameState, handIndex: number | undefined, cardId: 
     const newDealerCards = [...state.dealer.cards];
     newDealerCards[dealerCardIndex] = { ...playerCard, isFaceUp: true };
 
-    const newHandValue = getBlackjackScore(newHandCards, invArr);
-    const isBust = newHandValue > 21;
+    const newHandValue = getBlackjackScore(newHandCards, invArr, false, getBustLimit(state));
+    const isBust = newHandValue > getBustLimit(state);
 
     const updatedHands = state.playerHands.map((h, idx) => {
         if (idx !== handIndex) return h;
@@ -595,7 +596,7 @@ function processSwitch(state: GameState, handIndex: number | undefined, cardId: 
     const updatedDealer: DealerHand = {
         ...state.dealer,
         cards: newDealerCards,
-        blackjackValue: getDealerDisplayValue({ ...state.dealer, cards: newDealerCards }, invArr),
+        blackjackValue: getDealerDisplayValue({ ...state.dealer, cards: newDealerCards }, invArr, getBustLimit(state)),
     };
 
     const events: GameEvent[] = [];

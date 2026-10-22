@@ -19,8 +19,6 @@ export function startRunFromUrl(search: string): boolean {
     if (params.get('skippack') === '1') {
         // Resolve the opening reward before rendering, keeping the ordinary
         // engine rules and giving mechanics tests an already-dealt round.
-        const packId = useGameBridge.getState().offeredPacks[0];
-        bridge.dispatchSync({ type: 'open_pack', packId });
         bridge.dispatchSync({ type: 'skip_pack' });
         bridge.dispatchSync({ type: 'finish_pack' });
         bridge.dispatchSync({ type: 'deal' });

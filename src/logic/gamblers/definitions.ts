@@ -69,12 +69,12 @@ export const GAMBLER_DEFINITIONS: GamblerDefinition[] = [
     {
         id: 'maniac',
         name: 'The Maniac',
-        description: 'Driven by high stakes and royalty. Starts with relics and high Face Card probability.',
+        description: 'Driven by high stakes and royalty. Starts with high Face Card probability.',
         unlockCondition: { type: 'beat_city', cityId: 'atlantic_city' },
         getInitialProbabilities: () => ({
             ...BASE_PROBS,
             ranks: { ace: 10, face: 50, upper: 20, lower: 20 }
         }),
-        getInitialRelics: () => [getRelicInstance('double_down'), getRelicInstance('royalty')]
+        getInitialRelics: () => [getRelicInstance('royalty')]
     }
 ];

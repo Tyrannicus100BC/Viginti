@@ -6,20 +6,21 @@ A high-stakes blackjack-inspired roguelike game built with React, TypeScript, an
 
 Viginti is a continuous blackjack table where you manage three hands and build your run through free packs.
 
-- Start with $100 cash and choose one of three free packs before the first deal. Each reward offers a Raise, Deck, and Relic pack, with the size of each rolled independently.
-- Each round costs a cash ante, starting at $50. The first card goes to the center hand; both side hands are always free to play. There are no comp tickets.
-- Every four completed rounds, the ante rises by 50%, rounded to the nearest $5 ($50 → $75 → $115 → $175 → $265). After collecting the round’s winnings and acknowledging the ante increase, the table fades out for another three-pack choice. Choose and open exactly one, then return to the table.
-- Packs are the only upgrade source. Basic packs offer 3 cards, choose 1; Jumbo packs offer 5, choose 1; Mega packs offer 5, choose 2. Pack sizes retain their 60% / 30% / 10% distribution. You can skip unwanted contents or remaining picks. Choosing or skipping contents consumes that reward; there is no reroll or additional pack purchase.
-- Raise cards permanently upgrade hand payouts for the current run. Deck cards change draw probabilities. Relic packs grant relics with their usual effects and full initial table-action charges. Hand Scores and Deck remain available during rewards.
-- Six relic slots are permanently available, three on each side. Acquisition order alternates left and right. Full relic inventories block additional relic selections; you can skip the pack to continue.
-- Cash scoring and upgrade effects remain in place. Cash is a separate balance from lifetime run winnings, and losses cannot reduce cash below $0. A run ends when you request a deal without enough cash for its ante. Pack rewards cost nothing, even when cash is low.
-- Debug mode provides **Relics** beneath the left slots and **Packs** beneath the right slots. The pack picker lists all nine packs and uses the usual reveal and selection flow, retaining upgrades before returning to the current round or waiting reward. The debug **Cash** button replaces the Cash label and adds $100.
-- Debug exports preserve pack offers, unfinished selections, earned upgrades, and RNG progress. Imported older shop snapshots convert to the pack flow, and side hands become free.
+- Start with $100 cash and a free Major Pack. Each round costs a cash ante, starting at $50; both side hands are free to play.
+- Only survival advances the ante: complete four rounds, collect rewards, then raise the ante to `current ante × 1.5 + $25`, rounded to the nearest $5 ($50 → $100 → $175 → $290 → $460). Earnings do not advance the ante.
+- Each ante starts with one side challenge. Completing it immediately generates another, so later hands and rounds can progress a second challenge before the ante changes. Side rewards do not reset survival progress. Extra challenges acquired from packs carry across ante changes until completed.
+- Rewards open directly. Major Packs offer six options: three Raises, two passive relics, and one randomly selected Deck Pack or Challenge Pack. Choose one reward; choosing a targeted pack opens three options of that type, from which you choose one. Minor Packs offer three independently random Raise, deck, or passive relic upgrades, with one pick and no challenges.
+- Every third ante (3, 6, 9, …) is a boss encounter. A seeded boss registry supplies hooks for rules that last the entire four-round encounter. The first boss, **High Limit**, raises the player and dealer bust limit to 25; exactly 21 keeps its usual scoring bonus.
+- Defeating a boss grants the normal Major Pack plus a separate choice of two unowned table actions. Table actions only come from boss rewards and do not occupy the six passive relic slots.
+- Full passive relic inventories block further passive relic selections; other reward types and skipping remain available. Exhausted relic pools fall back to Raises. Hand Scores and Deck remain available during rewards.
+- Cash is separate from lifetime run winnings and cannot fall below $0. A run ends when you request a deal without enough cash for its ante. Rewards cost nothing, even when cash is low.
+- Debug Packs retain legacy family, size, and quality variants for testing and saved-run compatibility. The debug Cash button adds one current ante.
+- Debug exports preserve boss identity, challenge progress, queued rewards, nested pack selections, earned upgrades, and RNG progress. Older imports drop the retired main earnings goal while retaining upgrades.
 
 Shared economy tuning lives in `src/engine/economy.ts`.
 
 For browser testing, add `?quickstart=1` to the Enmanner-managed app URL to skip
-the title screen and start a fresh run at its opening pack choice. The plain URL
+the title screen and start a fresh run at its opening Major Pack. The plain URL
 continues to show the title screen.
 For mechanics testing, use `?quickstart=1&skippack=1` to bypass the opening pack
 as well and begin an already-dealt first round. The usual ante is paid, no pack

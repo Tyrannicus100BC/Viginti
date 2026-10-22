@@ -57,7 +57,7 @@ const [isPulsing, setIsPulsing] = useState(false);
   }, [isCollecting, totalValue, onItemArrived, onCollectionComplete]);
 
   const isEssentiallyEmpty = variant === 'multiplier' 
-    ? (totalValue <= 1)
+    ? (totalValue === 1)
     : (totalValue === 0);
   const isEmpty = forceHide || isEssentiallyEmpty;
 

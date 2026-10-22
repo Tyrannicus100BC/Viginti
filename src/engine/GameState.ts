@@ -107,6 +107,7 @@ export interface GameState {
     readonly cash: number; // Spendable bankroll
     readonly ante: number;
     readonly challengeStage: number;
+    readonly bossId: string | null;
     readonly challenges: readonly Challenge[];
     readonly challengeRewards: readonly ChallengeReward[];
 

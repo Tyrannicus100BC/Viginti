@@ -37,24 +37,21 @@ export function ChallengeRewardIntro({ challenge, onDepart, onReveal, onComplete
         const run = async () => {
             try {
                 if (reducedMotion) {
-                    await play([{ opacity: 0 }, { opacity: 1 }], 120);
+                    await play([{ opacity: 1 }, { opacity: 0 }], 120);
                     if (!alive) return;
                     reveal();
-                    await play([{ opacity: 1 }, { opacity: 0 }], 160);
+                    await play([{ opacity: 0 }, { opacity: 0 }], 160);
                 } else {
                     await play([
                         { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(1)`, opacity: 1 },
-                        { transform: 'translate(-50%, -50%) scale(1.8)', opacity: 1, offset: 0.76 },
-                        { transform: 'translate(-50%, -50%) scale(1.8)', opacity: 1 },
+                        { transform: 'translate(-50%, -50%) scale(1.8)', opacity: 0, offset: 0.76 },
+                        { transform: 'translate(-50%, -50%) scale(1.8)', opacity: 0 },
                     ], 1000);
                     if (!alive) return;
                     setBursting(true);
                     reveal();
-                    await play([
-                        { transform: 'translate(-50%, -50%) scale(1.8)', opacity: 1, filter: 'blur(0px)' },
-                        { transform: 'translate(-50%, -50%) scale(2.5)', opacity: 0, filter: 'blur(8px)', offset: 0.38 },
-                        { transform: 'translate(-50%, -50%) scale(2.5)', opacity: 0, filter: 'blur(8px)' },
-                    ], 700);
+                    // Keep the token invisible throughout the burst and card reveal.
+                    await play([{ opacity: 0 }, { opacity: 0 }], 700);
                 }
                 if (alive) onComplete();
             } catch {

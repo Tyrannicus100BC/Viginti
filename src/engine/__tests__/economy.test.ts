@@ -22,8 +22,8 @@ describe('free pack cadence and cash antes', () => {
     it('offers an optional opening pack before the first deal without charging cash or ante', () => {
         const state = start();
         expect(state).toMatchObject({ phase: 'pack_choice', cash: 100, ante: BASE_ANTE, dealsTaken: 0, relicSlots: 6 });
-        expect(state.offeredPacks).toHaveLength(3);
-        expect(getValidActions(state)).toEqual([...state.offeredPacks.map(packId => ({ type: 'open_pack', packId })), { type: 'skip_pack' }]);
+        expect(state.pendingPack?.packId).toBe('mixed_major');
+        expect(getValidActions(state)).toEqual([...state.pendingPackChoices.map(cardId => ({ type: 'choose_pack_card', cardId })), { type: 'skip_pack' }]);
         expect(act(state, { type: 'deal' })).toEqual(state);
         expect(act(state, { type: 'finish_pack' })).toEqual(state);
         const opened = act(state, { type: 'open_pack', packId: state.offeredPacks[0] });
@@ -39,7 +39,7 @@ describe('free pack cadence and cash antes', () => {
         const state = start();
         const skipped = processAction(state, { type: 'skip_pack' });
         expect(skipped.events).toEqual([{ type: 'pack_skipped' }]);
-        expect(skipped.nextState).toEqual({ ...state, offeredPacks: [] });
+        expect(skipped.nextState).toEqual({ ...state, offeredPacks: [], pendingPack: null, pendingPackChoices: [] });
         expect(act(skipped.nextState, { type: 'skip_pack' })).toEqual(skipped.nextState);
         const returned = act(skipped.nextState, { type: 'finish_pack' });
         expect(returned).toMatchObject({ phase: 'entering_casino', cash: 100, ante: BASE_ANTE, dealsTaken: 0 });
@@ -104,13 +104,13 @@ describe('free pack cadence and cash antes', () => {
                 const cash = state.cash;
                 state = act(state, { type: 'deal' });
                 expect(state).toMatchObject({ phase: 'pack_choice', cash, ante: previous.ante });
-                expect(state.offeredPacks).toHaveLength(3);
+                expect(state.pendingPack?.packId).toBe('mixed_major');
                 expect(act(state, { type: 'deal' })).toEqual(state);
-                state = finishOpeningPack(state);
+                while (state.phase === 'pack_choice') state = finishOpeningPack(state);
                 expect(state).toMatchObject({ phase: 'deal_over', cash, relicSlots: 6 });
                 expect(state.ante).toBe(antes[Math.floor(round / CHALLENGE_ROUNDS)]);
                 expect(state.challenges.find(challenge => challenge.metric === 'rounds')?.progress).toBe(0);
-                expect(state.challenges.find(challenge => challenge.metric === 'earnings')?.target).toBe(state.ante * CHALLENGE_ROUNDS * 1.5);
+                expect(state.challenges.some(challenge => challenge.metric === 'earnings')).toBe(false);
                 expect(getValidActions(state)).toEqual([{ type: 'deal' }]);
             } else expect(state.challengeRewards).toEqual([]);
             expect(act(state, { type: 'score_round' })).toEqual(state);

@@ -48,7 +48,7 @@ describe('debug pack opening', () => {
     });
 
     it('accepts debug pack input through the animated bridge queue and restores the waiting reward', async () => {
-        const before = start();
+        const before = { ...start(), pendingPack: null, pendingPackChoices: [], offeredPacks: ['mixed_major' as const] };
         expect(useGameBridge.getState().loadGameState(JSON.stringify(before))).toBe(true);
         useGameBridge.setState({ headless: true });
         await useGameBridge.getState().dispatch({ type: 'debug_open_pack', packId: 'raise_mega' });
@@ -63,7 +63,7 @@ describe('debug pack opening', () => {
     });
 
     it('preserves the normal three-pack reward when a debug pack is opened first', () => {
-        const before = start();
+        const before = { ...start(), pendingPack: null, pendingPackChoices: [], offeredPacks: ['mixed_major' as const] };
         const opened = act(before, { type: 'debug_open_pack', packId: 'deck_mega' });
         const skipped = act(opened, { type: 'skip_pack' });
         const returned = act(skipped, { type: 'finish_pack' });

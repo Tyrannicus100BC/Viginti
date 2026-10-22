@@ -134,6 +134,7 @@ export function executeOnCardPlaced(
     placedCard: Card,
     blackjackValue: number,
     dealerCards: Card[],
+    bustLimit = 21,
 ): RelicHookResult {
     const events: GameEvent[] = [];
     const inv = inventory.map(i => ({ ...i, state: cloneRelicState(i.state) }));
@@ -152,6 +153,7 @@ export function executeOnCardPlaced(
             handCards: currentHandCards,
             placedCard,
             blackjackValue,
+            bustLimit,
             highlightRelic: async (relicId: string, options?: any) => {
                 events.push({ type: 'relic_activated', relicId, description: `${hook.config.name} triggered` });
                 // Execute the trigger callback synchronously if present

@@ -6,25 +6,25 @@ import { getBaseBlackjackScore } from './rules';
 import { evaluateBaseHands, type HandUpgrades } from './handScoring';
 export { POKER_ORDER, RANK_VALUES } from './rules';
 
-export function getBlackjackScore(cards: Card[], inventory: RelicInstance[] = [], ignoreSpecialEffects: boolean = false): number {
-  let score = getBaseBlackjackScore(cards, ignoreSpecialEffects);
+export function getBlackjackScore(cards: Card[], inventory: RelicInstance[] = [], ignoreSpecialEffects: boolean = false, bustLimit = 21): number {
+  let score = getBaseBlackjackScore(cards, ignoreSpecialEffects, bustLimit);
 
   // Relic: Adjust Blackjack Score (e.g. Joker)
   score = RelicManager.executeValueHook('adjustBlackjackScore', score, {
     inventory,
     handCards: cards,
-    ignoreSpecialEffects
+    ignoreSpecialEffects, bustLimit
   });
 
   return score;
 }
 
-export function evaluateHandScore(cards: Card[], isWin: boolean, isDoubled: boolean = false, inventory: RelicInstance[] = [], handsRemaining: number = 0, categoryCounts?: Record<string, number>, outcome?: 'win' | 'loss' | 'bust' | 'push' | null, handUpgrades: HandUpgrades = {}): HandScore {
-  const blackjackScore = getBlackjackScore(cards, inventory);
+export function evaluateHandScore(cards: Card[], isWin: boolean, isDoubled: boolean = false, inventory: RelicInstance[] = [], handsRemaining: number = 0, categoryCounts?: Record<string, number>, outcome?: 'win' | 'loss' | 'bust' | 'push' | null, handUpgrades: HandUpgrades = {}, bustLimit = 21): HandScore {
+  const blackjackScore = getBlackjackScore(cards, inventory, false, bustLimit);
 
   // Initial Empty Score
   const initialScore: HandScore = {
-    criteria: evaluateBaseHands(cards, isWin, blackjackScore, outcome, handUpgrades),
+    criteria: evaluateBaseHands(cards, isWin, blackjackScore, outcome, handUpgrades, bustLimit),
     totalChips: 0,
     totalMultiplier: 0,
     finalScore: 0,

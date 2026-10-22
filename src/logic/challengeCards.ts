@@ -33,7 +33,7 @@ export function getChallengeCard(id: string): ChallengeCard | undefined {
     const description = metric === 'earnings' ? `Earn $${target.toLocaleString()}`
         : metric === 'rounds' ? `Complete ${target} rounds`
         : metric === 'wins' ? `Win ${target} hands`
-        : `Score ${target} ${{ pairs: 'pair', straights: 'straight', flushes: 'flush' }[metric]} hands`;
+        : `Score ${target} ${metric}`;
     return { id, name: TITLES[metric], rarity, challenge: {
         id, title: TITLES[metric], description, metric, target, main: false, source: 'pack',
         rewardTier: rarity === 'Rare' ? 'major' : 'minor', progress: 0, completed: false,

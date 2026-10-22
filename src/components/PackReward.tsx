@@ -16,7 +16,7 @@ export function PackReward() {
     const debug = useGameBridge(state => !!state.gameState.debugPackReturn);
     const challenge = useGameBridge(state => state.challenges.find(goal => goal.id === reward?.id));
     const [introStage, setIntroStage] = useState<'moving' | 'revealing' | 'ready'>(() =>
-        reward && challenge && !debug && !pendingPack ? 'moving' : 'ready');
+        reward && challenge && !debug ? 'moving' : 'ready');
     const departChallenge = useCallback(() => {
         if (!reward) return;
         useGameBridge.setState(state => ({
@@ -116,7 +116,7 @@ export function PackReward() {
                 disabled={processing || exiting} onClick={() => setExiting(true)}>{rewards.length > 1 && !debug ? 'Next Reward' : 'Back to Table'}</button>}
         </section>
         {introStage !== 'ready' && challenge && <ChallengeRewardIntro challenge={challenge} onDepart={departChallenge} onReveal={revealPacks} onComplete={finishIntro} />}
-        {opening && <div className={`${styles.reveal} ${exiting ? styles.exiting : ''}`}>
+        {opening && introStage !== 'moving' && <div className={`${styles.reveal} ${exiting ? styles.exiting : ''}`}>
             <RaisePackChoice sourceRect={source} onComplete={() => setExiting(true)} />
         </div>}
     </>;

@@ -1,282 +1,193 @@
-import { getPackDefinition } from '../../logic/packs';
 import { describe, expect, it } from 'vitest';
-import { createInitialState, getValidActions, processAction } from '../engine';
-import { createChallenges } from '../challenges';
-import { BASE_ANTE, getNextAnte } from '../economy';
+import { createInitialState, processAction } from '../engine';
+import { completeChallenges, advanceChallenges, createChallenges } from '../challenges';
 import type { GameState } from '../GameState';
-import type { PlayerHand } from '../../types';
+import type { Card, PlayerHand, Rank } from '../../types';
 import { finishOpeningPack } from './fixtures';
-import { TUTORIAL_STEPS } from '../tutorial/definitions';
 
-const start = () => finishOpeningPack(processAction(createInitialState(), {
+const act = (state: GameState, action: Parameters<typeof processAction>[1]) => processAction(state, action).nextState;
+const start = () => finishOpeningPack(act(createInitialState(), {
     type: 'start_game', cityId: 'las_vegas', gamblerId: 'default', seed: 42,
-    globalTutorialsCompleted: TUTORIAL_STEPS.map(step => step.id),
-}).nextState);
-const settle = (state: GameState, earnings = 0, playerHands: readonly PlayerHand[] = []) => processAction({
+}));
+const settle = (state: GameState, earnings = 0, playerHands: readonly PlayerHand[] = []) => act({
     ...state, phase: 'scoring', runningSummary: { chips: earnings, mult: 1 }, playerHands,
 }, { type: 'score_round' });
-const beginRewards = (state: GameState) => processAction(state, { type: 'deal' }).nextState;
-const goal = (state: GameState, metric: string) => state.challenges.find(challenge => challenge.metric === metric)!;
-const pairs = (size = 2): PlayerHand[] => [{
-    id: 0, cards: Array.from({ length: size }, (_, index) => ({ id: `pair-${index}`, rank: '2',
-        suit: index % 2 ? 'hearts' : 'clubs', isFaceUp: true })),
-    blackjackValue: size * 2, isHeld: true, isBust: false, isInactive: false, outcome: 'loss',
-}];
+const pair: PlayerHand = { id: 0, cards: [
+    { id: 'p1', rank: '2', suit: 'hearts' }, { id: 'p2', rank: '2', suit: 'clubs' },
+], blackjackValue: 4, isHeld: true, isBust: false, outcome: 'loss' };
 
-describe('challenge progression', () => {
-    it.each(['rounds', 'earnings'] as const)('offers Raise and Relic packs when the %s Main goal completes', metric => {
-        const before = start();
-        const earned = settle({ ...before, challenges: before.challenges.map(challenge => challenge.metric === metric
-            ? { ...challenge, progress: challenge.target - 1 } : challenge) }, metric === 'earnings' ? 1 : 0).nextState;
-        expect(earned.challengeRewards).toMatchObject([{ tier: 'major' }]);
-        const offers = beginRewards(earned).offeredPacks.map(id => getPackDefinition(id).family);
-        expect(offers).toHaveLength(3);
-        expect(offers).toEqual(expect.arrayContaining(['raise', 'relic']));
-    });
-
-    it('always creates two competing Main goals and a rotating side goal', () => {
-        for (let stage = 0; stage < 6; stage++) {
-            const ante = [50, 100, 175, 290, 460, 715][stage];
-            const board = createChallenges(stage, ante);
-            expect(board.filter(challenge => challenge.main).map(challenge => challenge.metric)).toEqual(['rounds', 'earnings']);
-            expect(board.filter(challenge => !challenge.main)).toHaveLength(1);
-            expect(board.find(challenge => challenge.metric === 'earnings')?.target).toBe([300, 600, 1050, 1740, 2760, 4290][stage]);
-            expect(board.every(challenge => challenge.progress === 0 && !challenge.completed)).toBe(true);
+describe('four-round progression', () => {
+    it('creates one survival goal and one rotating side challenge, with no main earnings goal', () => {
+        for (let stage = 0; stage < 9; stage++) {
+            const challenges = createChallenges(stage);
+            expect(challenges).toHaveLength(2);
+            expect(challenges.filter(goal => goal.main)).toMatchObject([{ metric: 'rounds', target: 4 }]);
+            expect(challenges.some(goal => goal.metric === 'earnings')).toBe(false);
         }
-        expect([0, 1, 2, 3].map(stage => createChallenges(stage)[2].metric)).toEqual(['pairs', 'straights', 'flushes', 'wins']);
+        expect([0, 1, 2, 3].map(stage => createChallenges(stage)[1].metric)).toEqual(['pairs', 'straights', 'flushes', 'wins']);
     });
 
-    it('accumulates earnings across payouts independently of the remaining bankroll', () => {
-        let state = settle(start(), 100).nextState;
-        expect(goal(state, 'earnings').progress).toBe(100);
-        state = settle({ ...state, cash: 0 }, 199).nextState;
-        expect(goal(state, 'earnings').progress).toBe(299);
+    it('cannot advance from a large payout or debug cash', () => {
+        let state = act(start(), { type: 'debug_give_cash', amount: 100000 });
+        state = settle(state, 100000);
+        expect(state.challengeRewards).toEqual([]);
+        expect(state.challenges[0]).toMatchObject({ progress: 1, completed: false });
         expect(state.ante).toBe(50);
-        const result = settle({ ...state, cash: 0 }, 1);
-        expect(result.nextState).toMatchObject({ ante: 50, challengeStage: 0, phase: 'deal_over', cash: 1 });
-        expect(goal(result.nextState, 'earnings')).toMatchObject({ completed: true, progress: 300 });
-        const opened = beginRewards(result.nextState);
-        expect(opened).toMatchObject({ phase: 'pack_choice', cash: 1, ante: 50 });
-        expect(result.nextState.challengeRewards).toMatchObject([{ tier: 'major', title: 'Money Maker' }]);
-        expect(opened.offeredPacks).toHaveLength(3);
-        expect(opened.offeredPacks.every(id => getPackDefinition(id).offerCount === 5)).toBe(true);
-        const returned = finishOpeningPack(opened);
-        expect(returned).toMatchObject({ ante: 100, challengeStage: 1, phase: 'deal_over' });
-        expect(returned.challenges.every(challenge => challenge.progress === 0)).toBe(true);
+        expect(act(state, { type: 'score_round' })).toEqual(state);
     });
 
-    it('allows a single large payout to advance exactly one stage without carrying earnings over', () => {
-        const earned = settle(start(), 10000).nextState;
-        expect(earned.challengeRewards).toHaveLength(1);
-        const state = finishOpeningPack(beginRewards(earned));
-        expect(state).toMatchObject({ ante: 100, challengeStage: 1 });
-        expect(state.challengeRewards).toHaveLength(0);
-        expect(goal(state, 'earnings').progress).toBe(0);
-        expect(goal(state, 'rounds').progress).toBe(0);
-    });
-
-    it('awards just one major pack if both Main goals complete together', () => {
-        const before = start();
-        const result = settle({ ...before, challenges: before.challenges.map(challenge => challenge.metric === 'rounds'
-            ? { ...challenge, progress: 3 } : challenge) }, 500);
-        expect(result.nextState.challengeRewards).toHaveLength(1);
-        expect(result.events.filter(event => event.type === 'ante_increased')).toHaveLength(0);
-        expect(result.nextState.ante).toBe(50);
-        expect(finishOpeningPack(beginRewards(result.nextState)).ante).toBe(100);
-    });
-
-    it('counts a pair hand once even with multiple matching pairs, and counts each scoring hand separately', () => {
+    it('requires exactly four settled rounds and advances once after the reward', () => {
         let state = start();
-        state = settle(state, 0, pairs(3)).nextState;
-        expect(goal(state, 'pairs').progress).toBe(1);
-        state = settle(state, 0, [...pairs(), { ...pairs()[0], id: 1 }]).nextState;
-        expect(goal(state, 'pairs').progress).toBe(3);
+        for (let round = 1; round <= 4; round++) {
+            state = settle(state);
+            expect(state.challenges[0].progress).toBe(round);
+            expect(state.challengeRewards).toHaveLength(round === 4 ? 1 : 0);
+            expect(state.ante).toBe(50);
+        }
+        state = act(state, { type: 'deal' });
+        expect(state.pendingPack).toEqual({ packId: 'mixed_major', picksRemaining: 1 });
+        state = finishOpeningPack(state);
+        expect(state).toMatchObject({ ante: 100, challengeStage: 1, phase: 'deal_over', bossId: null });
+        expect(state.challenges).toEqual(createChallenges(1));
+        expect(state.challengeRewards).toEqual([]);
     });
 
-    it.each([
-        { metric: 'pairs', stage: 0, target: 4, ranks: ['2', '2'], suits: ['clubs', 'hearts'] },
-        { metric: 'straights', stage: 1, target: 5, ranks: ['2', '3'], suits: ['clubs', 'hearts'] },
-        { metric: 'flushes', stage: 2, target: 6, ranks: ['2', '4'], suits: ['clubs', 'clubs'] },
-    ] as const)('completes the $metric goal after $target scoring hands', ({ metric, stage, target, ranks, suits }) => {
-        const challenges = createChallenges(stage).map(challenge => challenge.metric === metric
-            ? { ...challenge, progress: target - 2 } : challenge);
-        expect(challenges.find(challenge => challenge.metric === metric)).toMatchObject({
-            target, description: `Score ${target} ${metric === 'flushes' ? 'flush' : metric.slice(0, -1)} hands`,
-        });
-        const hand: PlayerHand = { ...pairs()[0], cards: ranks.map((rank, index) => ({
-            id: `pattern-${index}`, rank, suit: suits[index], isFaceUp: true,
-        })), blackjackValue: metric === 'pairs' ? 4 : metric === 'straights' ? 5 : 6 };
-        const before = settle({ ...start(), challenges }, 0, [hand]).nextState;
-        expect(goal(before, metric)).toMatchObject({ progress: target - 1, completed: false });
-        expect(before.challengeRewards).toEqual([]);
-        const completed = settle(before, 0, [hand]).nextState;
-        expect(goal(completed, metric)).toMatchObject({ progress: target, completed: true });
-        expect(completed.challengeRewards).toMatchObject([{ tier: 'minor' }]);
-    });
-
-    it('awards a side pack once without raising the ante or resetting other goals', () => {
+    it('renews a completed side challenge immediately and progresses it on later hands in the same round', () => {
         const before = start();
-        const result = settle({ ...before, challenges: before.challenges.map(challenge => challenge.metric === 'pairs'
-            ? { ...challenge, progress: challenge.target - 1 } : challenge) }, 0, pairs());
-        let state = result.nextState;
-        expect(state.ante).toBe(50);
-        expect(goal(state, 'rounds').progress).toBe(1);
-        expect(goal(state, 'pairs')).toMatchObject({ progress: 4, completed: true });
-        expect(state.offeredPacks).toEqual([]);
-        state = beginRewards(state);
-        expect(state.offeredPacks).toHaveLength(3);
-        expect(state.offeredPacks.every(id => getPackDefinition(id).pickCount === 1)).toBe(true);
+        const almost = { ...before, challenges: before.challenges.map(goal => goal.main ? goal : { ...goal, progress: 3 }) };
+        const straight: PlayerHand = { ...pair, id: 1, cards: [{ id: 's1', rank: '2', suit: 'hearts' }, { id: 's2', rank: '3', suit: 'clubs' }], blackjackValue: 5 };
+        let state = settle(almost, 0, [pair, straight]);
         expect(state.challengeRewards).toMatchObject([{ tier: 'minor' }]);
-        expect(result.events.some(event => event.type === 'ante_increased')).toBe(false);
-        state = finishOpeningPack(state);
-        expect(state.challengeRewards).toEqual([]);
-        state = settle(state, 0, pairs()).nextState;
-        expect(state.phase).toBe('deal_over');
-        expect(goal(state, 'pairs').progress).toBe(4);
-    });
-
-    it('queues simultaneous side and Main rewards and requires both before another deal', () => {
-        const before = start();
-        let state = settle({ ...before, challenges: before.challenges.map(challenge => ({ ...challenge,
-            progress: challenge.metric === 'rounds' ? 3 : challenge.metric === 'pairs' ? challenge.target - 1 : 0,
-        })) }, 0, pairs()).nextState;
-        expect(state.challengeRewards.map(reward => reward.tier)).toEqual(['major', 'minor']);
-        const completedBoard = state.challenges;
-        expect(state.phase).toBe('deal_over');
-        const waiting = state;
-        // Debug pack previews must leave the earned queue and ante untouched.
-        const debug = processAction(state, { type: 'debug_open_pack', packId: 'raise_basic' }).nextState;
-        const returned = finishOpeningPack(debug);
-        expect(returned.challengeRewards).toEqual(waiting.challengeRewards);
-        expect(returned.ante).toBe(50);
-        expect(returned.challenges).toEqual(completedBoard);
-        state = beginRewards(returned);
-        expect(state.cash).toBe(waiting.cash);
-        expect(waiting.playerHands[0].cards).toHaveLength(2);
-        expect(state.playerHands.every(hand => hand.cards.length === 0)).toBe(true);
-        expect(state.runningSummary).toBeNull();
-        expect(state.dealsTaken).toBe(waiting.dealsTaken);
-        expect(state.challenges).toEqual(completedBoard);
+        expect(state.challenges.find(goal => !goal.completed && !goal.main)).toMatchObject({ metric: 'straights', progress: 1 });
+        const rounds = state.challenges[0];
+        state = act(state, { type: 'deal' });
+        expect(state.pendingPack?.packId).toBe('mixed_minor');
         state = finishOpeningPack(state);
         expect(state.ante).toBe(50);
-        expect(state.challenges).toEqual(completedBoard);
-        expect(state.phase).toBe('pack_choice');
-        expect(state.challengeRewards.map(reward => reward.tier)).toEqual(['minor']);
-        expect(state.offeredPacks).toHaveLength(3);
-        expect(state.offeredPacks.every(id => getPackDefinition(id).pickCount === 1)).toBe(true);
-        expect(getValidActions(state)).toEqual([...state.offeredPacks.map(packId => ({ type: 'open_pack', packId })), { type: 'skip_pack' }]);
+        expect(state.challenges[0]).toEqual(rounds);
+        expect(state.challenges).toHaveLength(2);
+        expect(state.challenges[1]).toMatchObject({ metric: 'straights', progress: 1 });
+    });
+
+    it('can earn a second side reward within the same ante without duplicate rewards', () => {
+        const first = completeChallenges(advanceChallenges(createChallenges(), { pairs: 4 }));
+        const second = completeChallenges(advanceChallenges(first.challenges, { straights: 5 }));
+        expect(first.rewards).toHaveLength(1);
+        expect(second.rewards).toHaveLength(1);
+        expect(second.rewards[0].id).not.toBe(first.rewards[0].id);
+        expect(second.challenges.find(goal => !goal.main && !goal.completed)?.metric).toBe('flushes');
+        expect(completeChallenges(second.challenges).rewards).toEqual([]);
+    });
+
+    it('counts all three scored pairs in three of a kind, then completes on the next pair', () => {
+        const triple: PlayerHand = { ...pair, cards: [...pair.cards, { id: 'p3', rank: '2', suit: 'spades' }], blackjackValue: 6 };
+        const first = settle(start(), 0, [triple]);
+        expect(first.challenges[1].progress).toBe(3);
+        const second = settle(first, 0, [pair]);
+        expect(second.challenges.find(goal => goal.metric === 'pairs')).toMatchObject({ progress: 4, completed: true });
+        expect(second.challengeRewards).toMatchObject([{ tier: 'minor' }]);
+    });
+
+    it('queues simultaneous main and side rewards and waits for both before raising the ante', () => {
+        let state = start();
+        state = settle({ ...state, challenges: state.challenges.map(goal => ({ ...goal, progress: goal.target - 1 })) }, 0, [pair]);
+        expect(state.challengeRewards.map(reward => reward.tier)).toEqual(['major', 'minor']);
+        state = act(state, { type: 'deal' });
+        expect(state.challengeRewards.map(reward => reward.tier)).toEqual(['minor', 'major']);
+        expect(state.pendingPack?.packId).toBe('mixed_minor');
+        const completedBoard = state.challenges;
         state = finishOpeningPack(state);
-        expect(state.phase).toBe('deal_over');
-        expect(state.challengeRewards).toEqual([]);
-        expect(state.challenges).toEqual(createChallenges(1, 100));
-        expect(state.ante).toBe(100);
-        expect(state.playerHands.every(hand => hand.cards.length === 0)).toBe(true);
-        expect(state.runningSummary).toBeNull();
-        expect(state.playerHands.every(hand => !('finalScore' in hand))).toBe(true);
-        expect(state.dealsTaken).toBe(waiting.dealsTaken);
+        expect(state).toMatchObject({ ante: 50, phase: 'pack_choice' });
+        expect(state.pendingPack?.packId).toBe('mixed_major');
+        expect(state.challenges).toEqual(completedBoard);
+        state = finishOpeningPack(state);
+        expect(state).toMatchObject({ ante: 100, phase: 'deal_over' });
+        expect(state.challenges).toEqual(createChallenges(1));
     });
 
-    it('skips unopened queued rewards one at a time and advances the ante after the last reward', () => {
-        const before = start();
-        const earned = settle({ ...before, challenges: before.challenges.map(challenge => ({ ...challenge,
-            progress: challenge.metric === 'rounds' ? 3 : challenge.metric === 'pairs' ? challenge.target - 1 : 0,
-        })) }, 0, pairs()).nextState;
-        let state = beginRewards(earned);
-        expect(state.challengeRewards).toHaveLength(2);
-        for (let remaining = 1; remaining >= 0; remaining--) {
-            const skipped = processAction(state, { type: 'skip_pack' });
-            expect(skipped.nextState).toEqual({ ...state, offeredPacks: [] });
-            state = processAction(skipped.nextState, { type: 'finish_pack' }).nextState;
-            expect(state.challengeRewards).toHaveLength(remaining);
-            expect(state.cash).toBe(earned.cash);
-            expect(state.dealsTaken).toBe(earned.dealsTaken);
-            expect(state.inventory).toEqual(earned.inventory);
-            expect(state.handUpgrades).toEqual(earned.handUpgrades);
-            expect(state.ante).toBe(remaining ? 50 : 100);
-            expect(state.phase).toBe(remaining ? 'pack_choice' : 'deal_over');
-            expect(state.offeredPacks).toHaveLength(remaining ? 3 : 0);
+    it('claims accumulated minor rewards in board order, then the major and boss rewards', () => {
+        const base = start();
+        const goals = [...base.challenges, { ...base.challenges[1], id: 'extra', source: 'pack' as const }]
+            .map(goal => ({ ...goal, progress: goal.target, completed: true }));
+        let state = act({ ...base, phase: 'deal_over', challenges: goals, challengeRewards: [
+            { id: 'boss-0', title: 'Boss Defeated', tier: 'major', kind: 'table_action' },
+            { id: goals[0].id, title: goals[0].title, tier: 'major' },
+            { id: 'extra', title: 'Extra', tier: 'minor' },
+            { id: goals[1].id, title: goals[1].title, tier: 'minor' },
+        ] }, { type: 'deal' });
+        expect(state.challengeRewards.map(reward => reward.id)).toEqual([goals[1].id, 'extra', goals[0].id, 'boss-0']);
+        for (const packId of ['mixed_minor', 'mixed_minor', 'mixed_major', 'relic_boss']) {
+            expect(state.pendingPack?.packId).toBe(packId);
+            expect(state.ante).toBe(50);
+            expect(state.challenges).toEqual(goals);
+            state = finishOpeningPack(state);
         }
-        expect(state.challenges).toEqual(createChallenges(1, 100));
+        expect(state).toMatchObject({ phase: 'deal_over', ante: 100, challengeRewards: [] });
+        expect(state.challenges).toEqual(createChallenges(1));
     });
 
-    it.each([0, 1, 2, 5, 20])('completes the stage %i cash goal in three debug clicks', stage => {
-        const ante = Array.from({ length: stage }).reduce<number>(getNextAnte, BASE_ANTE);
-        let state: GameState = { ...start(), phase: 'deal_over', ante, challengeStage: stage, challenges: createChallenges(stage, ante) };
-        const before = state;
-        const target = goal(state, 'earnings').target;
-        const amount = Math.ceil(target / 3);
-        for (let count = 1; count <= 3; count++) {
-            const result = processAction(state, { type: 'debug_give_cash' });
-            state = result.nextState;
-            expect(goal(state, 'earnings').progress).toBe(Math.min(count * amount, target));
-            expect(state.phase).toBe('deal_over');
-            expect(state.ante).toBe(ante);
-            expect(state.dealsTaken).toBe(before.dealsTaken);
-        }
-        expect(state.cash).toBe(before.cash + 3 * amount);
-        expect(goal(state, 'earnings').completed).toBe(true);
-        expect(state.challengeRewards).toMatchObject([{ tier: 'major', title: 'Money Maker' }]);
-        const repeated = processAction(state, { type: 'debug_give_cash' }).nextState;
-        expect(repeated.challengeRewards).toEqual(state.challengeRewards);
-        expect(finishOpeningPack(beginRewards(repeated))).toMatchObject({ ante: getNextAnte(ante), challengeStage: stage + 1, phase: 'deal_over' });
-    });
-
-    it('keeps only one Main reward if debug earnings complete before survival completes', () => {
-        const before = start();
-        let state = processAction({ ...before, phase: 'playing', challenges: before.challenges.map(challenge =>
-            challenge.metric === 'rounds' ? { ...challenge, progress: 3 } : challenge) },
-            { type: 'debug_give_cash', amount: 300 }).nextState;
-        expect(state.phase).toBe('playing');
-        expect(state.challengeRewards).toHaveLength(1);
-        state = settle(state, 0).nextState;
-        expect(goal(state, 'rounds').completed).toBe(true);
-        expect(state.challengeRewards).toHaveLength(1);
-        expect(finishOpeningPack(beginRewards(state)).ante).toBe(100);
-    });
-
-    it('opens a debug-earned reward before the first deal without charging the ante', () => {
-        const earned = processAction(start(), { type: 'debug_give_cash', amount: 300 }).nextState;
-        const opened = beginRewards(earned);
-        expect(opened).toMatchObject({ phase: 'pack_choice', cash: earned.cash, dealsTaken: 0 });
-        const returned = finishOpeningPack(opened);
-        expect(returned).toMatchObject({ phase: 'deal_over', ante: 100, cash: earned.cash });
-        expect(returned.challengeRewards).toEqual([]);
-    });
-
-    it('starts with no challenges and replenishes them only after finishing the opening pack', () => {
-        expect(createInitialState().challenges).toEqual([]);
-        const opening = processAction(createInitialState(), { type: 'start_game', cityId: 'las_vegas',
-            gamblerId: 'default', seed: 42, globalTutorialsCompleted: TUTORIAL_STEPS.map(step => step.id) }).nextState;
+    it('creates challenges after finishing the opening reward', () => {
+        const opening = act(createInitialState(), { type: 'start_game', cityId: 'las_vegas', gamblerId: 'default', seed: 1 });
         expect(opening.challenges).toEqual([]);
-        const opened = processAction(opening, { type: 'open_pack', packId: opening.offeredPacks[0] }).nextState;
-        expect(opened.challenges).toEqual([]);
-        const skipped = processAction(opened, { type: 'skip_pack' }).nextState;
-        expect(skipped.challenges).toEqual([]);
-        const finished = processAction(skipped, { type: 'finish_pack' });
-        expect(finished.nextState).toMatchObject({ phase: 'entering_casino', ante: 50, challengeStage: 0 });
-        expect(finished.nextState.challenges).toEqual(createChallenges());
-        expect(finished.events).toContainEqual({ type: 'challenges_updated', challenges: createChallenges() });
-        expect(finished.events.some(event => event.type === 'ante_increased')).toBe(false);
+        expect(opening.pendingPack?.packId).toBe('mixed_major');
+        expect(finishOpeningPack(opening).challenges).toEqual(createChallenges());
+    });
+});
+
+
+describe('hand-pattern challenge progress', () => {
+    const patterns = [
+        { metric: 'pairs', cards: [{ id: 'a', rank: '9', suit: 'hearts' }, { id: 'b', rank: '9', suit: 'clubs' }] },
+        { metric: 'straights', cards: [{ id: 'a', rank: '9', suit: 'hearts' }, { id: 'b', rank: '10', suit: 'clubs' }] },
+        { metric: 'flushes', cards: [{ id: 'a', rank: '9', suit: 'hearts' }, { id: 'b', rank: '10', suit: 'hearts' }] },
+    ] as const;
+
+    describe.each(['win', 'loss', 'bust', 'push'] as const)('%s hands', outcome => {
+        it.each(patterns)('counts $metric independently of the outcome', ({ metric, cards }) => {
+            const goals = [0, 1, 2, 3].map(stage => createChallenges(stage)[1]);
+            const finalCards: Card[] = [...cards];
+            if (outcome === 'bust') finalCards.push({ id: 'c', rank: 'K', suit: 'spades' });
+            const state = settle({ ...start(), challenges: goals }, 0, [{ ...pair,
+                cards: finalCards, blackjackValue: outcome === 'bust' ? 28 : 18, isBust: outcome === 'bust', outcome,
+            }]);
+            expect(state.challenges.find(goal => goal.metric === metric)?.progress).toBe(1);
+            expect(state.challenges.find(goal => goal.metric === 'wins')?.progress).toBe(outcome === 'win' ? 1 : 0);
+        });
     });
 
-    it('does not credit money to challenges before the opening pack creates them', () => {
-        const opening = processAction(createInitialState(), { type: 'start_game', cityId: 'las_vegas',
-            gamblerId: 'default', seed: 42, globalTutorialsCompleted: TUTORIAL_STEPS.map(step => step.id) }).nextState;
-        const earned = processAction(opening, { type: 'debug_give_cash', amount: 300 }).nextState;
-        expect(earned.challenges).toEqual([]);
-        expect(earned.challengeRewards).toEqual([]);
-        const returned = finishOpeningPack(earned);
-        expect(returned).toMatchObject({ phase: 'entering_casino', ante: 50, cash: 400 });
-        expect(returned.challenges).toEqual(createChallenges());
+    it.each([1, 2])('counts a losing flush even when tradeoffs remove its positive payout (%i penalties)', count => {
+        const state = settle({ ...start(), challenges: createChallenges(2),
+            handUpgrades: { raise_v3_0_tradeoff_win_cash_flush_cash: count },
+        }, 0, [{ ...pair, cards: [{ id: 'a', rank: '2', suit: 'hearts' }, { id: 'b', rank: '3', suit: 'hearts' }], blackjackValue: 5 }]);
+        const flush = state.playerHands[0].finalScore!.criteria.find(row => row.id === 'flush')!;
+        expect(flush.chips).toBe(5 - 5 * count);
+        expect(flush.multiplier).toBe(0);
+        expect(state.challenges.find(goal => goal.metric === 'flushes')?.progress).toBe(1);
     });
 
-    it('does not count removed debug cash or duplicate settlement as additional earnings', () => {
+    it('earns a pattern reward from an intentional bust and immediately renews the challenge', () => {
         const before = start();
-        const debug = processAction(before, { type: 'debug_give_cash', amount: 100 }).nextState;
-        const removed = processAction(debug, { type: 'debug_give_cash', amount: -50 }).nextState;
-        expect(goal(removed, 'earnings').progress).toBe(100);
-        const settled = settle(removed, 100).nextState;
-        expect(goal(settled, 'earnings').progress).toBe(200);
-        expect(processAction(settled, { type: 'score_round' }).nextState).toEqual(settled);
+        const state = settle({ ...before, challenges: before.challenges.map(goal => goal.metric === 'pairs'
+            ? { ...goal, progress: goal.target - 1 } : goal) }, 0, [{ ...pair, cards: [
+                { id: 'a', rank: 'K', suit: 'hearts' }, { id: 'b', rank: 'K', suit: 'clubs' }, { id: 'c', rank: '9', suit: 'spades' },
+            ], blackjackValue: 29, isBust: true, outcome: 'bust' }]);
+        expect(state.challengeRewards).toMatchObject([{ tier: 'minor', title: 'Pair Collector' }]);
+        expect(state.challenges.find(goal => !goal.main && !goal.completed)?.metric).toBe('straights');
     });
+});
+
+
+it.each<{ name: string; stage: number; metric: string; ranks: Rank[]; suits?: Card['suit'][]; outcome: PlayerHand['outcome']; value: number; count: number }>([
+    { name: 'two separate straights in a loss', stage: 1, metric: 'straights', ranks: ['2', '3', '7', '8'], outcome: 'loss', value: 20, count: 2 },
+    { name: 'two separate straights in a bust', stage: 1, metric: 'straights', ranks: ['3', '4', '8', '9'], outcome: 'bust', value: 24, count: 2 },
+    { name: 'two flushes in different suits', stage: 2, metric: 'flushes', ranks: ['2', '3', '7', '8'], suits: ['hearts', 'hearts', 'clubs', 'clubs'], outcome: 'loss', value: 20, count: 2 },
+    { name: 'one maximal straight, without counting its sub-runs', stage: 1, metric: 'straights', ranks: ['A', '2', '3', '4'], outcome: 'loss', value: 20, count: 1 },
+    { name: 'separate Ace-high and Ace-low straights', stage: 1, metric: 'straights', ranks: ['K', 'A', '2'], outcome: 'loss', value: 13, count: 2 },
+])('matches the scored pattern count for $name', ({ stage, metric, ranks, suits, outcome, value, count }) => {
+    const cards: Card[] = ranks.map((rank, index) => ({ id: `multi-${index}`, rank, suit: suits?.[index] ?? 'hearts' }));
+    const state = settle({ ...start(), challenges: createChallenges(stage) }, 0, [{ ...pair, cards,
+        blackjackValue: value, isBust: outcome === 'bust', outcome }]);
+    const criterionId = metric === 'flushes' ? 'flush' : 'straight';
+    expect(state.playerHands[0].finalScore!.criteria.filter(row => row.id === criterionId)).toHaveLength(count);
+    expect(state.challenges.find(goal => goal.metric === metric)?.progress).toBe(count);
 });

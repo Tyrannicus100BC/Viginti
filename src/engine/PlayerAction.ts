@@ -44,6 +44,8 @@ export type PlayerAction =
     | { type: 'debug_remove_relic'; relicId: string }
     | { type: 'debug_fill_charges'; relicId: string }
     | { type: 'debug_give_cash'; amount?: number }
+    | { type: 'debug_advance_round' }
+    | { type: 'debug_advance_ante' }
     | { type: 'debug_draw_card'; cardId: string }
 
     // === Tutorial & Animations ===

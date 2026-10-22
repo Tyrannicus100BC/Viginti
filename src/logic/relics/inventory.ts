@@ -7,5 +7,7 @@ export const getRelicSide = (_index: number): RelicSide => 'left';
 export const getSideSlotCount = (side: RelicSide, slots: number) => side === 'left' ? slots : 0;
 
 export function canAcquireRelic(id: string, inventory: readonly RelicInstance[], slots = INITIAL_RELIC_SLOTS): boolean {
-    return !!RelicManager.getRelicConfig(id) && !inventory.some(instance => instance.id === id) && inventory.length < slots;
+    const config = RelicManager.getRelicConfig(id);
+    const passiveCount = inventory.filter(instance => !RelicManager.getRelicConfig(instance.id)?.tableAction).length;
+    return !!config && !inventory.some(instance => instance.id === id) && (!!config.tableAction || passiveCount < slots);
 }

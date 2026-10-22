@@ -5,7 +5,7 @@ export type PackFamily = typeof PACK_FAMILIES[number];
 export type PackQuality = 'average' | 'excellent' | 'exceptional';
 type PackFormat = 'basic' | 'jumbo' | 'mega';
 // Original IDs remain valid for saved runs; size names are internal only.
-export type PackId = `${PackFamily}_${PackFormat}` | `${PackFamily}_${PackFormat}_${Exclude<PackQuality, 'average'>}`;
+export type PackId = `${PackFamily}_${PackFormat}` | `${PackFamily}_${PackFormat}_${Exclude<PackQuality, 'average'>}` | 'mixed_major' | 'mixed_minor' | 'relic_boss';
 export type PackItemType = 'RaisePack' | 'DeckPack' | 'RelicPack' | 'MixedPack' | 'ChallengePack';
 export const PACK_ITEM_TYPES: Readonly<Record<PackFamily, PackItemType>> = {
     raise: 'RaisePack', deck: 'DeckPack', relic: 'RelicPack', mixed: 'MixedPack', challenge: 'ChallengePack',
@@ -42,13 +42,23 @@ const FORMATS = [
     { format: 'mega', cost: 80, offerCount: 5, pickCount: 2, stockWeight: 10 },
 ] as const;
 export const RAISE_PACK_COST = 40;
-export const PACKS: readonly PackDefinition[] = PACK_FAMILIES.flatMap(family =>
+export const PACKS: readonly PackDefinition[] = [...PACK_FAMILIES.flatMap(family =>
     (['average', 'excellent', 'exceptional'] as const).flatMap((quality, tier) => FORMATS.map(({ format, ...counts }) => ({
         ...counts,
         id: `${family}_${format}${quality === 'average' ? '' : `_${quality}`}` as PackId,
         family, name: `${family[0].toUpperCase() + family.slice(1)} Pack`, quality,
         rarity: (['Common', 'Uncommon', 'Rare'] as const)[tier], cost: counts.cost + tier * 20,
-    }))));
+    })))),
+    { id: 'mixed_major', family: 'mixed', name: 'Major Pack', quality: 'average', rarity: 'Common', cost: 0, offerCount: 6, pickCount: 1, stockWeight: 0 },
+    { id: 'mixed_minor', family: 'mixed', name: 'Minor Pack', quality: 'average', rarity: 'Common', cost: 0, offerCount: 3, pickCount: 1, stockWeight: 0 },
+    { id: 'relic_boss', family: 'relic', name: 'Boss Reward', quality: 'average', rarity: 'Common', cost: 0, offerCount: 2, pickCount: 1, stockWeight: 0 },
+];
+
+export const TARGETED_PACK_REWARDS = {
+    reward_deck_pack: { id: 'deck_basic', name: 'Deck Pack', family: 'deck', rarity: 'Common', description: 'Open a Deck Pack and choose one of three deck upgrades.' },
+    reward_challenge_pack: { id: 'challenge_basic', name: 'Challenge Pack', family: 'challenge', rarity: 'Common', description: 'Open a Challenge Pack and choose one of three extra challenges.' },
+} as const;
+export const getTargetedPackReward = (id: string) => TARGETED_PACK_REWARDS[id as keyof typeof TARGETED_PACK_REWARDS];
 
 export const getPackDefinition = (id?: string | null): PackDefinition => PACKS.find(pack => pack.id === id?.replace(/^special_/, 'deck_')) ?? PACKS[0];
 

@@ -26,7 +26,7 @@ describe('relic balance', () => {
         }
         const packs = generateRelicPackChoices(new SeededRNG(42), 100, []);
         const shop = generateShopItems([{ type: 'Relic', count: 100 }], [], undefined, new SeededRNG(42));
-        expect(packs.length).toBe(RelicManager.getAllRelics().length);
+        expect(packs.length).toBe(RelicManager.getAllRelics().filter(relic => !relic.tableAction).length);
         expect([...packs, ...shop.map(item => item.id)].some(id => removed.includes(id))).toBe(false);
     });
 

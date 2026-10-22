@@ -26,6 +26,35 @@
     overflow: visible;
 }
 
+.viewOverlay {
+    background: rgba(5, 12, 18, .8);
+    backdrop-filter: blur(8px);
+}
+
+.compactView {
+    padding: 24px 18px;
+}
+
+.compactView .title {
+    display: block;
+    margin-right: 28px;
+    width: auto;
+    font-size: 24px;
+    text-transform: none;
+    letter-spacing: 0;
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.compactView .titleText { white-space: normal; }
+.compactView .unifiedGrid { gap: 14px; }
+.compactView .probSection { padding: 14px 12px; margin-bottom: 0; }
+.compactView .probRow { gap: 10px; }
+.compactView .probLabel { width: 112px; flex-shrink: 0; }
+.compactView .probBarContainer { min-width: 0; }
+.compactView .probPercent { flex-shrink: 0; }
+.compactView .cardList { justify-content: flex-start; }
+
 .title {
     margin: 0 0 20px 0;
     font-size: 1.5rem;

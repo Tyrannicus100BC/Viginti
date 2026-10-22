@@ -31,6 +31,7 @@ export interface EventPlayerConfig {
     getSpeed: () => number;
     /** If true, skip all timing (for tests / headless) */
     headless?: boolean;
+    getBustLimit?: () => number;
     /** Hold the ante interstitial until the player dismisses it. */
     waitForAnteContinue?: () => Promise<void>;
 }
@@ -225,7 +226,7 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
                     ...next[event.handIndex],
                     cards: event.newCards,
                     blackjackValue: event.newBlackjackValue,
-                    isBust: event.newBlackjackValue > 21
+                    isBust: event.newBlackjackValue > (config.getBustLimit?.() ?? 21)
                 };
                 return next;
             }

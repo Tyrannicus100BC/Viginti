@@ -1,10 +1,11 @@
 import { formatCash, formatChipMultiplier } from '../logic/formatters';
 import { ENHANCE_CASH_COSTS, getRemovalCashCost } from '../engine/economy';
 import React from 'react';
-import type { Card as CardType, Suit, Rank } from '../types';
+import type { Card as CardType, Suit } from '../types';
 import type { DeckProbabilities } from '../engine/GameState';
 import { getSpecialWeights, SPECIAL_COLORS, SPECIAL_LABELS } from '../logic/specialCards';
 import styles from './DeckView.module.css';
+import panelStyles from './ReferencePanel.module.css';
 
 interface DeckViewProps {
   probabilities: DeckProbabilities;
@@ -16,6 +17,7 @@ interface DeckViewProps {
   onEnhanceCard?: (cardId: string, effect: { type: 'chip' | 'mult' | 'score', value: number }) => void;
   removalCount?: number;
   cash?: number;
+  docked?: boolean;
 }
 
 const SUITS_MAP: Record<string, string> = {
@@ -36,11 +38,20 @@ export const DeckView: React.FC<DeckViewProps> = ({
     onDeductRemovalCost, 
     onEnhanceCard, 
     removalCount = 0, 
-    cash = 0
+    cash = 0,
+    docked = false
 }) => {
     
     const [selectedEnhancement, setSelectedEnhancement] = React.useState<{ type: 'chip' | 'mult' | 'score', value: number } | null>(null);
     const [destroyingIds, setDestroyingIds] = React.useState<Set<string>>(new Set());
+    const isDocked = docked && mode === 'view';
+
+    React.useEffect(() => {
+        if (isDocked) return;
+        const close = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
+        window.addEventListener('keydown', close);
+        return () => window.removeEventListener('keydown', close);
+    }, [onClose, isDocked]);
 
     const handleRemove = (id: string) => {
         if (destroyingIds.has(id)) return;
@@ -154,9 +165,9 @@ export const DeckView: React.FC<DeckViewProps> = ({
     };
 
     return (
-        <div className={styles.overlay} onClick={onClose}>
-            <div className={styles.modal} onClick={e => e.stopPropagation()}>
-                <h2 className={styles.title}>
+        <div className={`${styles.overlay} ${mode === 'view' ? styles.viewOverlay : ''} ${isDocked ? `${panelStyles.docked} ${panelStyles.right}` : ''}`} onClick={isDocked ? event => event.stopPropagation() : onClose}>
+            <section id="deck-probabilities-panel" className={`${styles.modal} ${mode === 'view' ? `${panelStyles.compact} ${styles.compactView}` : ''}`} role={isDocked ? 'complementary' : 'dialog'} aria-modal={isDocked ? undefined : true} aria-labelledby="deck-probabilities-title" onClick={e => e.stopPropagation()}>
+                <h2 id="deck-probabilities-title" className={styles.title}>
                     <div className={styles.titleSpacer} />
                     <span className={styles.titleText}>
                         {mode === 'remove' ? 'Remove In-Play Cards' : 
@@ -211,8 +222,8 @@ export const DeckView: React.FC<DeckViewProps> = ({
                             </div>
                         )}
 
-                        {/* In Play Cards */}
-                        {activeCards.length > 0 && (
+                        {/* Card selection is only needed when removing or enhancing cards. */}
+                        {mode !== 'view' && activeCards.length > 0 && (
                             <div className={styles.probSection}>
                                 <h3 className={styles.sectionHeader}>Currently In Play</h3>
                                 <div className={styles.cardList}>
@@ -266,8 +277,8 @@ export const DeckView: React.FC<DeckViewProps> = ({
                     </div>
                 )}
 
-                <button className="close-x-btn" onClick={onClose}>×</button>
-            </div>
+                <button className="close-x-btn" aria-label="Close deck probabilities" autoFocus={!isDocked} onClick={onClose}>×</button>
+            </section>
         </div>
     );
 };

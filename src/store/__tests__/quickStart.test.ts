@@ -20,8 +20,9 @@ describe('quick-start URL', () => {
         expect(bridge.gameState).toMatchObject({ phase: 'pack_choice', selectedCityId: 'las_vegas',
             selectedGamblerId: 'default', cash: 100, ante: 50, dealsTaken: 0 });
         expect(bridge.phase).toBe('pack_choice');
-        expect(bridge.offeredPacks).toHaveLength(3);
-        expect(bridge.pendingPack).toBeNull();
+        expect(bridge.offeredPacks).toEqual([]);
+        expect(bridge.pendingPack).toEqual({ packId: 'mixed_major', picksRemaining: 1 });
+        expect(bridge.pendingPackChoices).toHaveLength(6);
         expect(bridge.challenges).toEqual([]);
         expect(bridge.isProcessingEvents).toBe(false);
         expect(bridge.eventLog.filter(event => event.type === 'phase_changed')).toHaveLength(1);
@@ -56,7 +57,7 @@ describe('quick-start URL', () => {
         expect(state.challengeRewards).toHaveLength(1);
         state = processAction(state, { type: 'deal' }).nextState;
         expect(state).toMatchObject({ phase: 'pack_choice', ante: 50 });
-        expect(state.offeredPacks).toHaveLength(3);
+        expect(state.pendingPack?.packId).toBe('mixed_major');
         state = finishOpeningPack(state);
         expect(state).toMatchObject({ phase: 'deal_over', ante: 100 });
     });

@@ -156,7 +156,7 @@ export const Hooks = {
     },
     joker_adjust_bj: {
         // @ts-ignore
-        adjustBlackjackScore: (currentScore: number, context: { handCards: Card[] }) => {
+        adjustBlackjackScore: (currentScore: number, context: { handCards: Card[]; bustLimit?: number }) => {
             const jackValues = [11, 10, 5, 1];
             const ignoreSpecialEffects = (context as any).ignoreSpecialEffects || false;
             let rawBase = 0;
@@ -206,12 +206,12 @@ export const Hooks = {
                 let score = rawBase + jackSum;
                 let remainingAces = aces;
                 
-                while (score > 21 && remainingAces > 0) {
+                while (score > (context.bustLimit ?? 21) && remainingAces > 0) {
                     score -= 10;
                     remainingAces--;
                 }
 
-                if (score <= 21) {
+                if (score <= (context.bustLimit ?? 21)) {
                     if (score > bestScore) bestScore = score;
                 } else {
                     if (score < minBust) minBust = score;
@@ -516,7 +516,7 @@ export const Hooks = {
         }
     },
     redemption_bust_bonus: {
-        onCheckCardPlace: (context: any) => context.blackjackValue > 21,
+        onCheckCardPlace: (context: any) => context.blackjackValue > (context.bustLimit ?? 21),
         onHandBust: async (_context: HandBustContext, relicState: any) => {
             relicState.pending_bonus = true;
         },
@@ -563,7 +563,7 @@ export const Hooks = {
         },
         onCheckCardPlace: (context: any, relicState: any, _config: any) => {
              // Wait if we are busting and haven't used mulligan yet
-             return !relicState.used_this_round && context.blackjackValue > 21;
+             return !relicState.used_this_round && context.blackjackValue > (context.bustLimit ?? 21);
         },
         onHandBust: async (context: HandBustContext, relicState: any, _config: any) => {
             if (!relicState.used_this_deal) {

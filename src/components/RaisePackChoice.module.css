@@ -1,4 +1,4 @@
-.scene { position: absolute; inset: 0; z-index: 2400; pointer-events: none; }
+.scene { --reward-card-width: 240px; --reward-card-height: 260px; --reward-card-gap: 24px; position: absolute; inset: 0; z-index: 2400; pointer-events: none; }
 .spotlight { position: absolute; inset: 0; background: radial-gradient(ellipse at center, #24466355 0%, #10192322 35%, transparent 70%); transition: opacity 280ms ease; }
 .packPosition { position: absolute; top: 50%; left: 50%; width: 240px; height: 310px; transform: translate(-50%, -50%); }
 .openingPack { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; border: 2px solid var(--pack-color); border-radius: 15px; background: repeating-linear-gradient(120deg, transparent 0 10px, #ffffff04 10px 12px), linear-gradient(135deg, color-mix(in srgb, var(--pack-color) 48%, #10202c), color-mix(in srgb, var(--pack-color) 18%, #101923) 45%, color-mix(in srgb, var(--pack-color) 40%, #10202c)); box-shadow: 0 18px 65px #0008; color: #ecf0f1; will-change: transform, opacity; }
@@ -30,50 +30,41 @@
 @keyframes burstGlow { from { transform: scale(.35); opacity: 0; } 12% { opacity: 1; } to { transform: scale(1.3); opacity: 0; } }
 @keyframes burstRing { from { transform: scale(.5); opacity: 1; } to { transform: scale(3.8); opacity: 0; } }
 @keyframes burstRays { from { transform: scale(.3) rotate(-8deg); opacity: 0; } 15% { opacity: 1; } to { transform: scale(1.15) rotate(12deg); opacity: 0; } }
-.choices { position: absolute; top: 50%; left: 50%; width: min(780px, calc(100% - 40px)); transform: translate(-50%, -50%); text-align: center; color: #ecf0f1; outline: none; }
+.choices { position: absolute; top: 50%; left: 50%; width: calc(3 * var(--reward-card-width) + 2 * var(--reward-card-gap)); transform: translate(-50%, -50%); text-align: center; color: #ecf0f1; outline: none; }
 /* Fade the HUD with the unselected options, keeping the selected card's flight visible. */
 .dismissedChoices > :not(.options) { opacity: 0; pointer-events: none; transition: opacity 280ms ease; }
 .title, .hiddenTitle { margin: 0 0 42px; font-size: 38px; font-weight: 800; color: #ffe3a2; letter-spacing: .5px; text-shadow: 0 3px 20px #000, 0 0 30px #ffd77a30; transition: opacity 350ms ease; }
 .hiddenTitle { opacity: 0; }
-.options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px; align-items: start; }
+/* Keep reward cards identical; only the number and placement of rows changes. */
+.options { display: grid; grid-template-columns: repeat(3, var(--reward-card-width)); gap: var(--reward-card-gap); align-items: start; }
 .pickCount { display: block; margin-top: 12px; font-size: 18px; font-weight: 600; color: #c6d9e8; letter-spacing: 0; }
-.fiveWide { width: min(1240px, calc(100% - 60px)); }
-.fiveWide .options { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 22px; }
-.fiveWide .card { padding-inline: 14px; }
 .fiveCompact .title, .fiveCompact .hiddenTitle { margin-bottom: 24px; }
-.fiveCompact .options { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 22px; }
+.fiveCompact .options { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 .fiveCompact .option { grid-column: span 2; }
 .fiveCompact .option:nth-child(4) { grid-column: 2 / span 2; }
 .fiveCompact .option:nth-child(5) { grid-column: 4 / span 2; }
-.fiveCompact .card { height: 270px; padding: 20px 16px 36px; }
-.fiveCompact .modifier { min-height: 36px; }
-.fiveCompact .cardBody { margin-top: 18px; }
-.fiveCompact .modifiers { gap: 8px; }
-.fiveCompact .modifier { padding-block: 7px; }
-.fiveCompact .chooseButton { margin-top: 12px; padding-block: 12px; }
 .option { opacity: 0; min-width: 0; will-change: transform, opacity; }
 .scene:is([data-pack-stage='revealing'], [data-pack-stage='ready'], [data-pack-stage='flying'], [data-pack-stage='received']) .option { opacity: 1; }
 .scene:is([data-pack-stage='ready'], [data-pack-stage='flying'], [data-pack-stage='received']) .option { transition: opacity 280ms ease; }
 .option.unselected { opacity: 0 !important; pointer-events: none; }
 .option.selected { z-index: 10; }
-.card { display: flex; flex-direction: column; position: relative; width: 100%; height: 320px; border: 2px solid var(--rarity-color); border-radius: 16px; padding: 28px 20px 40px; container-type: inline-size; background: linear-gradient(150deg, color-mix(in srgb, var(--card-type-color) 16%, #2c4053), color-mix(in srgb, var(--card-type-color) 9%, #172533) 65%); box-shadow: 0 16px 45px #0007, 0 0 24px color-mix(in srgb, var(--rarity-color) 16%, transparent); transform-origin: center; will-change: transform, opacity; pointer-events: auto; cursor: pointer; font-family: inherit; color: inherit; text-align: inherit; outline: none; transition: border-color 180ms ease, box-shadow 180ms ease; }
+.card { box-sizing: border-box; display: flex; flex-direction: column; position: relative; width: var(--reward-card-width); height: var(--reward-card-height); border: 2px solid var(--rarity-color); border-radius: 16px; padding: 12px 20px 20px; container-type: inline-size; background: linear-gradient(150deg, color-mix(in srgb, var(--card-type-color) 16%, #2c4053), color-mix(in srgb, var(--card-type-color) 9%, #172533) 65%); box-shadow: 0 16px 45px #0007, 0 0 24px color-mix(in srgb, var(--rarity-color) 16%, transparent); transform-origin: center; will-change: transform, opacity; pointer-events: auto; cursor: pointer; font-family: inherit; color: inherit; text-align: inherit; outline: none; transition: border-color 180ms ease, box-shadow 180ms ease; }
 .card:disabled { pointer-events: none; cursor: default; opacity: 1; }
 .card:focus-visible { outline: 3px solid #74b9ff; outline-offset: 5px; }
 .card::before { content: ''; position: absolute; inset: 7px; border: 1px solid color-mix(in srgb, var(--rarity-color) 22%, transparent); border-radius: 10px; pointer-events: none; }
 .rarity { flex-shrink: 0; font-size: 20px; font-weight: 800; line-height: 1.2; letter-spacing: .6px; }
-.cardBody { display: flex; flex: 1; flex-direction: column; min-height: 0; margin-top: 28px; }
-.modifiers { display: flex; flex-direction: column; gap: 12px; width: 100%; min-height: 0; }
-.modifier { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 46px; padding: 10px 0; border-bottom: 1px solid #ffffff12; font-size: clamp(13px, 8.5cqw, 17px); font-weight: 700; line-height: 1.25; }
+.cardBody { display: flex; flex: 1; flex-direction: column; min-height: 0; margin-top: 8px; }
+.modifiers { display: flex; flex-direction: column; gap: 8px; width: 100%; min-height: 0; }
+.modifier { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 36px; padding: 7px 0; border-bottom: 1px solid #ffffff12; font-size: clamp(13px, 8.5cqw, 17px); font-weight: 700; line-height: 1.25; }
 .handName, .modifierName { display: inline-flex; align-items: center; gap: 4px; min-width: 0; color: #9cd7ff; text-align: left; }
 .modifier strong { flex-shrink: 0; font-size: inherit; font-weight: inherit; white-space: nowrap; text-align: right; }
 .suitIcon { display: inline-flex; align-items: center; justify-content: center; width: 1.5em; height: 1.5em; flex-shrink: 0; }
 .denseCard .modifiers { gap: 6px; }
-.denseCard .modifier { min-height: 30px; padding-block: 5px; }
-.fiveCompact .denseCard .modifier { min-height: 25px; padding-block: 2px; }
+.denseCard .modifier { min-height: 28px; padding-block: 4px; }
 .cash { color: #66ee8d; }
 .mult { color: #ffc45f; }
 .negative { color: #ff7c7c; }
-.chooseButton { pointer-events: auto; width: calc(100% - 24px); margin: 20px 12px 0; padding: 14px 0; background: #20374bd9; color: #f4e5c7; border: 1px solid color-mix(in srgb, var(--rarity-color) 55%, transparent); border-radius: 9px; box-shadow: 0 6px 24px #0005; font-family: inherit; font-size: 13px; letter-spacing: 2px; font-weight: 800; outline: none; transition: background 180ms ease, border-color 180ms ease, box-shadow 180ms ease, opacity 200ms ease; }
+.chooseButton { pointer-events: auto; width: calc(100% - 24px); margin: 12px 12px 0; padding: 12px 0; background: #20374bd9; color: #f4e5c7; border: 1px solid color-mix(in srgb, var(--rarity-color) 55%, transparent); border-radius: 9px; box-shadow: 0 6px 24px #0005; font-family: inherit; font-size: 13px; letter-spacing: 2px; font-weight: 800; outline: none; transition: background 180ms ease, border-color 180ms ease, box-shadow 180ms ease, opacity 200ms ease; }
 .option:has(button:hover:not(:disabled)) .card { border-color: color-mix(in srgb, var(--rarity-color) 80%, white); box-shadow: 0 16px 45px #0007, 0 0 32px color-mix(in srgb, var(--rarity-color) 35%, transparent); }
 .option:has(button:hover:not(:disabled)) .chooseButton { background: #35546b; border-color: color-mix(in srgb, var(--rarity-color) 80%, white); box-shadow: 0 0 24px color-mix(in srgb, var(--rarity-color) 35%, transparent); }
 .chooseButton:focus-visible { outline: 3px solid #74b9ff; outline-offset: 5px; }
@@ -93,7 +84,16 @@
 
 .packDetails { display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: #c6d9e8; }
 .openingPack .packDetails strong { font-size: 16px; color: #ecf0f1; }
-.cardType { position: absolute; bottom: 16px; left: 12px; right: 12px; display: flex; align-items: center; justify-content: center; gap: 6px; height: 22px; font-size: 10px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: color-mix(in srgb, var(--card-type-color) 65%, #b4c5d2); }
+.cardType { display: flex; flex-shrink: 0; align-self: center; margin-bottom: 4px; align-items: center; justify-content: center; gap: 6px; height: 24px; font-size: 14px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: color-mix(in srgb, var(--card-type-color) 65%, #b4c5d2); }
 .cardType .packArt { width: 24px; height: 24px; }
 .blockedLabel { position: absolute; inset: 45% 10px auto; padding: 8px; background: #172533ee; border-radius: 6px; font-size: 13px; }
 .slotStatus { color: #c6d9e8; margin: -16px 0 16px; font-size: 14px; }
+
+.twoChoices { width: calc(2 * var(--reward-card-width) + var(--reward-card-gap)); }
+.twoChoices .options { grid-template-columns: repeat(2, var(--reward-card-width)); }
+
+/* Keep the two reward rows between the HUD and the 80px table action area. */
+.multiRowChoices { top: 108px; bottom: 140px; transform: translateX(-50%); display: flex; flex-direction: column; justify-content: center; }
+.multiRowChoices .title, .multiRowChoices .hiddenTitle { margin-bottom: 20px; line-height: 1.2; flex-shrink: 0; }
+.multiRowChoices .options { flex-shrink: 0; }
+.multiRowChoices .skipButton { margin-top: 16px; }

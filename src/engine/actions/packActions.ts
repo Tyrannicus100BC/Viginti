@@ -1,12 +1,13 @@
 import { generateChallengeCardChoices, getChallengeCard } from '../../logic/challengeCards';
 import { createChallenges, type RewardTier } from '../challenges';
+import { chooseBoss } from '../bosses';
 import { getNextAnte } from '../economy';
 import type { GameEvent } from '../GameEvent';
 /** Free opening packs and queued challenge rewards. */
 import { generateRelicPackChoices } from '../../logic/relicPacks';
 import { applyPackCard, generatePackCardChoices, getPackCard } from '../../logic/packCards';
 import { getRaise, generateRaiseChoices } from '../../logic/handScoring';
-import { getPackDefinition, hasPendingPack, PACKS, PACK_FAMILIES, rollPackDefinition, type PackId } from '../../logic/packs';
+import { getPackDefinition, hasPendingPack, PACKS, getTargetedPackReward, type PackId } from '../../logic/packs';
 import type { Card, PlayerHand } from '../../types';
 import type { RelicInstance } from '../../logic/relics/types';
 import type { GameState } from '../GameState';
@@ -16,35 +17,38 @@ import { SeededRNG } from '../rng';
 import { canAcquireRelic } from '../../logic/relics/inventory';
 import { INITIAL_HAND_COUNT } from '../GameState';
 
-export function generatePackOffers(rng: SeededRNG, tier?: RewardTier): PackId[] {
-    // Three distinct families, with quantity and quality competing for reward value.
-    const variants = rng.shuffle(tier === 'major'
-        ? ['mega_excellent', 'jumbo_exceptional', 'mega']
-        : ['basic_excellent', 'jumbo', 'basic']);
-    // Opening and major rewards always include the two core upgrade families.
-    const families = tier === 'minor'
-        ? rng.shuffle(PACK_FAMILIES).slice(0, 3)
-        : rng.shuffle(['raise', 'relic', rng.pick(PACK_FAMILIES.filter(family => family !== 'raise' && family !== 'relic'))] as const);
-    return families.map((family, index) => {
-        if (!tier) return rollPackDefinition(rng.next(), family, rng.next()).id;
-        return `${family}_${variants[index]}` as PackId;
-    });
+export function generatePackOffers(_rng: SeededRNG, tier: RewardTier = 'major'): PackId[] {
+    return [tier === 'major' ? 'mixed_major' : 'mixed_minor'];
+}
+
+/** Open the reward immediately; there is no pack-family selection screen. */
+export function openReward(state: GameState): ActionResult {
+    const packId = state.challengeRewards[0]?.kind === 'table_action' ? 'relic_boss'
+        : state.challengeRewards[0]?.tier === 'minor' ? 'mixed_minor' : 'mixed_major';
+    return processOpenPack({ ...state, phase: 'pack_choice', offeredPacks: [packId] }, packId);
 }
 
 /** The normal table advance opens earned rewards before it can deal another round. */
 export function processBeginChallengeRewards(state: GameState): ActionResult {
     if ((state.phase !== 'deal_over' && state.phase !== 'entering_casino') || !state.challengeRewards.length) return { nextState: state, events: [] };
+    // Claim minor packs in HUD order before major rewards, even when goals
+    // completed on different hands or the queue came from an older save.
+    const boardOrder = new Map(state.challenges.map((challenge, index) => [challenge.id, index]));
+    const challengeRewards = [...state.challengeRewards].sort((left, right) =>
+        Number(left.tier === 'major') - Number(right.tier === 'major')
+        || (boardOrder.get(left.id) ?? boardOrder.size) - (boardOrder.get(right.id) ?? boardOrder.size));
     const rng = new SeededRNG(state.rngState);
     const playerHands: PlayerHand[] = Array.from({ length: INITIAL_HAND_COUNT }, (_, id) => ({
         id, cards: [], isHeld: false, isInactive: false, isBust: false, blackjackValue: 0,
     }));
-    return {
-        nextState: { ...state, phase: 'pack_choice', packReturnPhase: 'deal_over',
+    const opened = openReward({ ...state, phase: 'pack_choice', packReturnPhase: 'deal_over',
+            challengeRewards,
             playerHands, dealer: { cards: [], isRevealed: false, blackjackValue: 0 },
             runningSummary: null, drawnCards: [], selectedDrawIndex: null, cardsPlacedThisTurn: 0,
             interactionMode: 'default', activeTableActionId: null, redrawDiscard: null,
-            offeredPacks: generatePackOffers(rng, state.challengeRewards[0].tier), rngState: rng.getState() },
-        events: [{ type: 'round_dismissed', playerHands }, { type: 'phase_changed', from: state.phase, to: 'pack_choice' }],
+            offeredPacks: [], rngState: rng.getState() });
+    return { nextState: opened.nextState,
+        events: [{ type: 'round_dismissed', playerHands }, { type: 'phase_changed', from: state.phase, to: 'pack_choice' }, ...opened.events],
     };
 }
 
@@ -55,14 +59,16 @@ export function processOpenPack(state: GameState, packId: PackId): ActionResult 
     const rng = new SeededRNG(state.rngState);
     const pack = getPackDefinition(packId);
     let choices: string[] = [];
-    if (pack.family === 'relic') choices = generateRelicPackChoices(rng, pack.offerCount, state.inventory, [], pack.quality);
+    if (pack.family === 'relic') choices = generateRelicPackChoices(rng, pack.offerCount, state.inventory, [], pack.quality, packId === 'relic_boss');
     if (pack.family === 'deck') choices = generatePackCardChoices(rng, pack.offerCount, state.deckProbabilities, pack.quality).map(card => card.id);
     if (pack.family === 'challenge') choices = generateChallengeCardChoices(rng, pack.offerCount, state.challengeStage, pack.quality).map(card => card.id);
     if (pack.family === 'mixed') {
-        // Every mixed pack contains all three upgrade families while relics remain available.
-        const families = rng.shuffle(['raise', 'deck', 'relic'] as const);
-        for (let index = 0; index < pack.offerCount; index++) {
-            const family = index < 3 ? families[index] : rng.pick(families);
+        const families = packId === 'mixed_major'
+            ? ['raise', 'raise', 'raise', 'relic', 'relic'] as const
+            : packId === 'mixed_minor'
+                ? Array.from({ length: 3 }, () => rng.pick(['raise', 'deck', 'relic'] as const))
+                : Array.from({ length: pack.offerCount }, (_, index) => index < 3 ? (['raise', 'deck', 'relic'] as const)[index] : rng.pick(['raise', 'deck', 'relic'] as const));
+        for (const family of families) {
             let id: string | undefined;
             if (family === 'relic') id = generateRelicPackChoices(rng, 1, state.inventory, choices, pack.quality)[0];
             if (family === 'deck') {
@@ -73,7 +79,9 @@ export function processOpenPack(state: GameState, packId: PackId): ActionResult 
             }
             choices.push(id);
         }
-        choices = rng.shuffle(choices);
+        if (packId === 'mixed_major') choices.push(rng.pick(['reward_deck_pack', 'reward_challenge_pack'] as const));
+        // Keep major choices grouped: raises, relics, and targeted packs.
+        if (packId !== 'mixed_major') choices = rng.shuffle(choices);
     }
     return {
         nextState: {
@@ -99,17 +107,11 @@ export function processFinishPack(state: GameState): ActionResult {
             events: [{ type: 'phase_changed', from: 'pack_choice', to: phase }],
         };
     }
-    // Debug earnings can complete a goal while the free opening pack is still open.
-    // That opening pack does not consume the newly earned challenge reward.
+    // The opening reward does not consume any separately queued challenge reward.
     const openingReward = state.packReturnPhase === 'entering_casino' && state.dealsTaken === 0;
     const challengeRewards = openingReward ? state.challengeRewards : state.challengeRewards.slice(1);
     if (challengeRewards.length) {
-        const rng = new SeededRNG(state.rngState);
-        return {
-            nextState: { ...state, challengeRewards, packReturnPhase: 'deal_over',
-                offeredPacks: generatePackOffers(rng, challengeRewards[0].tier), rngState: rng.getState() },
-            events: [],
-        };
+        return openReward({ ...state, challengeRewards, packReturnPhase: 'deal_over' });
     }
     // Retain completed goals and the current ante through every reward in the queue.
     const advance = state.challengeRewards.length > 0 && state.challenges.some(challenge => challenge.main && challenge.completed);
@@ -118,6 +120,8 @@ export function processFinishPack(state: GameState): ActionResult {
     const challenges = advance || openingReward
         ? [...createChallenges(challengeStage, ante), ...state.challenges.filter(challenge => challenge.source === 'pack' && !challenge.completed)]
         : state.challenges;
+    const rng = new SeededRNG(state.rngState);
+    const bossId = advance ? chooseBoss(challengeStage, rng) : state.bossId;
     const events: GameEvent[] = [];
     if (advance) {
         events.push({ type: 'ante_increased', previousAnte: state.ante, ante });
@@ -125,7 +129,7 @@ export function processFinishPack(state: GameState): ActionResult {
     if (advance || openingReward) events.push({ type: 'challenges_updated', challenges });
     events.push({ type: 'phase_changed', from: 'pack_choice', to: state.packReturnPhase });
     return {
-        nextState: { ...state, challengeRewards, ante, challengeStage, challenges, phase: state.packReturnPhase },
+        nextState: { ...state, challengeRewards, ante, challengeStage, bossId, rngState: rng.getState(), challenges: challenges.filter(goal => !goal.completed), phase: state.packReturnPhase },
         events,
     };
 }
@@ -206,6 +210,11 @@ export function processChooseRaise(state: GameState, raiseId: string): ActionRes
 export function processChoosePackCard(state: GameState, cardId: string): ActionResult {
     if (state.phase !== 'pack_choice' || !state.pendingPackChoices.includes(cardId) || !state.pendingPack) {
         return { nextState: state, events: [] };
+    }
+    const targeted = getTargetedPackReward(cardId);
+    if (targeted && state.pendingPack.packId === 'mixed_major') {
+        const opened = processOpenPack({ ...state, pendingPack: null, pendingPackChoices: [], offeredPacks: [targeted.id] }, targeted.id);
+        return { nextState: opened.nextState, events: [{ type: 'pack_card_chosen', cardId }, ...opened.events] };
     }
     const family = getPackDefinition(state.pendingPack.packId).family;
     let updated = state;

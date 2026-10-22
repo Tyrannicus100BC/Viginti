@@ -1,4 +1,6 @@
-import { advanceChallenges, completeChallenges, getHandChallengeProgress } from './challenges';
+import { getBustLimit } from './bosses';
+import { processDebugAdvanceRound, processDebugAdvanceAnte } from './actions/debugProgression';
+import { advanceChallenges, completeChallenges, getHandChallengeProgress, type ChallengeReward } from './challenges';
 import { canAcquireRelic, INITIAL_RELIC_SLOTS } from '../logic/relics/inventory';
 /**
  * Game Engine — the main entry point for processing player actions.
@@ -40,7 +42,7 @@ import {
     processSelectTableActionCard,
     processSelectTableActionDrawCard,
 } from './actions/tableActions';
-import { generatePackOffers, processBeginChallengeRewards, processDebugOpenPack, processOpenPack, processFinishPack, processChooseRaise, processChoosePackCard, processSkipPack } from './actions/packActions';
+import { openReward, processBeginChallengeRewards, processDebugOpenPack, processOpenPack, processFinishPack, processChooseRaise, processChoosePackCard, processSkipPack } from './actions/packActions';
 import {
     checkTutorialTriggers,
     handleTutorialAction,
@@ -144,6 +146,10 @@ function processCoreAction(state: GameState, action: PlayerAction): ActionResult
             return processDebugFillCharges(state, action.relicId);
         case 'debug_give_cash':
             return processDebugGiveCash(state, action.amount);
+        case 'debug_advance_round':
+            return processDebugAdvanceRound(state);
+        case 'debug_advance_ante':
+            return processDebugAdvanceAnte(state);
         case 'debug_draw_card':
             return processDebugDrawCard(state, action.cardId);
         case 'debug_undo':
@@ -365,6 +371,7 @@ export function createInitialState(): GameState {
         cash: STARTING_CASH,
         ante: BASE_ANTE,
         challengeStage: 0,
+        bossId: null,
         challenges: [],
         challengeRewards: [],
         phase: 'init',
@@ -454,6 +461,7 @@ function processStartGame(
         cash: STARTING_CASH,
         ante: BASE_ANTE,
         challengeStage: 0,
+        bossId: null,
         challenges: [],
         challengeRewards: [],
         phase: 'entering_casino',
@@ -483,7 +491,6 @@ function processStartGame(
         removalCount: 0,
     };
 
-    const offeredPacks = generatePackOffers(rng);
     events.push({ type: 'phase_changed', from: state.phase, to: 'pack_choice' });
 
     // Initialize tutorial state
@@ -498,10 +505,8 @@ function processStartGame(
         tutorialState.globalCompletedStepIds = completedSteps;
     }
 
-    return {
-        nextState: { ...nextState, phase: 'pack_choice', offeredPacks, rngState: rng.getState(), tutorial: tutorialState },
-        events
-    };
+    const opened = openReward({ ...nextState, rngState: rng.getState(), tutorial: tutorialState });
+    return { nextState: opened.nextState, events: [...events, ...opened.events] };
 }
 
 function processDeal(state: GameState, _forceContinue?: boolean): ActionResult {
@@ -541,7 +546,7 @@ function processDeal(state: GameState, _forceContinue?: boolean): ActionResult {
     playerHands[1] = {
         ...playerHands[1],
         cards: [playerCard],
-        blackjackValue: getBlackjackScore([playerCard], state.inventory as RelicInstance[]),
+        blackjackValue: getBlackjackScore([playerCard], state.inventory as RelicInstance[], false, getBustLimit(state)),
     };
 
     // Deal dealer cards
@@ -585,7 +590,7 @@ function processDeal(state: GameState, _forceContinue?: boolean): ActionResult {
         dealer: {
             cards: dealerCards,
             isRevealed: false,
-            blackjackValue: getBlackjackScore(dealerCards.filter(c => c.isFaceUp), state.inventory as RelicInstance[], true),
+            blackjackValue: getBlackjackScore(dealerCards.filter(c => c.isFaceUp), state.inventory as RelicInstance[], true, getBustLimit(state)),
         },
         drawnCards: [],
         selectedDrawIndex: null,
@@ -687,8 +692,8 @@ function processPlaceCard(state: GameState, handIndex: number): ActionResult {
         animationOffset: drawOffset,
     };
     const newCards = isSpecial ? [cardToAdd, ...targetHand.cards] : [...targetHand.cards, cardToAdd];
-    const newBJValue = getBlackjackScore(newCards, invArr);
-    const isBust = newBJValue > 21;
+    const newBJValue = getBlackjackScore(newCards, invArr, false, getBustLimit(state));
+    const isBust = newBJValue > getBustLimit(state);
 
     let updatedHand: PlayerHand = {
         ...targetHand,
@@ -717,6 +722,7 @@ function processPlaceCard(state: GameState, handIndex: number): ActionResult {
     // Check hooks (synchronous, pure)
     const checkContext = {
         inventory: invArr,
+        bustLimit: getBustLimit(state),
         handId: handIndex,
         placedCard: cardToPlace,
         handCards: updatedHand.cards,
@@ -738,6 +744,7 @@ function processPlaceCard(state: GameState, handIndex: number): ActionResult {
         cardToPlace,
         updatedHand.blackjackValue,
         state.dealer.cards,
+        getBustLimit(state),
     );
     events.push(...cardPlacedResult.events);
     // Apply hand modifications from relics (e.g., safety_net_20 discards hand)
@@ -749,7 +756,7 @@ function processPlaceCard(state: GameState, handIndex: number): ActionResult {
             updatedHand = {
                 ...updatedHand,
                 cards: modifiedEvent.newCards,
-                blackjackValue: getBlackjackScore(modifiedEvent.newCards, invArr),
+                blackjackValue: getBlackjackScore(modifiedEvent.newCards, invArr, false, getBustLimit(state)),
                 isBust: false,
             };
             updatedHands = updatedHands.map((h, idx) => idx === handIndex ? updatedHand : h);
@@ -771,12 +778,12 @@ function processPlaceCard(state: GameState, handIndex: number): ActionResult {
                 (e): e is Extract<GameEvent, { type: 'hand_modified' }> => e.type === 'hand_modified' && e.handIndex === handIndex
             );
             if (modifiedEvent) {
-                const newBJ = getBlackjackScore(modifiedEvent.newCards, invArr);
+                const newBJ = getBlackjackScore(modifiedEvent.newCards, invArr, false, getBustLimit(state));
                 updatedHand = {
                     ...updatedHand,
                     cards: modifiedEvent.newCards,
                     blackjackValue: newBJ,
-                    isBust: newBJ > 21,
+                    isBust: newBJ > getBustLimit(state),
                 };
                 updatedHands = updatedHands.map((h, idx) => idx === handIndex ? updatedHand : h);
             }
@@ -884,7 +891,7 @@ function processResolveDealerTurn(state: GameState): ActionResult {
 
     if (!state.dealer.isRevealed && dCards.length >= 2) {
         dCards[0] = { ...dCards[0], isFaceUp: true };
-        dVal = getBlackjackScore(dCards, invArr, true);
+        dVal = getBlackjackScore(dCards, invArr, true, getBustLimit(state));
         events.push({ type: 'dealer_reveal', card: dCards[0], newValue: dVal });
     }
 
@@ -893,7 +900,7 @@ function processResolveDealerTurn(state: GameState): ActionResult {
     let debugDeck = (state as any).deck ? [...(state as any).deck] : null;
     const isDebugWin = (state as any).debugWin === true;
 
-    while (dVal < dealerStopValue || (isDebugWin && dVal <= 21)) {
+    while (dVal < dealerStopValue || (isDebugWin && dVal <= getBustLimit(state))) {
         let c: Card;
         if (debugDeck && debugDeck.length > 0) {
             c = debugDeck.pop()!;
@@ -904,12 +911,12 @@ function processResolveDealerTurn(state: GameState): ActionResult {
         c.isFaceUp = true;
         c.origin = 'deck';
         dCards.push(c);
-        dVal = getBlackjackScore(dCards, invArr, true);
+        dVal = getBlackjackScore(dCards, invArr, true, getBustLimit(state));
 
         events.push({ type: 'dealer_hit', card: c, newValue: dVal, burnedCards: [] });
     }
 
-    if (dVal > 21) {
+    if (dVal > getBustLimit(state)) {
         events.push({ type: 'dealer_bust', value: dVal });
     } else {
         events.push({ type: 'dealer_stand', value: dVal });
@@ -951,8 +958,8 @@ function processResolveHandOutcome(state: GameState): ActionResult {
         } else if (h.isBust) {
             outcome = 'bust';
         } else if (h.blackjackValue === 21) {
-            outcome = dVal > 21 || h.blackjackValue >= dVal ? 'win' : 'loss';
-        } else if (dVal > 21) {
+            outcome = dVal > getBustLimit(state) || h.blackjackValue >= dVal ? 'win' : 'loss';
+        } else if (dVal > getBustLimit(state)) {
             outcome = 'win';
         } else if (h.blackjackValue >= dVal) {
             outcome = 'win';
@@ -1010,13 +1017,14 @@ function processScoreRound(state: GameState): ActionResult {
     let currentInv = state.inventory as RelicInstance[];
     const scoredHands = state.playerHands;
     let challenges = state.challenges;
+    const sideRewards: ChallengeReward[] = [];
 
     // Pre-calculate to count category instances across all scored hands
     const categoryCounts: Record<string, number> = { flush: 0, rank: 0, straight: 0 };
     scoredHands.forEach(hand => {
         if (hand.cards.length === 0) return;
         const isWin = hand.outcome === 'win';
-        const preScore = evaluateHandScore(hand.cards, isWin, hand.isDoubled ?? false, currentInv, state.handsRemaining, undefined, hand.outcome, state.handUpgrades);
+        const preScore = evaluateHandScore(hand.cards, isWin, hand.isDoubled ?? false, currentInv, state.handsRemaining, undefined, hand.outcome, state.handUpgrades, getBustLimit(state));
         preScore.criteria.forEach(c => {
             if (c.id === 'flush' || c.id.startsWith('flush_')) categoryCounts.flush++;
             if (c.id === 'straight' || c.id.startsWith('straight_')) categoryCounts.straight++;
@@ -1039,7 +1047,8 @@ function processScoreRound(state: GameState): ActionResult {
             state.handsRemaining,
             categoryCounts,
             hand.outcome,
-            state.handUpgrades
+            state.handUpgrades,
+            getBustLimit(state)
         );
 
         events.push({ type: 'scoring_hand_focus', handIndex: i });
@@ -1107,7 +1116,9 @@ function processScoreRound(state: GameState): ActionResult {
         currentInv = handCompResult.inventory;
 
         events.push({ type: 'scoring_hand_complete', handIndex: i });
-        challenges = advanceChallenges(challenges, getHandChallengeProgress(score));
+        const handCompletion = completeChallenges(advanceChallenges(challenges, getHandChallengeProgress(hand)));
+        challenges = handCompletion.challenges;
+        sideRewards.push(...handCompletion.rewards);
         events.push({ type: 'challenges_updated', challenges });
 
         return { ...hand, finalScore: score, resultRevealed: true };
@@ -1152,8 +1163,10 @@ function processScoreRound(state: GameState): ActionResult {
     challenges = advanceChallenges(challenges, { rounds: 1, earnings: Math.max(0, finalScore) });
     const completion = completeChallenges(challenges);
     events.push({ type: 'challenges_updated', challenges: completion.challenges });
-    const challengeRewards = [...state.challengeRewards, ...completion.rewards];
-    completion.rewards.forEach(reward => events.push({ type: 'challenge_completed', reward }));
+    const rewards = [...completion.rewards, ...sideRewards];
+    if (completion.advance && state.bossId) rewards.push({ id: `boss-${state.challengeStage}`, title: 'Boss Defeated', tier: 'major', kind: 'table_action' });
+    const challengeRewards = [...state.challengeRewards, ...rewards];
+    rewards.forEach(reward => events.push({ type: 'challenge_completed', reward }));
     const tableActionCharges = { ...state.tableActionCharges };
     currentInv = currentInv.map(instance => {
         const action = getRelicConfig(instance.id)?.tableAction;
@@ -1303,9 +1316,7 @@ function processDebugFillCharges(state: GameState, relicId: string): ActionResul
     };
 }
 
-function processDebugGiveCash(state: GameState, amount = Math.ceil(
-    (state.challenges.find(challenge => challenge.main && challenge.metric === 'earnings')?.target ?? 300) / 3
-)): ActionResult {
+function processDebugGiveCash(state: GameState, amount = state.ante): ActionResult {
     if (!Number.isFinite(amount)) return { nextState: state, events: [] };
     const completion = completeChallenges(advanceChallenges(state.challenges, { earnings: Math.max(0, amount) }));
     return {

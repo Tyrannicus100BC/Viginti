@@ -65,6 +65,8 @@ export const useGameStore = <T>(selector?: (state: any) => T): any => {
         triggerDebugChips: () => {
              dispatch({ type: 'debug_give_cash' });
         },
+        debugAdvanceRound: () => dispatch({ type: 'debug_advance_round' }),
+        debugAdvanceAnte: () => dispatch({ type: 'debug_advance_ante' }),
         debugWin: () => dispatch({ type: 'debug_win' }),
         debugUndo: () => dispatch({ type: 'debug_undo' }),
         debugAddRelic: (relicId: string) => dispatch({ type: 'debug_add_relic', relicId }),

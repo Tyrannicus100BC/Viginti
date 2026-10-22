@@ -290,7 +290,9 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
   useLayoutEffect(() => {
     if ((isScoringFocus || isEnlarged) && containerRef.current) {
       const rect = containerRef.current.getBoundingClientRect();
-      const viewportWidth = window.innerWidth;
+      const playArea = containerRef.current.closest('#player-hands-zone');
+      if (!playArea) return;
+      const playAreaRect = playArea.getBoundingClientRect();
 
       // We scale by 1.5
       const scaledWidth = rect.width * 1.5;
@@ -299,8 +301,10 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
       // Default center assumes expansion goes half left, half right
       const expansionPerSide = widthDiff / 2;
 
-      const wouldGoOffLeft = (rect.left - expansionPerSide) < 20; // 20px padding
-      const wouldGoOffRight = (rect.right + expansionPerSide) > (viewportWidth - 20);
+      // The hand row stays inside the fixed-width board, even when the browser
+      // has extra space on either side. Both rectangles include responsive scaling.
+      const wouldGoOffLeft = (rect.left - expansionPerSide) < playAreaRect.left;
+      const wouldGoOffRight = (rect.right + expansionPerSide) > playAreaRect.right;
 
       if (wouldGoOffLeft) {
         setTransformOrigin('left center');

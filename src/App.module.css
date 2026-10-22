@@ -1285,8 +1285,8 @@
 }
 .dealActions > button { min-width: 0; }
 
-/* Keep the debug cash control in the Cash label's own layout position. */
-.cashDebugButton {
+/* Keep debug controls in their HUD labels' own layout positions. */
+.hudDebugButton {
     display: inline-flex;
     width: auto;
     font: inherit;
@@ -1296,6 +1296,8 @@
     margin: -2px -8px;
     vertical-align: baseline;
 }
+.hudDebugButton:disabled { opacity: .35; cursor: default; }
+.hudDebugButton:focus-visible { outline: 1px solid #a7b9c6; outline-offset: 3px; }
 
 /* Shared heading height keeps the side inventories aligned with Dealer. */
 .dealerHeading, .sidebarHeading {
@@ -1324,3 +1326,6 @@
 }
 .headingDebugButton:disabled { opacity: .35; cursor: default; }
 .headingDebugButton:focus-visible { outline: 1px solid #a7b9c6; outline-offset: 3px; }
+
+.bossRule { position: absolute; top: 102px; left: 50%; transform: translateX(-50%); text-align: center; color: #ffd8c4; background: #421e2ee8; border: 1px solid #e38280; border-radius: 10px; padding: 8px 20px; font-size: 17px; z-index: 100; pointer-events: none; }
+.bossRule span { display: block; font-size: 12px; color: #e6b6b6; margin-top: 3px; }

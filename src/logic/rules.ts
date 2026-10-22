@@ -12,7 +12,7 @@ export const POKER_ORDER: Record<string, number> = {
   '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14
 };
 
-export function getBaseBlackjackScore(cards: Card[], ignoreSpecialEffects: boolean = false): number {
+export function getBaseBlackjackScore(cards: Card[], ignoreSpecialEffects: boolean = false, bustLimit = 21): number {
   let score = 0;
   let aces = 0;
 
@@ -36,7 +36,7 @@ export function getBaseBlackjackScore(cards: Card[], ignoreSpecialEffects: boole
     }
   }
 
-  while (score > 21 && aces > 0) {
+  while (score > bustLimit && aces > 0) {
     score -= 10;
     aces -= 1;
   }

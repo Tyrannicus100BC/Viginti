@@ -4,6 +4,9 @@ import React, { createContext, useContext, useEffect, useState, useMemo } from '
 // This is the coordinate system the components will "think" they are in, before extra space is added.
 const IDEAL_WIDTH = 800;
 const IDEAL_HEIGHT = 1050;
+const REFERENCE_PANEL_WIDTH = 340;
+const REFERENCE_PANEL_GAP = 24;
+const REFERENCE_PANEL_MARGIN = 16;
 
 interface LayoutContextType {
     scale: number;
@@ -13,6 +16,7 @@ interface LayoutContextType {
     extraHeight: number; // Vertical space to distribute
     idealWidth: number;
     idealHeight: number;
+    referencePanelsFit: boolean;
 }
 
 const LayoutContext = createContext<LayoutContextType>({
@@ -23,6 +27,7 @@ const LayoutContext = createContext<LayoutContextType>({
     extraHeight: 0,
     idealWidth: IDEAL_WIDTH,
     idealHeight: IDEAL_HEIGHT,
+    referencePanelsFit: false,
 });
 
 export const useLayout = () => useContext(LayoutContext);
@@ -108,12 +113,15 @@ export const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({ children }) 
         top: 0,
         left: 0,
         overflow: 'hidden', // Clip anything outside the calculated viewport
-    };
+        '--reference-panel-width': `${REFERENCE_PANEL_WIDTH}px`,
+        '--reference-panel-margin': `${REFERENCE_PANEL_MARGIN}px`,
+    } as React.CSSProperties;
 
     const contextValue = useMemo(() => ({
         ...layout,
         idealWidth: IDEAL_WIDTH,
-        idealHeight: IDEAL_HEIGHT
+        idealHeight: IDEAL_HEIGHT,
+        referencePanelsFit: layout.viewportWidth >= IDEAL_WIDTH + 2 * (REFERENCE_PANEL_WIDTH + REFERENCE_PANEL_GAP + REFERENCE_PANEL_MARGIN),
     }), [layout]);
 
     return (

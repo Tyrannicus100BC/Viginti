@@ -1,3 +1,4 @@
+import { chooseBoss, getBustLimit } from '../engine/bosses';
 import { createChallenges, CHALLENGE_ROUNDS } from '../engine/challenges';
 import type { Challenge, ChallengeReward } from '../engine/challenges';
 import { generatePackOffers } from '../engine/actions/packActions';
@@ -331,6 +332,8 @@ export const useGameBridge = create<GameBridgeState>((set, get) => {
                         'debug_remove_relic',
                         'debug_fill_charges',
                         'debug_give_cash',
+                        'debug_advance_round',
+                        'debug_advance_ante',
                         'debug_draw_card',
                         'start_game' // Always allow restart
                     ].includes(action.type);
@@ -419,6 +422,7 @@ export const useGameBridge = create<GameBridgeState>((set, get) => {
                             return updates;
                         }),
                         sfx,
+                        getBustLimit: () => getBustLimit(get().gameState),
                         getSpeed: () => get().animationSpeed,
                         headless: hl,
                         waitForAnteContinue: () => new Promise<void>(resolve => {
@@ -604,6 +608,8 @@ export const useGameBridge = create<GameBridgeState>((set, get) => {
                 const offeredPacks = rawState.offeredPacks ?? (rawState.phase === 'gift_shop' &&
                     !rawState.pendingPack && !rawState.pendingRaiseChoices?.length && !rawState.pendingPackChoices?.length
                     ? generatePackOffers(rng) : []);
+                const initialRngState = rng.getState();
+                const bossId = rawState.bossId !== undefined ? rawState.bossId : chooseBoss(rawState.challengeStage ?? 0, rng);
                 const nextGameState = {
                     ...migratedState,
                     deckProbabilities: normalizeDeckProbabilities(rawState.deckProbabilities),
@@ -617,7 +623,7 @@ export const useGameBridge = create<GameBridgeState>((set, get) => {
                     playerHands: rawState.playerHands.map((hand: PlayerHand) => ({ ...hand, isInactive: false })),
                     phase: rawState.phase === 'gift_shop' ? 'pack_choice' : rawState.phase,
                     offeredPacks,
-                    rngState: offeredPacks !== rawState.offeredPacks && offeredPacks.length ? rng.getState() : rawState.rngState,
+                    rngState: rng.getState() === initialRngState ? rawState.rngState : rng.getState(),
                     packReturnPhase: rawState.packReturnPhase ?? rawState.shopReturnPhase ?? 'deal_over',
                     debugPackReturn: rawState.debugPackReturn ?? null,
                     pendingRaiseChoices: rawState.pendingRaiseChoices ?? [],
@@ -630,7 +636,8 @@ export const useGameBridge = create<GameBridgeState>((set, get) => {
                     } : null,
                     ante: rawState.ante ?? BASE_ANTE,
                     challengeStage: rawState.challengeStage ?? 0,
-                    challenges: rawState.challenges ?? createChallenges(rawState.challengeStage ?? 0, rawState.ante ?? BASE_ANTE).map(challenge => challenge.metric === 'rounds'
+                    bossId,
+                    challenges: rawState.challenges?.filter((goal: Challenge) => !(goal.main && goal.metric === 'earnings')) ?? createChallenges(rawState.challengeStage ?? 0, rawState.ante ?? BASE_ANTE).map(challenge => challenge.metric === 'rounds'
                         ? { ...challenge, progress: Math.max(0, Math.min(CHALLENGE_ROUNDS, CHALLENGE_ROUNDS - (rawState.handsUntilAnteIncrease ?? CHALLENGE_ROUNDS))) } : challenge),
                     challengeRewards: rawState.challengeRewards ?? [],
                     handUpgrades: rawState.handUpgrades ?? {},

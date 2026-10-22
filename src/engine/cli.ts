@@ -1,6 +1,7 @@
 #!/usr/bin/env node
+import { getBoss, getBustLimit } from './bosses';
 import { formatChipMultiplier, formatMultPercent } from '../logic/formatters';
-import { getPackDefinition, describePackChoices } from '../logic/packs';
+import { getPackDefinition, describePackChoices, getTargetedPackReward } from '../logic/packs';
 import { canPlayHand } from './economy';
 /**
  * Viginti CLI Simulator
@@ -75,6 +76,8 @@ export function renderState(state: GameState): string {
     lines.push(`═══════════════════════════════════════════════`);
     lines.push(`  ${cityName}  |  Deal ${state.deal}  |  Phase: ${state.phase}`);
     lines.push(`  Cash: $${state.cash ?? 0}  |  Ante: $${state.ante}  |  Deals: ${state.dealsTaken ?? 0}`);
+    const boss = getBoss(state);
+    if (boss) lines.push(`  Boss: ${boss.name} — bust above ${getBustLimit(state)}`);
     // Note: Deck/Discard are calculated from probabilities or currently not tracked as distinct piles in this engine version.
     lines.push(`═══════════════════════════════════════════════`);
 
@@ -152,6 +155,10 @@ export function describeAction(action: PlayerAction, _state?: GameState): string
             return `Open ${getPackDefinition(action.packId).name} (${describePackChoices(getPackDefinition(action.packId))})`;
         case 'finish_pack':
             return 'Return to the table';
+        case 'choose_pack_card': {
+            const pack = getTargetedPackReward(action.cardId);
+            return pack ? `Choose ${pack.name}: ${pack.description}` : `Choose reward ${action.cardId}`;
+        }
         case 'choose_raise':
             return 'Choose raise ' + action.raiseId;
         case 'activate_table_action': {
@@ -247,7 +254,7 @@ export const greedyStrategy: Strategy = (state, actions) => {
 export function createLLMStrategy(model: string, profile: string): Strategy {
     return async (state, actions) => {
         const systemPrompt = `You are an expert card game player playing "Viginti", a blackjack-inspired rogue-like.
-Your goal is to keep playing as long as possible and grow your winnings. Choose one of three free packs at the start and after completing a challenge. Dealing costs the cash ante and starts the center hand; both side hands are always free. You lose when you try to deal without enough cash for the ante. Complete either Main challenge (rounds or earnings) to earn a major pack upgrade, refresh all challenges, and raise the ante by 50% (rounded to the nearest $5). Side challenges earn minor pack upgrades without raising the ante. Six relic slots are permanently available. Packs are the only upgrade source.
+Your goal is to survive as long as possible and grow your winnings. Dealing costs the cash ante and starts the center hand; both side hands are always free. You lose when you try to deal without enough cash for the ante. Survive four rounds to earn a major reward and raise the ante to current ante * 1.5 + 25, rounded to the nearest $5. Side challenges immediately renew and earn minor rewards without raising the ante. Major rewards offer six options: three raises, two passive relics, and one randomly selected Deck Pack or Challenge Pack; choose one. Minor rewards offer three random upgrades; choose one. Every third ante is a boss. Boss rules last four rounds, and defeating one also grants a choice of two table actions. Table actions are exclusive to boss rewards and do not consume the six passive relic slots.
 Current Play Profile: ${profile}
 
 You MUST follow the play profile strictly.
@@ -260,6 +267,8 @@ Respond ONLY in JSON format: {"reasoning": "...", "actionIndex": 0}`;
             totalScore: state.totalScore,
             cash: state.cash,
             ante: state.ante,
+            boss: getBoss(state)?.description ?? null,
+            bustLimit: getBustLimit(state),
             challenges: state.challenges,
             challengeRewards: state.challengeRewards,
             dealsTaken: state.dealsTaken,
@@ -293,12 +302,12 @@ Respond ONLY in JSON format: {"reasoning": "...", "actionIndex": 0}`;
         const actionList = actions.map((a, i) => `${i}: ${describeAction(a, state)}`);
         
         const prompt = `### VIGINTI GAME RULES ###
-1. Blackjack rules apply: Aim for 21. Over 21 is a BUST (loss).
+1. Blackjack rules apply: Aim for 21. Over ${getBustLimit(state)} is a BUST (loss) in the current ante. Exactly 21 retains its normal scoring bonus.
 2. You play 3 hands simultaneously.
 3. DRAW takes cards from the deck.
 4. PLACE_CARD puts a drawn card into a hand.
 5. STAND ends your turn; the dealer then plays.
-6. To WIN, your total score from ALL winning hands across ALL deals must reach the target.
+6. Survive four rounds to advance the ante; earnings alone cannot advance it.
 7. Winning hands are scored by (Chips * Multiplier).
 
 ### CURRENT GAME STATE ###
@@ -311,7 +320,7 @@ ${actionList.join('\n')}
 Choose the best action index. 
 - If you have cards drawn, you MUST place them before standing.
 - Do NOT stand on low hand values (e.g., < 16) unless you are forced to or have a specific relic strategy.
-- Your priority is to build hands close to 21 without busting.
+- Build high hands without exceeding the current bust limit of ${getBustLimit(state)}.
 
 Briefly explain your reasoning, then provide the actionIndex.
 Respond ONLY in JSON format: {"reasoning": "...", "actionIndex": 0}`;

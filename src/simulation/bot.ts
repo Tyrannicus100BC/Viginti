@@ -1,3 +1,4 @@
+import { getBustLimit } from '../engine/bosses';
 import type { GameState } from '../engine/GameState';
 import type { PlayerAction } from '../engine/PlayerAction';
 import { canPlayHand } from '../engine/economy';
@@ -6,6 +7,7 @@ import type { Bot } from './model';
 
 // An explicit information boundary: policies never receive the RNG or face-down cards.
 export type BotObservation = Pick<GameState, 'playerHands' | 'drawnCards' | 'inventory' | 'handUpgrades' | 'selectedDrawIndex'> & {
+    bustLimit?: number;
     dealerCards: GameState['dealer']['cards'];
 };
 
@@ -13,6 +15,7 @@ export function observe(state: GameState): BotObservation {
     return {
         playerHands: state.playerHands, drawnCards: state.drawnCards, inventory: state.inventory,
         handUpgrades: state.handUpgrades, selectedDrawIndex: state.selectedDrawIndex,
+        bustLimit: getBustLimit(state),
         dealerCards: state.dealer.cards.filter(card => card.isFaceUp),
     };
 }
@@ -25,24 +28,24 @@ function placementValue(observation: BotObservation, drawIndex: number, handInde
     const card = observation.drawnCards[drawIndex]!;
     const hands = observation.playerHands.map((hand, index) => {
         const cards = index === handIndex ? [...hand.cards, card] : hand.cards;
-        return { ...hand, cards, blackjackValue: getBlackjackScore(cards, inventory) };
+        return { ...hand, cards, blackjackValue: getBlackjackScore(cards, inventory, false, observation.bustLimit ?? 21) };
     });
-    const visible = getBlackjackScore(observation.dealerCards, inventory, true);
+    const visible = getBlackjackScore(observation.dealerCards, inventory, true, observation.bustLimit ?? 21);
     const known = observation.dealerCards.length >= 2;
     const scenarios = known && visible >= 17
         ? [{ value: visible, weight: 1 }]
         : [{ value: 17, weight: .14 }, { value: 18, weight: .14 }, { value: 19, weight: .13 },
-            { value: 20, weight: .18 }, { value: 21, weight: .10 }, { value: 22, weight: .31 }];
+            { value: 20, weight: .18 }, { value: 21, weight: .10 }, { value: (observation.bustLimit ?? 21) + 1, weight: .31 }];
     let expected = 0;
     for (const dealer of scenarios) {
         let chips = 0;
         let mult = 1;
         for (const hand of hands) {
             if (!hand.cards.length) continue;
-            const bust = hand.blackjackValue > 21;
-            const win = !bust && (dealer.value > 21 || hand.blackjackValue >= dealer.value);
+            const bust = hand.blackjackValue > (observation.bustLimit ?? 21);
+            const win = !bust && (dealer.value > (observation.bustLimit ?? 21) || hand.blackjackValue >= dealer.value);
             const score = evaluateHandScore(hand.cards, win, false, inventory, 1, undefined,
-                bust ? 'bust' : win ? 'win' : 'loss', observation.handUpgrades);
+                bust ? 'bust' : win ? 'win' : 'loss', observation.handUpgrades, observation.bustLimit ?? 21);
             chips += score.totalChips;
             mult += score.totalMultiplier;
         }
@@ -51,7 +54,7 @@ function placementValue(observation: BotObservation, drawIndex: number, handInde
     // Preserve useful live hands; prevent immediate pattern bonuses from making
     // the baseline bot casually throw away a strong hand with future potential.
     const placed = hands[handIndex];
-    if (placed.blackjackValue > 21) expected -= 35;
+    if (placed.blackjackValue > (observation.bustLimit ?? 21)) expected -= 35;
     else expected += Math.min(placed.blackjackValue, 17) * .7;
     return expected;
 }
@@ -76,9 +79,9 @@ export function chooseAction(observation: BotObservation, bot: Bot): PlayerActio
             ? { type: 'select_drawn_card', drawIndex }
             : { type: 'place_card', handIndex };
     }
-    const dealerValue = getBlackjackScore(observation.dealerCards, structuredClone([...observation.inventory]), true);
-    if (bot === 'score' && observation.dealerCards.length >= 2 && dealerValue > 21) return { type: 'stand' };
+    const dealerValue = getBlackjackScore(observation.dealerCards, structuredClone([...observation.inventory]), true, observation.bustLimit ?? 21);
+    if (bot === 'score' && observation.dealerCards.length >= 2 && dealerValue > (observation.bustLimit ?? 21)) return { type: 'stand' };
     const threshold = bot === 'score' && observation.dealerCards.length >= 2 && dealerValue >= 17
-        ? Math.min(21, dealerValue) : 17;
+        ? Math.min(observation.bustLimit ?? 21, dealerValue) : 17;
     return playable.some(hand => hand.blackjackValue < threshold) ? { type: 'draw' } : { type: 'stand' };
 }

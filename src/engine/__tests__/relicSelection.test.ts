@@ -9,7 +9,7 @@ import { getPackDefinition } from '../../logic/packs';
 
 afterEach(() => vi.restoreAllMocks());
 
-const allRelics = RelicManager.getAllRelics();
+const allRelics = RelicManager.getAllRelics().filter(relic => !relic.tableAction);
 const generators = {
     pack: (rng: SeededRNG, count: number, owned: string[] = [], excluded: string[] = []) =>
         generateRelicPackChoices(rng, count, owned.map(id => ({ id, state: {} })), excluded),

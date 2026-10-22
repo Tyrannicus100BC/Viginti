@@ -16,7 +16,7 @@ export const RelicInventory: React.FC<RelicInventoryProps> = ({
     inventoryKind, hiddenEntry = null, pendingHiddenRelicId = null
 }) => {
     const { inventory, relicSlots, activeRelicId } = useGameStore();
-    const entries = (inventory as RelicInstance[]).filter((_, index) => getRelicSide(index) === inventoryKind);
+    const entries = (inventory as RelicInstance[]).filter((instance, index) => !RelicManager.getRelicConfig(instance.id)?.tableAction && getRelicSide(index) === inventoryKind);
     const slotCount = Math.max(entries.length, getSideSlotCount(inventoryKind, relicSlots));
     const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
     const right = inventoryKind === 'right';

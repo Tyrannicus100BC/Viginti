@@ -8,14 +8,14 @@ import { generateRaiseChoices, getRaise } from '../../logic/handScoring';
 import { generatePackCardChoices, getPackCard } from '../../logic/packCards';
 import { generateRelicPackChoices } from '../../logic/relicPacks';
 import { generateChallengeCardChoices, getChallengeCard } from '../../logic/challengeCards';
-import { PACK_FAMILIES, PACK_RARITY_WEIGHTS, getPackDefinition, type PackId, type PackQuality } from '../../logic/packs';
+import { PACK_RARITY_WEIGHTS, type PackId, type PackQuality } from '../../logic/packs';
 import { RelicManager } from '../../logic/relics/manager';
 import { useGameBridge } from '../../store/gameBridge';
 import { finishOpeningPack } from './fixtures';
 
 const act = (state: GameState, action: Parameters<typeof processAction>[1]) => processAction(state, action).nextState;
 const start = () => act(createInitialState(), { type: 'start_game', cityId: 'las_vegas', gamblerId: 'default', seed: 42 });
-const open = (id: PackId, overrides: Partial<GameState> = {}) => act({ ...start(), ...overrides, offeredPacks: [id] }, { type: 'open_pack', packId: id });
+const open = (id: PackId, overrides: Partial<GameState> = {}) => act({ ...start(), ...overrides, pendingPack: null, pendingRaiseChoices: [], pendingPackChoices: [], offeredPacks: [id] }, { type: 'open_pack', packId: id });
 const family = (id: string) => getRaise(id) ? 'raise' : getPackCard(id) ? 'deck' : RelicManager.getRelicConfig(id) ? 'relic' : 'unknown';
 afterEach(() => { vi.restoreAllMocks(); useGameBridge.getState().reset(); });
 
@@ -44,32 +44,9 @@ describe.each(Object.entries(generators))('%s pack quality', (_, generate) => {
 });
 
 describe('pack variety and mixed choices', () => {
-    it.each(['opening', 'major'] as const)('always offers Raise and Relic packs for %s rewards with a random third family', reward => {
-        const thirdFamilies = new Set<string>();
-        for (let seed = 1; seed <= 100; seed++) {
-            const ids = reward === 'opening'
-                ? act(createInitialState(), { type: 'start_game', cityId: 'las_vegas', gamblerId: 'default', seed }).offeredPacks
-                : generatePackOffers(new SeededRNG(seed), 'major');
-            const families = ids.map(id => getPackDefinition(id).family);
-            expect(families).toHaveLength(3);
-            expect(families).toEqual(expect.arrayContaining(['raise', 'relic']));
-            expect(new Set(families).size).toBe(3);
-            thirdFamilies.add(families.find(family => family !== 'raise' && family !== 'relic')!);
-        }
-        expect(thirdFamilies).toEqual(new Set(['deck', 'mixed', 'challenge']));
-    });
-
-    it('offers all five families over time and keeps quantity separate from quality', () => {
-        const seen = new Set<string>();
-        for (let seed = 1; seed <= 100; seed++) {
-            for (const tier of [undefined, 'minor', 'major'] as const) {
-                const offers = generatePackOffers(new SeededRNG(seed), tier).map(id => getPackDefinition(id));
-                expect(new Set(offers.map(pack => pack.family)).size).toBe(3);
-                offers.forEach(pack => seen.add(pack.family));
-                if (tier) expect(new Set(offers.map(pack => `${pack.pickCount}/${pack.offerCount}/${pack.quality}`)).size).toBe(3);
-            }
-        }
-        expect(seen).toEqual(new Set(PACK_FAMILIES));
+    it('uses fixed major and minor rewards instead of choosing a family', () => {
+        expect(generatePackOffers(new SeededRNG(42))).toEqual(['mixed_major']);
+        expect(generatePackOffers(new SeededRNG(42), 'minor')).toEqual(['mixed_minor']);
     });
 
     it.each(['raise', 'deck', 'relic'])('applies a %s chosen from a mixed pack', selectedFamily => {
@@ -85,7 +62,7 @@ describe('pack variety and mixed choices', () => {
     });
 
     it('keeps other mixed cards available when relic slots are full, including between picks and saves', () => {
-        const inventory = RelicManager.getAllRelics().slice(0, 5).map(relic => ({ id: relic.id, state: {} }));
+        const inventory = RelicManager.getAllRelics().filter(relic => !relic.tableAction).slice(0, 5).map(relic => ({ id: relic.id, state: {} }));
         let state = open('mixed_mega_excellent', { inventory });
         const relic = state.pendingPackChoices.find(id => family(id) === 'relic')!;
         state = act(state, { type: 'choose_pack_card', cardId: relic });
@@ -119,7 +96,7 @@ describe('acquired challenge goals', () => {
         const cards = metrics.map(metric => getChallengeCard(`challenge_v1_${metric}_${rarity}_0_1`)!);
         expect(cards.map(card => card.challenge.target)).toEqual(targets);
         cards.forEach((card, index) => expect(card.challenge.description)
-            .toBe(`Score ${targets[index]} ${['pair', 'straight', 'flush'][index]} hands`));
+            .toBe(`Score ${targets[index]} ${metrics[index]}`));
         expect(cards[0].challenge.target).toBeLessThan(cards[1].challenge.target);
         expect(cards[1].challenge.target).toBeLessThan(cards[2].challenge.target);
     });
@@ -133,7 +110,7 @@ describe('acquired challenge goals', () => {
         expect(state.challenges).toEqual([getChallengeCard(id)!.challenge]);
         state = act(state, { type: 'skip_pack' });
         state = act(state, { type: 'finish_pack' });
-        expect(state.challenges).toHaveLength(4);
+        expect(state.challenges).toHaveLength(3);
         expect(state.challenges.at(-1)?.id).toBe(id);
         expect(state.challenges.at(-1)?.progress).toBe(0);
     });
@@ -145,7 +122,7 @@ describe('acquired challenge goals', () => {
             offeredPacks: [], challenges: [...board, extra], challengeRewards: [{ id: board[0].id, title: board[0].title, tier: 'major' as const }] };
         const returned = act(state, { type: 'finish_pack' });
         expect(returned.ante).toBe(100);
-        expect(returned.challenges).toHaveLength(4);
+        expect(returned.challenges).toHaveLength(3);
         expect(returned.challenges.at(-1)).toEqual(extra);
     });
 

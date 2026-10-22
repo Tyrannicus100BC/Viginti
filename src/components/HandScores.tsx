@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { HAND_TYPES, getHandPayout, getHandRaiseChanges, formatRaiseCash, formatRaiseMult, type HandTypeId, type HandUpgrades } from '../logic/handScoring';
 import styles from './HandScores.module.css';
+import panelStyles from './ReferencePanel.module.css';
 import { HandIcon } from './HandIcon';
 
 type ScoreRow = Omit<ReturnType<typeof getHandPayout>, 'id'> & { id: string; handTypeId: HandTypeId };
@@ -78,12 +79,13 @@ function HandScoreRow({ hand, upgrades }: { hand: ScoreRow; upgrades: HandUpgrad
     </article>;
 }
 
-export function HandScores({ upgrades = {}, onClose }: { upgrades?: HandUpgrades; onClose: () => void }) {
+export function HandScores({ upgrades = {}, onClose, docked = false }: { upgrades?: HandUpgrades; onClose: () => void; docked?: boolean }) {
     useEffect(() => {
+        if (docked) return;
         const close = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
         window.addEventListener('keydown', close);
         return () => window.removeEventListener('keydown', close);
-    }, [onClose]);
+    }, [onClose, docked]);
     const hands = HAND_TYPES.map(type => ({ ...getHandPayout(type.id, upgrades), handTypeId: type.id }));
     const outcomes = hands.filter(hand => !hand.chipCards).flatMap(hand => [
         hand,
@@ -97,8 +99,8 @@ export function HandScores({ upgrades = {}, onClose }: { upgrades?: HandUpgrades
         }] : []),
     ]);
     const patterns = hands.filter(hand => hand.chipCards);
-    return <div className={styles.overlay} onClick={onClose}>
-        <section className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="hand-scores-title" onClick={event => event.stopPropagation()}>
+    return <div className={`${styles.overlay} ${docked ? `${panelStyles.docked} ${panelStyles.left}` : ''}`} onClick={docked ? event => event.stopPropagation() : onClose}>
+        <section id="hand-scores-panel" className={`${styles.modal} ${panelStyles.compact}`} role={docked ? 'complementary' : 'dialog'} aria-modal={docked ? undefined : true} aria-labelledby="hand-scores-title" onClick={event => event.stopPropagation()}>
             <div className={styles.content}>
                 <h2 id="hand-scores-title">Hand Scores</h2>
                 <div className={styles.list}>
@@ -107,7 +109,7 @@ export function HandScores({ upgrades = {}, onClose }: { upgrades?: HandUpgrades
                     </div>)}
                 </div>
             </div>
-            <button className="close-x-btn" aria-label="Close hand scores" autoFocus onClick={onClose}>×</button>
+            <button className="close-x-btn" aria-label="Close hand scores" autoFocus={!docked} onClick={onClose}>×</button>
         </section>
     </div>;
 }
