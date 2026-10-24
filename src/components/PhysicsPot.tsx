@@ -9,7 +9,6 @@ interface PhysicsPotProps {
   center: { x: number; y: number };
   onCollectionComplete: () => void;
   onItemArrived?: (value: number) => void;
-  labelPrefix?: string; // '$' or 'x'
   labelId?: string;
   forceHide?: boolean;
   isFinalScore?: boolean;
@@ -22,7 +21,6 @@ export const PhysicsPot: React.FC<PhysicsPotProps> = ({
   center,
   onCollectionComplete,
   onItemArrived,
-  labelPrefix = '$',
   labelId,
   forceHide = false,
   isFinalScore = false
@@ -78,7 +76,7 @@ const [isPulsing, setIsPulsing] = useState(false);
         }}
       >
         <div className={styles.potValue}>
-          {labelPrefix === '$' ? formatCash(totalValue) : formatChipMultiplier(totalValue)}
+          {variant === 'chips' ? formatCash(totalValue) : formatChipMultiplier(totalValue)}
         </div>
       </div>
     </div>

@@ -347,7 +347,7 @@ describe('GameBridge', () => {
         expect(getBridge().eventLog.filter(event => event.type === 'ante_increased')).toHaveLength(1);
     });
 
-    it('clears a consumed side challenge after its reward while retaining its replacement', () => {
+    it('clears a consumed side challenge after its reward and resets its early replacement from an older save', () => {
         startGame();
         const before = getBridge().gameState;
         const completed = { ...before, phase: 'deal_over', challenges: [
@@ -360,7 +360,9 @@ describe('GameBridge', () => {
         dispatch({ type: 'finish_pack' });
         expect(getBridge().challengeRewards).toEqual([]);
         expect(getBridge().challenges.some(challenge => challenge.id === '0-pairs')).toBe(false);
-        expect(getBridge().challenges.find(challenge => challenge.id === '0-pairs-next')).toMatchObject({ progress: 2 });
+        expect(getBridge().challenges.filter(challenge => challenge.id === '0-pairs-next')).toEqual([
+            expect.objectContaining({ progress: 0, completed: false }),
+        ]);
         expect(getBridge().ante).toBe(50);
     });
 

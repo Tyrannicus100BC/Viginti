@@ -10,7 +10,7 @@ export function formatMultPercent(value: number, includeNegativeSign = false): s
 }
 
 export function formatChipMultiplier(value: number, includeNegativeSign = false): string {
-    return `${includeNegativeSign && value < 0 ? '−' : ''}x${formatMultPercent(value)}`;
+    return formatMultPercent(value, includeNegativeSign);
 }
 
 export function formatHandChips(chips: number, chipCards: boolean = false, useMarkdown: boolean = false, chipRun?: number): string {
@@ -52,7 +52,7 @@ export function formatHandChips(chips: number, chipCards: boolean = false, useMa
 export function formatHandMult(mult: number, multRun?: number, useMarkdown: boolean = false): string {
     let base = '';
     if (mult > 0 && !(mult === 1 && multRun)) { 
-        // Omit the base x100% when only the per-card bonus is relevant.
+        // Omit the base 100% when only the per-card bonus is relevant.
         base = formatChipMultiplier(mult);
     }
 

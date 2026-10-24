@@ -1,6 +1,7 @@
 import { type ScoreRowContext, type HandContext, type GameContext, type HandCompletionContext, type DealCompletionContext, type HandBustContext, type RelicConfig } from './types';
 import type { Card, HandScore } from '../../types';
-import { RANK_VALUES } from '../rules';
+import { getBaseBlackjackScore, RANK_VALUES } from '../rules';
+import { withPriority } from './types';
 
 // Helpers
 const createDecayingBonusHook = (type: 'chips' | 'mult') => ({
@@ -21,6 +22,15 @@ const createDecayingBonusHook = (type: 'chips' | 'mult') => ({
 });
 
 const isFaceCard = (c: Card) => ['J', 'Q', 'K'].includes(c.rank);
+
+// Recalculate the shared card-value rules together so Joker and Royal Couple
+// compose independently of acquisition order, with aces optimized afterwards.
+const adjustFaceCardValues = (_score: number, context: GameContext & {
+    handCards: Card[]; ignoreSpecialEffects?: boolean; bustLimit?: number;
+}) => getBaseBlackjackScore(context.handCards, context.ignoreSpecialEffects, context.bustLimit, {
+    flexibleJacks: context.inventory.some(relic => relic.id === 'joker'),
+    pairedFaces: context.inventory.some(relic => relic.id === 'royal_couple'),
+});
 
 // Wait Helper
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -140,6 +150,46 @@ const createCardWinBonusHook = (ranks: string[]) => ({
 });
 
 export const Hooks = {
+    sweet_spot_cash: {
+        onEvaluateHandScore: (score: HandScore, context: HandContext, relicState: any, config: RelicConfig) => {
+            const matching = context.handCards.filter(card => (!card.type || card.type === 'standard') &&
+                ['6', '7', '8', '9'].includes(card.rank));
+            if (!matching.length) return score;
+            const bonus = matching.length * (relicState.bonus_chips ?? config.properties?.bonus_chips ?? 5);
+            const criteria = [...score.criteria, { id: config.id, name: config.name, count: matching.length,
+                chips: bonus, multiplier: 0, cardIds: matching.map(card => card.id), sourceRelicId: config.id }];
+            const totalChips = score.totalChips + bonus;
+            return { ...score, criteria, totalChips,
+                finalScore: Math.floor(Number((totalChips * score.totalMultiplier).toFixed(8))) };
+        }
+    },
+    prismatic_charm_flushes: {
+        onDealCompletion: async (context: DealCompletionContext, relicState: any, config: RelicConfig) => {
+            const suits = new Set<string>();
+            for (const hand of context.playerHands) {
+                for (const row of hand.finalScore?.criteria ?? []) {
+                    if (row.id !== 'flush') continue;
+                    const first = hand.cards.find((card: Card) => row.cardIds?.includes(card.id));
+                    if (first) suits.add(first.suit);
+                }
+            }
+            if (suits.size < 3) return;
+            await context.highlightRelic(config.id, {
+                trigger: () => context.modifyRunningSummary(0, relicState.bonus_mult ?? config.properties?.bonus_mult ?? 0.2)
+            });
+        }
+    },
+    stage_fright_dealer: {
+        // Always-standing overrides the Idiot's 17 rule in either inventory order.
+        shouldDealerHit: withPriority(100, (value: boolean, _context: GameContext, relicState: any) =>
+            relicState.armed ? false : value),
+        onDealCompletion: async (context: DealCompletionContext, relicState: any, config: RelicConfig) => {
+            const armed = context.vigintis >= 2;
+            if (armed) {
+                await context.highlightRelic(config.id, { trigger: () => { relicState.armed = true; } });
+            } else relicState.armed = false;
+        }
+    },
     // JMarr Category
     deft_extra_draw: {
         getDealsPerCasino: (val: number, _context: GameContext, relicState: any) => val + relicState.extra_draws
@@ -155,74 +205,73 @@ export const Hooks = {
         }
     },
     joker_adjust_bj: {
-        // @ts-ignore
-        adjustBlackjackScore: (currentScore: number, context: { handCards: Card[]; bustLimit?: number }) => {
-            const jackValues = [11, 10, 5, 1];
-            const ignoreSpecialEffects = (context as any).ignoreSpecialEffects || false;
-            let rawBase = 0;
-            let aces = 0;
-            let jacks = 0;
-
-            for (const card of context.handCards) {
-                if (!ignoreSpecialEffects && card.specialEffect?.type === 'score') {
-                    rawBase -= card.specialEffect.value;
-                }
-                if (card.type === 'chip' || card.type === 'mult') continue;
-                if (card.type === 'score') {
-                    if (!ignoreSpecialEffects) {
-                        rawBase -= (card.chips || 0);
-                    }
-                    continue;
-                }
-
-                if (card.rank === 'J') {
-                    jacks++;
-                } else {
-                    const val = RANK_VALUES[card.rank];
-                    if (val !== undefined) {
-                        rawBase += val;
-                        if (card.rank === 'A') aces++;
-                    }
-                }
-            }
-
-            if (jacks === 0) return currentScore;
-
-            let possibleJackSums = new Set<number>([0]);
-            for (let i = 0; i < jacks; i++) {
-                const nextSums = new Set<number>();
-                for (const s of possibleJackSums) {
-                    for (const jv of jackValues) {
-                        nextSums.add(s + jv);
-                    }
-                }
-                possibleJackSums = nextSums;
-            }
-
-            let bestScore = -Infinity;
-            let minBust = Infinity;
-
-            for (const jackSum of possibleJackSums) {
-                let score = rawBase + jackSum;
-                let remainingAces = aces;
-                
-                while (score > (context.bustLimit ?? 21) && remainingAces > 0) {
-                    score -= 10;
-                    remainingAces--;
-                }
-
-                if (score <= (context.bustLimit ?? 21)) {
-                    if (score > bestScore) bestScore = score;
-                } else {
-                    if (score < minBust) minBust = score;
-                }
-            }
-
-            return bestScore !== -Infinity ? bestScore : minBust;
-        }
+        adjustBlackjackScore: adjustFaceCardValues
+    },
+    royal_couple_value: {
+        adjustBlackjackScore: adjustFaceCardValues
     },
     idiot_dealer_stop: {
-        getDealerStopValue: (_val: number, _context: GameContext, relicState: any) => relicState.stop_value
+        shouldDealerHit: (_value: boolean, context: GameContext & { blackjackValue: number }) =>
+            context.blackjackValue < 15 || context.blackjackValue === 17
+    },
+    extra_life_limit: {
+        getBustLimit: (value: number) => Math.max(value, 22)
+    },
+    clean_sweep_growth: {
+        onDealCompletion: async (context: DealCompletionContext, relicState: any, config: RelicConfig) => {
+            const step = relicState.growth_chips ?? config.properties?.growth_chips ?? 5;
+            const swept = context.playerHands.length >= 3 && context.wins === 3;
+            const bonus = Math.max(0, (relicState.bonus_chips ?? 0) + (swept ? step : -step));
+            await context.highlightRelic(config.id, {
+                trigger: () => {
+                    relicState.bonus_chips = bonus;
+                    context.modifyRunningSummary(bonus, 0);
+                }
+            });
+        }
+    },
+    two_peas_growth: {
+        onDealCompletion: async (context: DealCompletionContext, relicState: any, config: RelicConfig) => {
+            const pairs = context.playerHands.reduce((sum, hand) => sum +
+                (hand.finalScore?.criteria.filter((row: any) => row.id === 'pair')
+                    .reduce((count: number, row: any) => count + row.count, 0) ?? 0), 0);
+            const step = relicState.growth_mult ?? config.properties?.growth_mult ?? 0.01;
+            const bonus = Number(((relicState.bonus_mult ?? 0) + (pairs >= 2 ? step : 0)).toFixed(8));
+            if (!bonus) return;
+            await context.highlightRelic(config.id, {
+                trigger: () => {
+                    relicState.bonus_mult = bonus;
+                    context.modifyRunningSummary(0, bonus);
+                }
+            });
+        }
+    },
+    climbing_vine_growth: {
+        // Evaluation is pure: previews and category-count passes must not grow
+        // the relic. Commit growth once in onHandCompletion instead.
+        onEvaluateHandScore: (score: HandScore, _context: HandContext, relicState: any, config: RelicConfig) => {
+            let bonus = relicState.bonus_chips ?? 0;
+            const step = relicState.growth_chips ?? config.properties?.growth_chips ?? 5;
+            const criteria = score.criteria.map(row => {
+                if (row.id !== 'straight') return row;
+                if ((row.cardIds?.length ?? 0) >= 3) bonus += step;
+                return { ...row, chips: row.chips + bonus, sourceRelicId: config.id };
+            });
+            const totalChips = criteria.reduce((sum, row) => sum + row.chips, 0);
+            return { ...score, criteria, totalChips,
+                finalScore: Math.floor(Number((totalChips * score.totalMultiplier).toFixed(8))) };
+        },
+        onScoreRow: async (context: ScoreRowContext, relicState: any, config: RelicConfig) => {
+            if (context.criterionId === 'straight' && (relicState.bonus_chips > 0 ||
+                context.score.criteria.some(row => row.id === 'straight' && (row.cardIds?.length ?? 0) >= 3))) {
+                await context.highlightRelic(config.id);
+            }
+        },
+        onHandCompletion: async (context: HandCompletionContext, relicState: any, config: RelicConfig) => {
+            const triggers = context.score.criteria.filter(row => row.id === 'straight' && (row.cardIds?.length ?? 0) >= 3).length;
+            const step = relicState.growth_chips ?? config.properties?.growth_chips ?? 5;
+            relicState.bonus_chips = (relicState.bonus_chips ?? 0) + triggers * step;
+        }
     },
     flusher_bonus: createCategoryBonusHook('flush', 'mult'),
     flusher_chips: createCategoryBonusHook('flush', 'chips'),

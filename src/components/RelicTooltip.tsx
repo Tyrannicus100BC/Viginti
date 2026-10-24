@@ -68,7 +68,7 @@ export const RelicTooltip: React.FC<RelicTooltipProps> = ({
         // 3. [...] (bracketed text for hand highlighting)
         // 4. Percentage multipliers, including their decrease sign
         // 5. $ or + followed by digits, or digits followed by "chips" (chips values)
-        const parts = text.split(/(<[^>]+>|\{[^}]+\}|\[.*?\]|[−-]?x\d+(?:\.\d+)?%|[−-]?\$[−-]?\d[\d,]*(?:\s*chips?)?|[₵\$\+]{1,2}\d+(?:\s*chips?)?|[−-]?\d+\s*chips?)/gi);
+        const parts = text.split(/(<[^>]+>|\{[^}]+\}|\[.*?\]|[−-]?\d+(?:\.\d+)?%|[−-]?\$[−-]?\d[\d,]*(?:\s*chips?)?|[₵\$\+]{1,2}\d+(?:\s*chips?)?|[−-]?\d+\s*chips?)/gi);
         const renderValue = (value: string, positiveClass: string, key: number) => {
             const isNegative = /^(?:[−-]|\$[−-])/.test(value.trim());
             const visibleValue = isNegative ? value.replace(/^\s*[−-]|^(\s*\$)[−-]/, '$1') : value;
@@ -87,7 +87,7 @@ export const RelicTooltip: React.FC<RelicTooltipProps> = ({
             if (part.startsWith('[') && part.endsWith(']')) {
                 return <span key={i} className={styles.handHighlight}>{part.slice(1, -1)}</span>;
             }
-            if (/^[−-]?x\d/i.test(part)) {
+            if (/^[−-]?\d+(?:\.\d+)?%$/.test(part)) {
                 return renderValue(part, styles.multValue, i);
             }
             if (

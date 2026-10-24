@@ -3,7 +3,7 @@ import { ENHANCE_CASH_COSTS, getRemovalCashCost } from '../engine/economy';
 import React from 'react';
 import type { Card as CardType, Suit } from '../types';
 import type { DeckProbabilities } from '../engine/GameState';
-import { getSpecialWeights, SPECIAL_COLORS, SPECIAL_LABELS } from '../logic/specialCards';
+import { getSpecialWeights, SPECIAL_COLORS, SPECIAL_LABELS, SPECIAL_STRENGTHS } from '../logic/specialCards';
 import styles from './DeckView.module.css';
 import panelStyles from './ReferencePanel.module.css';
 
@@ -72,10 +72,7 @@ export const DeckView: React.FC<DeckViewProps> = ({
             return getRemovalCashCost(removalCount);
         }
         if (mode === 'enhance' && selectedEnhancement) {
-            let level = 0;
-            if (selectedEnhancement.type === 'score') level = [-1, -2, -3, -4].indexOf(-selectedEnhancement.value);
-            if (selectedEnhancement.type === 'mult') level = [1, 2, 3, 4].indexOf(selectedEnhancement.value);
-            if (selectedEnhancement.type === 'chip') level = [5, 10, 20, 50].indexOf(selectedEnhancement.value);
+            const level = SPECIAL_STRENGTHS[selectedEnhancement.type].indexOf(selectedEnhancement.value);
             return ENHANCE_CASH_COSTS[level] || 0;
         }
         return 0;
@@ -251,7 +248,7 @@ export const DeckView: React.FC<DeckViewProps> = ({
 
                         <div className={styles.effectRow}>
                             <div className={styles.effectLabel}>Mult</div>
-                            {[1, 2, 3, 4].map(val => (
+                            {SPECIAL_STRENGTHS.mult.map(val => (
                                 <button
                                     key={`mult-${val}`}
                                     className={`${styles.effectButton} ${selectedEnhancement?.type === 'mult' && selectedEnhancement.value === val ? styles.selected : ''}`}
@@ -264,7 +261,7 @@ export const DeckView: React.FC<DeckViewProps> = ({
 
                         <div className={styles.effectRow}>
                             <div className={styles.effectLabel}>Chips</div>
-                            {[5, 10, 20, 50].map(val => (
+                            {SPECIAL_STRENGTHS.chip.map(val => (
                                 <button
                                     key={`chip-${val}`}
                                     className={`${styles.effectButton} ${selectedEnhancement?.type === 'chip' && selectedEnhancement.value === val ? styles.selected : ''}`}

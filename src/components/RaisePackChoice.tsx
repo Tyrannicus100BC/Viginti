@@ -8,38 +8,18 @@ import { getPackCard, type PackCard } from '../logic/packCards';
 import { SPECIAL_COLORS } from '../logic/specialCards';
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useGameBridge } from '../store/gameBridge';
-import { getRaise, HAND_TYPES, formatRaiseCash, formatRaiseMult, type Raise } from '../logic/handScoring';
+import { getRaise } from '../logic/handScoring';
+import { RaiseCard } from './RaiseCard';
 import { getRelicRarityFrameColor, getRelicRarityTextColor } from '../logic/relics/rarity';
 import { sfxEngine } from '../utils/sfxEngine';
+import { PackVisual } from './PackVisual';
 import { PACK_FAMILY_COLORS, PACK_FAMILY_LABELS, RaisePackArt } from './RaisePackArt';
-import { HandIcon } from './HandIcon';
-import { getPackDefinition, getTargetedPackReward, PACK_QUALITY_LABELS, type PackId, type PendingPack } from '../logic/packs';
+import { getPackDefinition, getTargetedPackReward, type PackId, type PendingPack } from '../logic/packs';
 import { useLayout } from './ResponsiveLayout';
 import styles from './RaisePackChoice.module.css';
 
 export interface PackSourceRect { left: number; top: number; width: number; height: number; packId?: PackId }
 type RevealStage = 'growing' | 'charging' | 'bursting' | 'revealing' | 'ready' | 'flying' | 'received';
-
-function RaiseCard({ raise }: { raise: Raise }) {
-    const group = ({ chips, mult }: Raise['modifiers'][number]) => chips > 0 ? 0 : mult > 0 ? 1 : chips < 0 ? 2 : 3;
-    const modifiers = [...raise.modifiers].sort((left, right) =>
-        group(left) - group(right)
-        || HAND_TYPES.findIndex(hand => hand.id === left.handTypeId) - HAND_TYPES.findIndex(hand => hand.id === right.handTypeId)
-    );
-    return <>
-        <span className={styles.modifiers}>
-            {modifiers.map((effect, index) => {
-                const hand = HAND_TYPES.find(hand => hand.id === effect.handTypeId)!;
-                return <span key={index} className={styles.modifier}>
-                    <span className={styles.handName}><HandIcon icon={hand.icon} /> {hand.name}</span>
-                    <strong className={effect.chips < 0 || effect.mult < 0 ? styles.negative : effect.chips ? styles.cash : styles.mult}>
-                        {effect.chips ? formatRaiseCash(effect.chips) : formatRaiseMult(effect.mult)}
-                    </strong>
-                </span>;
-            })}
-        </span>
-    </>;
-}
 
 function UpgradeCard({ card }: { card: PackCard }) {
     const suitIcons = { hearts: '♥', diamonds: '♦', clubs: '♣', spades: '♠' };
@@ -69,10 +49,10 @@ function ChallengeOption({ card }: { card: ChallengeCard }) {
     </PackCardDetails>;
 }
 
-function PackReveal({ choices, pendingPack, sourceRect, onComplete }: {
-    choices: readonly string[]; pendingPack: PendingPack | null; sourceRect: PackSourceRect | null; onComplete: () => void;
+function PackReveal({ choices, pendingPack, sourceRect, arrivedFromChallenge, onComplete, onOpenPack }: {
+    choices: readonly string[]; pendingPack: PendingPack | null; sourceRect: PackSourceRect | null; arrivedFromChallenge: boolean; onComplete: () => void; onOpenPack: (cardId: string, source: PackSourceRect) => Promise<void>;
 }) {
-    const [stage, setStage] = useState<RevealStage>('growing');
+    const [stage, setStage] = useState<RevealStage>(arrivedFromChallenge ? 'charging' : 'growing');
     const [selected, setSelected] = useState<string | null>(null);
     const [offers, setOffers] = useState<readonly string[] | null>(null);
     const { idealWidth, referencePanelsFit } = useLayout();
@@ -128,7 +108,7 @@ function PackReveal({ choices, pendingPack, sourceRect, onComplete }: {
             const dy = sourceRect ? (sourceRect.top + sourceRect.height / 2 - rect.top - rect.height / 2) / scale : 0;
             const size = sourceRect ? sourceRect.width / rect.width : 0.6;
             try {
-                await play(element, [
+                if (!arrivedFromChallenge) await play(element, [
                     { transform: `translate(${dx}px, ${dy}px) scale(${size})`, opacity: 1 },
                     { transform: 'translate(0, 0) scale(1.08)', offset: 0.8 },
                     { transform: 'translate(0, 0) scale(1)', opacity: 1 },
@@ -160,7 +140,7 @@ function PackReveal({ choices, pendingPack, sourceRect, onComplete }: {
             for (const animation of activeAnimations) animation.cancel();
             activeAnimations.clear();
         };
-    }, [sourceRect, play, reducedMotion]);
+    }, [sourceRect, arrivedFromChallenge, play, reducedMotion]);
 
     useEffect(() => {
         if (stage !== 'revealing') return;
@@ -200,8 +180,24 @@ function PackReveal({ choices, pendingPack, sourceRect, onComplete }: {
         setSelected(id);
         setStage('flying');
         scene.current?.querySelector<HTMLElement>('[role="region"]')?.focus({ preventScroll: true });
-        sfxEngine.play('cardPlace');
         const card = cards.current.get(id)!;
+        const targeted = getTargetedPackReward(id);
+        if (targeted) {
+            // Carry the sealed reward straight into the next opening scene.
+            const { left, top, width, height } = card.getBoundingClientRect();
+            try {
+                await onOpenPack(id, { left, top, width, height, packId: targeted.id });
+            } catch {
+                if (alive.current) {
+                    selecting.current = false;
+                    setFinishing(false);
+                    setSelected(null);
+                    setStage('ready');
+                }
+            }
+            return;
+        }
+        sfxEngine.play('cardPlace');
         const button = isRelic
             ? document.querySelector<HTMLElement>(`[aria-label="Empty relic slot ${inventory.filter(instance => !RelicManager.getRelicConfig(instance.id)?.tableAction).length + 1}"]`)
             : document.getElementById(isRaise ? 'hand-scores-button' : getChallengeCard(id) ? 'challenges-label' : 'deck-view-button');
@@ -317,13 +313,7 @@ function PackReveal({ choices, pendingPack, sourceRect, onComplete }: {
         <div className={styles.packPosition}>
             <div ref={pack} className={`${styles.openingPack} ${stage === 'charging' ? styles.chargingPack : ''}`}
                 style={{ '--pack-color': PACK_FAMILY_COLORS[definition.family] } as CSSProperties} aria-hidden="true">
-                <div className={styles.packSeal} />
-                <span className={styles.openingIdentity}>
-                    <RaisePackArt family={definition.family} sparkles />
-                    <strong>{progressionPack ? definition.name : `${familyLabel} Pack`}</strong>
-                </span>
-                <span className={styles.packDetails}>Choose {definition.pickCount} of {definition.offerCount}{!progressionPack && <strong>{PACK_QUALITY_LABELS[definition.quality]} choices</strong>}</span>
-                <span className={styles.packBrand}>VIGINTI</span>
+                <PackVisual packId={definition.id} />
             </div>
             {showSparks && !reducedMotion && <div
                 className={`${styles.sparks} ${stage === 'charging' ? styles.chargeSparks : styles.burstSparks}`}
@@ -375,16 +365,18 @@ function PackReveal({ choices, pendingPack, sourceRect, onComplete }: {
                             disabled={stage !== 'ready' || consumed || blocked}
                             aria-label={`Select ${card.name} card, ${card.rarity}`}
                             onClick={() => void choose(id)}
-                            className={`${styles.card} ${blocked ? styles.blockedCard : ''} ${(raise?.modifiers.length ?? 0) > 3 ? styles.denseCard : ''}`}>
-                            <span className={styles.cardType}>
-                                <RaisePackArt family={cardFamily} />
-                                {targeted ? 'Pack' : relic?.tableAction ? 'Table Action' : PACK_FAMILY_LABELS[cardFamily]}
-                            </span>
-                            <span className={styles.rarity} style={{ color: getRelicRarityTextColor(card.rarity) }}>{targeted ? 'TARGETED PACK' : relic?.tableAction ? 'TABLE ACTION' : card.rarity}</span>
-                            <span className={styles.cardBody}>
-                                {targeted ? <PackCardDetails icon={<RaisePackArt family={targeted.family} sparkles />} name={targeted.name}>{targeted.description}</PackCardDetails> : raise ? <RaiseCard raise={raise} /> : relic ? <RelicTooltip relic={relic} layout="card" displayValues={relic.properties ?? {}} /> : challenge ? <ChallengeOption card={challenge} /> : <UpgradeCard card={upgrade!} />}
-                            </span>
-                            {blocked && <span className={styles.blockedLabel}>Relic slots full</span>}
+                            className={`${styles.card} ${targeted ? styles.packCard : ''} ${blocked ? styles.blockedCard : ''} ${(raise?.modifiers.length ?? 0) > 3 ? styles.denseCard : ''}`}>
+                            {targeted ? <PackVisual packId={targeted.id} /> : <>
+                                <span className={styles.cardType}>
+                                    <RaisePackArt family={cardFamily} />
+                                    {relic?.tableAction ? 'Table Action' : PACK_FAMILY_LABELS[cardFamily]}
+                                </span>
+                                <span className={styles.rarity} style={{ color: getRelicRarityTextColor(card.rarity) }}>{relic?.tableAction ? 'TABLE ACTION' : card.rarity}</span>
+                                <span className={styles.cardBody}>
+                                    {raise ? <RaiseCard raise={raise} /> : relic ? <RelicTooltip relic={relic} layout="card" displayValues={relic.properties ?? {}} /> : challenge ? <ChallengeOption card={challenge} /> : <UpgradeCard card={upgrade!} />}
+                                </span>
+                                {blocked && <span className={styles.blockedLabel}>Relic slots full</span>}
+                            </>}
                         </button>
                         <button data-choose-raise className={`${styles.chooseButton} ${selected === id ? styles.fadeOut : ''}`}
                             disabled={stage !== 'ready' || consumed || blocked} aria-label={`Choose ${card.name}, ${card.rarity}`}
@@ -401,11 +393,18 @@ function PackReveal({ choices, pendingPack, sourceRect, onComplete }: {
     </div>;
 }
 
-export function RaisePackChoice({ sourceRect, onComplete }: { sourceRect: PackSourceRect | null; onComplete: () => void }) {
+export function RaisePackChoice({ sourceRect, arrivedFromChallenge = false, onComplete }: { sourceRect: PackSourceRect | null; arrivedFromChallenge?: boolean; onComplete: () => void }) {
+    const [nestedSource, setNestedSource] = useState<PackSourceRect | null>(null);
     const raises = useGameBridge(state => state.pendingRaiseChoices);
     const upgrades = useGameBridge(state => state.pendingPackChoices);
     const choices = upgrades.length ? upgrades : raises;
     const pendingPack = useGameBridge(state => state.pendingPack);
     if (!sourceRect && !choices.length && !pendingPack) return null;
-    return <PackReveal key={pendingPack?.packId ?? sourceRect?.packId} choices={choices} pendingPack={pendingPack} sourceRect={sourceRect} onComplete={onComplete} />;
+    const openNestedPack = async (cardId: string, source: PackSourceRect) => {
+        setNestedSource(source);
+        await useGameBridge.getState().dispatch({ type: 'choose_pack_card', cardId });
+        if (useGameBridge.getState().pendingPack?.packId !== source.packId) throw new Error('Pack selection was not accepted');
+    };
+    const openingSource = nestedSource?.packId === pendingPack?.packId ? nestedSource : sourceRect;
+    return <PackReveal key={pendingPack?.packId ?? sourceRect?.packId} choices={choices} pendingPack={pendingPack} sourceRect={openingSource} arrivedFromChallenge={arrivedFromChallenge && !openingSource} onComplete={onComplete} onOpenPack={openNestedPack} />;
 }

@@ -54,10 +54,10 @@ describe('RelicEngine', () => {
             expect(result).toBe(17);
         });
 
-        it('applies idiot relic to dealer stop value', () => {
+        it('applies idiot relic to dealer decisions, including legacy state', () => {
             const inv: RelicInstance[] = [{ id: 'idiot', state: { stop_value: 16 } }];
-            const result = executeValueHook('getDealerStopValue', 17, { inventory: inv });
-            expect(result).toBe(16);
+            expect(executeValueHook('shouldDealerHit', false, { inventory: inv, blackjackValue: 17 })).toBe(true);
+            expect(executeValueHook('shouldDealerHit', true, { inventory: inv, blackjackValue: 16 })).toBe(false);
         });
 
         it('ignores removed deft relic', () => {

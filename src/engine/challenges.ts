@@ -59,14 +59,9 @@ export function getHandChallengeProgress(hand: Pick<PlayerHand, 'cards' | 'outco
     return progress;
 }
 
-/** Only the four-round main goal advances the ante. Side goals renew immediately. */
+/** Only the four-round main goal advances the ante. Replacement goals wait for rewards. */
 export function completeChallenges(challenges: readonly Challenge[]) {
     const finished = challenges.filter(challenge => !challenge.completed && challenge.progress >= challenge.target);
-    const replacements = finished.filter(goal => !goal.main && !goal.source).map(goal => {
-        const current = SIDE_CHALLENGES.findIndex(side => side.metric === goal.metric);
-        const next = SIDE_CHALLENGES[(current + 1) % SIDE_CHALLENGES.length];
-        return { ...next, id: `${goal.id}-next`, main: false, progress: 0, completed: false };
-    });
     const main = challenges.some(challenge => challenge.main && challenge.completed)
         ? undefined : finished.find(challenge => challenge.main);
     const rewarded = [...(main ? [main] : []), ...finished.filter(challenge => !challenge.main)];
@@ -76,6 +71,20 @@ export function completeChallenges(challenges: readonly Challenge[]) {
     return {
         advance: !!main,
         rewards,
-        challenges: [...challenges.map(challenge => ({ ...challenge, completed: challenge.completed || finished.includes(challenge) })), ...replacements],
+        challenges: challenges.map(challenge => ({ ...challenge, completed: challenge.completed || finished.includes(challenge) })),
     };
+}
+
+/** Assign fresh side goals only after the entire earned reward queue is collected. */
+export function renewSideChallenges(challenges: readonly Challenge[]): Challenge[] {
+    // Discard replacements generated early by older saves before assigning them afresh.
+    const pendingIds = new Set(challenges.filter(challenge => challenge.completed && !challenge.main && !challenge.source)
+        .map(challenge => `${challenge.id}-next`));
+    return challenges.filter(challenge => !pendingIds.has(challenge.id)).flatMap(challenge => {
+        if (!challenge.completed || challenge.main) return [challenge];
+        if (challenge.source) return [];
+        const current = SIDE_CHALLENGES.findIndex(side => side.metric === challenge.metric);
+        const next = SIDE_CHALLENGES[(current + 1) % SIDE_CHALLENGES.length];
+        return [{ ...next, id: `${challenge.id}-next`, main: false, progress: 0, completed: false }];
+    });
 }

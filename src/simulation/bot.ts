@@ -1,4 +1,4 @@
-import { getBustLimit } from '../engine/bosses';
+import { getBustLimit, getDealerBustLimit } from '../engine/bosses';
 import type { GameState } from '../engine/GameState';
 import type { PlayerAction } from '../engine/PlayerAction';
 import { canPlayHand } from '../engine/economy';
@@ -8,6 +8,7 @@ import type { Bot } from './model';
 // An explicit information boundary: policies never receive the RNG or face-down cards.
 export type BotObservation = Pick<GameState, 'playerHands' | 'drawnCards' | 'inventory' | 'handUpgrades' | 'selectedDrawIndex'> & {
     bustLimit?: number;
+    dealerBustLimit?: number;
     dealerCards: GameState['dealer']['cards'];
 };
 
@@ -16,6 +17,7 @@ export function observe(state: GameState): BotObservation {
         playerHands: state.playerHands, drawnCards: state.drawnCards, inventory: state.inventory,
         handUpgrades: state.handUpgrades, selectedDrawIndex: state.selectedDrawIndex,
         bustLimit: getBustLimit(state),
+        dealerBustLimit: getDealerBustLimit(state),
         dealerCards: state.dealer.cards.filter(card => card.isFaceUp),
     };
 }
@@ -30,12 +32,13 @@ function placementValue(observation: BotObservation, drawIndex: number, handInde
         const cards = index === handIndex ? [...hand.cards, card] : hand.cards;
         return { ...hand, cards, blackjackValue: getBlackjackScore(cards, inventory, false, observation.bustLimit ?? 21) };
     });
-    const visible = getBlackjackScore(observation.dealerCards, inventory, true, observation.bustLimit ?? 21);
+    const dealerLimit = observation.dealerBustLimit ?? observation.bustLimit ?? 21;
+    const visible = getBlackjackScore(observation.dealerCards, inventory, true, dealerLimit);
     const known = observation.dealerCards.length >= 2;
     const scenarios = known && visible >= 17
         ? [{ value: visible, weight: 1 }]
         : [{ value: 17, weight: .14 }, { value: 18, weight: .14 }, { value: 19, weight: .13 },
-            { value: 20, weight: .18 }, { value: 21, weight: .10 }, { value: (observation.bustLimit ?? 21) + 1, weight: .31 }];
+            { value: 20, weight: .18 }, { value: 21, weight: .10 }, { value: dealerLimit + 1, weight: .31 }];
     let expected = 0;
     for (const dealer of scenarios) {
         let chips = 0;
@@ -43,7 +46,7 @@ function placementValue(observation: BotObservation, drawIndex: number, handInde
         for (const hand of hands) {
             if (!hand.cards.length) continue;
             const bust = hand.blackjackValue > (observation.bustLimit ?? 21);
-            const win = !bust && (dealer.value > (observation.bustLimit ?? 21) || hand.blackjackValue >= dealer.value);
+            const win = !bust && (dealer.value > dealerLimit || hand.blackjackValue >= dealer.value);
             const score = evaluateHandScore(hand.cards, win, false, inventory, 1, undefined,
                 bust ? 'bust' : win ? 'win' : 'loss', observation.handUpgrades, observation.bustLimit ?? 21);
             chips += score.totalChips;
@@ -79,8 +82,9 @@ export function chooseAction(observation: BotObservation, bot: Bot): PlayerActio
             ? { type: 'select_drawn_card', drawIndex }
             : { type: 'place_card', handIndex };
     }
-    const dealerValue = getBlackjackScore(observation.dealerCards, structuredClone([...observation.inventory]), true, observation.bustLimit ?? 21);
-    if (bot === 'score' && observation.dealerCards.length >= 2 && dealerValue > (observation.bustLimit ?? 21)) return { type: 'stand' };
+    const dealerLimit = observation.dealerBustLimit ?? observation.bustLimit ?? 21;
+    const dealerValue = getBlackjackScore(observation.dealerCards, structuredClone([...observation.inventory]), true, dealerLimit);
+    if (bot === 'score' && observation.dealerCards.length >= 2 && dealerValue > dealerLimit) return { type: 'stand' };
     const threshold = bot === 'score' && observation.dealerCards.length >= 2 && dealerValue >= 17
         ? Math.min(observation.bustLimit ?? 21, dealerValue) : 17;
     return playable.some(hand => hand.blackjackValue < threshold) ? { type: 'draw' } : { type: 'stand' };

@@ -110,7 +110,7 @@ export function renderState(state: GameState): string {
     // Running summary
     if (state.runningSummary) {
         const { chips, mult } = state.runningSummary;
-        lines.push(`  Running: $${chips} × ${formatMultPercent(mult, true)} = ${Math.floor(chips * mult)}`);
+        lines.push(`  Running: $${chips} at ${formatMultPercent(mult, true)} = ${Math.floor(chips * mult)}`);
         lines.push('');
     }
 
@@ -254,7 +254,7 @@ export const greedyStrategy: Strategy = (state, actions) => {
 export function createLLMStrategy(model: string, profile: string): Strategy {
     return async (state, actions) => {
         const systemPrompt = `You are an expert card game player playing "Viginti", a blackjack-inspired rogue-like.
-Your goal is to survive as long as possible and grow your winnings. Dealing costs the cash ante and starts the center hand; both side hands are always free. You lose when you try to deal without enough cash for the ante. Survive four rounds to earn a major reward and raise the ante to current ante * 1.5 + 25, rounded to the nearest $5. Side challenges immediately renew and earn minor rewards without raising the ante. Major rewards offer six options: three raises, two passive relics, and one randomly selected Deck Pack or Challenge Pack; choose one. Minor rewards offer three random upgrades; choose one. Every third ante is a boss. Boss rules last four rounds, and defeating one also grants a choice of two table actions. Table actions are exclusive to boss rewards and do not consume the six passive relic slots.
+Your goal is to survive as long as possible and grow your winnings. Dealing costs the cash ante and starts the center hand; both side hands are always free. You lose when you try to deal without enough cash for the ante. Survive four rounds to earn a major reward and raise the ante to current ante * 1.5 + 25, rounded to the nearest $5. Side challenges earn minor rewards without raising the ante and renew after all queued rewards are collected. Major rewards offer six options: three raises, two passive relics, and one randomly selected Deck Pack or Challenge Pack; choose one. Minor rewards offer three random upgrades; choose one. Every third ante is a boss. Boss rules last four rounds, and defeating one also grants a choice of two table actions. Table actions are exclusive to boss rewards and do not consume the six passive relic slots.
 Current Play Profile: ${profile}
 
 You MUST follow the play profile strictly.

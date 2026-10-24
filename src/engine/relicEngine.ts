@@ -102,10 +102,10 @@ function collectHooks(
 // Value hooks are already pure — they take (value, context, relicState, config) → value
 // We delegate directly to RelicManager which handles priority sorting.
 
-export function executeValueHook<T>(
+export function executeValueHook<T, C extends GameContext>(
     hookName: keyof RelicHooks,
     initialValue: T,
-    context: GameContext,
+    context: C,
 ): T {
     return RelicManager.executeValueHook(hookName, initialValue, context);
 }

@@ -1,5 +1,6 @@
 import type { GameState } from './GameState';
 import type { SeededRNG } from './rng';
+import { getPlayerBustLimit } from '../logic/scoring';
 
 export interface BossDefinition {
     readonly id: string;
@@ -14,5 +15,7 @@ export const BOSS_REGISTRY: readonly BossDefinition[] = [{
 }];
 export const isBossStage = (stage: number) => (stage + 1) % 3 === 0;
 export const getBoss = (state: Pick<GameState, 'bossId'>) => BOSS_REGISTRY.find(boss => boss.id === state.bossId);
-export const getBustLimit = (state: Pick<GameState, 'bossId'>) => getBoss(state)?.hooks.getBustLimit?.(21) ?? 21;
+export const getDealerBustLimit = (state: Pick<GameState, 'bossId'>) => getBoss(state)?.hooks.getBustLimit?.(21) ?? 21;
+export const getBustLimit = (state: Pick<GameState, 'bossId'> & Partial<Pick<GameState, 'inventory'>>) =>
+    getPlayerBustLimit(state.inventory ?? [], getDealerBustLimit(state));
 export const chooseBoss = (stage: number, rng: SeededRNG): string | null => isBossStage(stage) ? rng.pick(BOSS_REGISTRY).id : null;

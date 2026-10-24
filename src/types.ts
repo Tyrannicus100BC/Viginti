@@ -1,5 +1,5 @@
 export type Suit = 'hearts' | 'diamonds' | 'clubs' | 'spades';
-export type Rank = 'A' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | 'J' | 'Q' | 'K' | 'none'; // 'none' for special cards
+export type Rank = 'A' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | 'J' | 'Q' | 'K' | 'none'; // 'none' retained for legacy standalone cards
 export type CardOrigin = 'deck' | 'draw_pile' | 'double_down' | 'shop';
 
 export interface Card {

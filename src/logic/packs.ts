@@ -43,8 +43,12 @@ const FORMATS = [
 ] as const;
 export const RAISE_PACK_COST = 40;
 export const PACKS: readonly PackDefinition[] = [...PACK_FAMILIES.flatMap(family =>
-    (['average', 'excellent', 'exceptional'] as const).flatMap((quality, tier) => FORMATS.map(({ format, ...counts }) => ({
+    (['average', 'excellent', 'exceptional'] as const).flatMap((quality, tier) => FORMATS
+        .filter(({ format }) => family !== 'challenge' || format !== 'jumbo')
+        .map(({ format, ...counts }) => ({
         ...counts,
+        // Challenge packs trade an immediate reward for two extra goals.
+        ...(family === 'challenge' ? { pickCount: 2 } : {}),
         id: `${family}_${format}${quality === 'average' ? '' : `_${quality}`}` as PackId,
         family, name: `${family[0].toUpperCase() + family.slice(1)} Pack`, quality,
         rarity: (['Common', 'Uncommon', 'Rare'] as const)[tier], cost: counts.cost + tier * 20,
@@ -56,11 +60,12 @@ export const PACKS: readonly PackDefinition[] = [...PACK_FAMILIES.flatMap(family
 
 export const TARGETED_PACK_REWARDS = {
     reward_deck_pack: { id: 'deck_basic', name: 'Deck Pack', family: 'deck', rarity: 'Common', description: 'Open a Deck Pack and choose one of three deck upgrades.' },
-    reward_challenge_pack: { id: 'challenge_basic', name: 'Challenge Pack', family: 'challenge', rarity: 'Common', description: 'Open a Challenge Pack and choose one of three extra challenges.' },
+    reward_challenge_pack: { id: 'challenge_basic', name: 'Challenge Pack', family: 'challenge', rarity: 'Common', description: 'Open a Challenge Pack and choose two of three extra challenges.' },
 } as const;
 export const getTargetedPackReward = (id: string) => TARGETED_PACK_REWARDS[id as keyof typeof TARGETED_PACK_REWARDS];
 
-export const getPackDefinition = (id?: string | null): PackDefinition => PACKS.find(pack => pack.id === id?.replace(/^special_/, 'deck_')) ?? PACKS[0];
+// Retired challenge jumbo packs resolve to the two-of-five format in old saves.
+export const getPackDefinition = (id?: string | null): PackDefinition => PACKS.find(pack => pack.id === id?.replace(/^special_/, 'deck_').replace(/^challenge_jumbo/, 'challenge_mega')) ?? PACKS[0];
 
 /** Roll quantity and quality independently. Omitting qualityRoll retains legacy average packs. */
 export function rollPackDefinition(random: number, family: PackFamily = 'raise', qualityRoll = 0): PackDefinition {

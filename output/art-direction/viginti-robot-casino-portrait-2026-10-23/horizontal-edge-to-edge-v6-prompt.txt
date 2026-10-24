@@ -1,0 +1,26 @@
+Use case: stylized-concept / major composition edit.
+Recompose the provided VIGINTI portrait first-person space-casino cabinet concept. Preserve its worn red/cream/petrol-blue chunky 3D art style, quiet warm lighting, simple corner-index cards, labels and physical controls. CHANGE the camera framing and the hand layout substantially. Output one 9:16 PORTRAIT image, not landscape.
+
+PRIMARY REQUIREMENT: THREE PLAYER HANDS SIDE BY SIDE IN ONE HORIZONTAL ROW across practically the ENTIRE WIDTH OF THE IMAGE. NOT vertically stacked. The player's three hands are the most important element; cabinet fiction must yield to their layout.
+
+CAMERA / CABINET GEOMETRY:
+Move the first-person camera closer to the cabinet and slightly LOWER, looking gently UP at its display. Use a natural widening trapezoidal perspective: the upper cabinet is further away and somewhat narrower, while the lower playfield is closer and extends wider than the camera frame. Upper left and upper right cabinet rails may be visible near the header, but as they descend they must slope OUTWARD and EXIT the left/right image boundaries BEFORE reaching the player hand row. At player-hand height the BLUE PLAYFIELD ITSELF touches both image edges; NO visible cabinet side rails, NO red/cream bezel, NO narrow strips of background, NO outer glass border on either side of the player row. The cabinet's lower-left and lower-right screen corners are OFF CAMERA. Do not merely put three tiny hands inside the previous narrow screen. Expand the lower playfield beyond the frame. Do not zoom out to show the whole cabinet. Avoid exaggerated fisheye distortion; use convincing mild perspective.
+
+LAYOUT:
+Top: slim CASH $250 | ROUND 3 | ANTE $50 header.
+Upper playfield: relics LEFT, compact overlapping dealer CENTRE, challenges RIGHT, all aligned at top. Dealer is face-up 9 spades overlapping a face-down blue star card, inside a subtle narrow recessed well with 9 beneath. Heading DEALER remains.
+Relics small icons BEFORE these names: Star Bead, Heart Button, Lucky Acorn, Faded Tag, Mini Shoe, Cozy Socks.
+Challenges text shortened: Rounds 2/4; Pairs 1/4; Flushes 2/8. Their icons AFTER the text at far right. No new explanatory text, no huge frames.
+Middle: a distinct shallow DRAW tray with three small positions: face-up 2 clubs, halfway-flipped 4 diamonds, face-down blue star card. Labels DRAW and REVEALING. Keep generous calm blue space between upper area, draw tray and player row. Use the portrait height for clear separation and card-animation travel, not three vertical player rows.
+Lower playfield: three EQUAL recessed hand wells placed LEFT, CENTRE, RIGHT on the SAME horizontal baseline, one row. Each well uses nearly one third of the full image width. At a 941px-wide composition, outermost wells start at about x=6 and end at x=935, with only 8-12px gutters between wells. Only a few pixels of blue margin at left/right image boundaries. These wells reach almost to the actual IMAGE EDGES, not an inner cabinet border. Wells have a fine muted brass line, bevelled corners and dark-blue shallow inset floor, matching draw tray. Give each compact fan comfortable padding within its well. Player row occupies the broad lower quarter of the glass, just above physical controls. No other player rows elsewhere.
+LEFT well: seven cards A hearts, A spades, 2 hearts, 2 diamonds, 3 clubs, 4 spades, 5 diamonds. Number 18 centered beneath inside same well.
+CENTRE well: five cards 2 clubs, 3 diamonds, 4 hearts, 5 spades, 6 clubs. Number 20 beneath.
+RIGHT well: six cards A diamonds, 2 spades, 3 hearts, 4 diamonds, 4 clubs, 5 hearts. Number 19 beneath.
+No HAND 1/2/3 labels, no word TOTAL. No separate score boxes. Do not add extra rows or decorative inscriptions to fill negative space.
+
+CARD DESIGN ESSENTIAL:
+All face-up cards have ENTIRELY BLANK CENTERS. Print only rank and compact suit in UPPER LEFT, mirrored upside-down at LOWER RIGHT. No central pips or giant suits. Large readable rank/suit corner strips. Very tight overlap: each following card covers about 75% of preceding card width, exposing just its left corner index. Seven-card fan about 2.5 card widths across, almost upright with only +/-3 degree rotation. All seven indices remain legible. Cards must NOT be shrunk to illegibility; the expanded edge-to-edge playfield is how three compact hands fit. Fan roughly 220px wide in a ~300px-wide well at this composition scale.
+
+Bottom: a physical control ledge spanning and cropped by BOTH image edges, with HAND SCORES left, orange STAND centre, DECK right. Just small worn robot fingertips at the bottom, no forearms/lap/knees/legs. Cabinet shell edges should stay OFFSCREEN near these controls, not reappear as a full frame. Upper slivers of space-casino environment and a cropped VIGINTI marquee can establish location. No people or additional props stealing space.
+
+The result should visibly read as a portrait view with an edge-to-edge THREE-HAND HORIZONTAL PLAY AREA inside a close first-person 3D cabinet. Preserve breathing room between gameplay zones and prioritize cards over showing the cabinet shell.

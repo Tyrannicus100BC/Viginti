@@ -1,5 +1,5 @@
 import { generateChallengeCardChoices, getChallengeCard } from '../../logic/challengeCards';
-import { createChallenges, type RewardTier } from '../challenges';
+import { createChallenges, renewSideChallenges, type RewardTier } from '../challenges';
 import { chooseBoss } from '../bosses';
 import { getNextAnte } from '../economy';
 import type { GameEvent } from '../GameEvent';
@@ -119,14 +119,14 @@ export function processFinishPack(state: GameState): ActionResult {
     const challengeStage = state.challengeStage + (advance ? 1 : 0);
     const challenges = advance || openingReward
         ? [...createChallenges(challengeStage, ante), ...state.challenges.filter(challenge => challenge.source === 'pack' && !challenge.completed)]
-        : state.challenges;
+        : renewSideChallenges(state.challenges);
     const rng = new SeededRNG(state.rngState);
     const bossId = advance ? chooseBoss(challengeStage, rng) : state.bossId;
     const events: GameEvent[] = [];
     if (advance) {
         events.push({ type: 'ante_increased', previousAnte: state.ante, ante });
     }
-    if (advance || openingReward) events.push({ type: 'challenges_updated', challenges });
+    events.push({ type: 'challenges_updated', challenges });
     events.push({ type: 'phase_changed', from: 'pack_choice', to: state.packReturnPhase });
     return {
         nextState: { ...state, challengeRewards, ante, challengeStage, bossId, rngState: rng.getState(), challenges: challenges.filter(goal => !goal.completed), phase: state.packReturnPhase },

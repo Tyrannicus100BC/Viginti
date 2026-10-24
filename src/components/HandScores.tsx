@@ -1,11 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { HAND_TYPES, getHandPayout, getHandRaiseChanges, formatRaiseCash, formatRaiseMult, type HandTypeId, type HandUpgrades } from '../logic/handScoring';
+import { HAND_TYPES, getHandPayout, getHandRaiseChanges, formatRaiseCash, formatRaiseMult, type RaiseHandTypeId, type HandUpgrades } from '../logic/handScoring';
 import styles from './HandScores.module.css';
 import panelStyles from './ReferencePanel.module.css';
 import { HandIcon } from './HandIcon';
 
-type ScoreRow = Omit<ReturnType<typeof getHandPayout>, 'id'> & { id: string; handTypeId: HandTypeId };
+type ScoreRow = Omit<ReturnType<typeof getHandPayout>, 'id'> & { id: string; handTypeId: RaiseHandTypeId };
 
 function HandScoreRow({ hand, upgrades }: { hand: ScoreRow; upgrades: HandUpgrades }) {
     const [showTooltip, setShowTooltip] = useState(false);
@@ -92,6 +92,7 @@ export function HandScores({ upgrades = {}, onClose, docked = false }: { upgrade
         ...(hand.variant ? [{
             ...hand,
             id: hand.variant.id,
+            handTypeId: hand.variant.id,
             name: hand.variant.id === 'viginti' ? 'Viginti' : hand.variant.name,
             icon: hand.variant.icon ?? hand.icon,
             chips: hand.variant.chips,

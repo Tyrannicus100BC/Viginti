@@ -2,8 +2,8 @@ import type { RewardConfig, ShopPriceOverrides } from '../cities/types';
 import { RelicManager } from '../relics/manager';
 import { pickRandomRelic } from '../relics/selection';
 import type { RelicInstance, RelicRarity } from '../relics/types';
-import type { SeededRNG } from '../../engine/rng';
-import { RAISES, getRaise } from '../handScoring';
+import { SeededRNG } from '../../engine/rng';
+import { generateRaiseChoices, getRaise } from '../handScoring';
 import { rollPackDefinition, isPackItem, PACK_ITEM_TYPES, type PackId, type PackItemType } from '../packs';
 
 export interface ShopItem {
@@ -57,9 +57,13 @@ export function generateShopItems(
                 continue;
             }
             if (config.type === 'Raise') {
-                const candidates = RAISES.filter(raise => !pickedRelicIds.has(raise.id) && (!config.specificIds?.length || config.specificIds.includes(raise.id)));
+                const candidates = config.specificIds?.length
+                    ? config.specificIds.map(getRaise).filter(raise => raise && !pickedRelicIds.has(raise.id)
+                        && !raise.modifiers.some(effect => (effect.handTypeId === 'loss' || effect.handTypeId === 'bust') && (effect.chips > 0 || effect.mult > 0)))
+                    : generateRaiseChoices(rng ?? SeededRNG.random(), 1);
                 if (!candidates.length) continue;
-                const pick = candidates[Math.floor(nextRandom() * candidates.length)];
+                let pick = candidates[Math.floor(nextRandom() * candidates.length)]!;
+                while (pickedRelicIds.has(pick.id)) pick = generateRaiseChoices(rng ?? SeededRNG.random(), 1)[0];
                 items.push({ id: pick.id, type: 'Raise', cost: pick.cost, nameOverride: pick.name });
                 pickedRelicIds.add(pick.id);
                 continue;

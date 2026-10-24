@@ -1,0 +1,12 @@
+[
+  {
+    "id": "main",
+    "path": "/Users/jmarr/Desktop/Projects/Viginti/output/art-direction/viginti-robot-casino-portrait-2026-10-23/images/03-compact-corner-index-play-v3.png",
+    "prompt": "Make exactly ONE tiny correction to this image, with everything else unchanged. The face-up DEALER card at top centre is the 9 OF SPADES. Its upper-left is correctly 9 with a spade below. Its lower-right incorrectly has a HEART. Replace that lower-right heart with a BLACK SPADE, rotated 180 degrees as part of the mirrored corner index. Keep the lower-right upside-down 9. Both corners of this dealer card must show 9 SPADES. Preserve the compact overlap, card sizes, blank centers, all player card indices, text, hand widths, draw tray, cabinet, lighting, colors and camera pixel-for-pixel as closely as possible. Do not regenerate or redesign anything else."
+  },
+  {
+    "id": "dealer",
+    "path": "/Users/jmarr/.codex/generated_images/01a14a65-322f-7301-8617-ab389c90cf68/exec-57447435-cd51-4d0a-8a7c-2bf1d29bf8aa.png",
+    "prompt": "Make exactly ONE tiny correction to this image, with everything else unchanged. The rightmost fully exposed DEALER card at top centre is the 3 OF HEARTS. The upper-left correctly shows 3 and a red heart. Its lower-right incorrectly shows a 5. Replace ONLY that lower-right numeral with a RED 3 ROTATED 180 DEGREES, so it is the same 3 of hearts index as upper-left but upside-down. Keep the lower-right heart. Both corners must denote 3 HEARTS. Dealer four cards remain 9 spades, 2 diamonds, 3 clubs, 3 hearts with total 17. Preserve all other card indices, compact overlap, blank card centers, hand widths, faded relics/challenges, text, cabinet, lighting, controls and camera pixel-for-pixel as closely as possible. Do not redesign or add anything."
+  }
+]

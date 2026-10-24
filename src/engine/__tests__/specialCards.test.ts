@@ -21,31 +21,47 @@ const base = createInitialState().deckProbabilities;
 
 describe('Special card type rates and strength rolls', () => {
     it.each(SPECIAL_TYPES)('uses exact 70/25/5 tier boundaries for %s', type => {
-        const strengths = type === 'chip' ? [5, 10, 20, 50] : [1, 2, 3, 4];
+        const strengths = type === 'chip' ? [4, 7, 9] : type === 'mult' ? [0.02, 0.04, 0.06] : [1, 2, 3, 4];
         for (const [roll, middle, index] of [[0, 0, 0], [0.699999, 0, 0], [0.7, 0, 1], [0.949999, 0.999, 2], [0.95, 0, 3], [0.999999, 0, 3]]) {
-            expect(rollSpecialStrength(type, new ScriptedRNG([roll, middle]))).toBe(strengths[index]);
+            const tier = strengths.length === 3 ? (roll < 0.7 ? 0 : roll < 0.95 ? 1 : 2) : index;
+            expect(rollSpecialStrength(type, new ScriptedRNG([roll, middle]))).toBe(strengths[tier]);
         }
-        const counts = [0, 0, 0, 0];
+        const counts = strengths.map(() => 0);
         for (let roll = 0; roll < 200; roll++) {
             const value = rollSpecialStrength(type, new ScriptedRNG([(roll + 0.5) / 200, roll % 2 / 2]));
             counts[strengths.indexOf(value)]++;
         }
-        expect(counts).toEqual([140, 25, 25, 10]);
+        expect(counts).toEqual(type === 'score' ? [140, 25, 25, 10] : [140, 50, 10]);
     });
 
     it('chooses the type before independently choosing its strength, leaving normal cards reachable', () => {
         const probabilities = { ...base, specialWeights: [
             { type: 'chip' as const, chance: 0.2 }, { type: 'mult' as const, chance: 0.3 }, { type: 'score' as const, chance: 0.1 },
         ] };
-        const cash = drawCardFromProbabilities(probabilities, new ScriptedRNG([0, 0.199999, 0.95]));
-        expect(cash).toMatchObject({ type: 'chip', chips: 50 });
-        const mult = drawCardFromProbabilities(probabilities, new ScriptedRNG([0, 0.2, 0.8, 0]));
-        expect(mult).toMatchObject({ type: 'mult', mult: 2 });
-        const value = drawCardFromProbabilities(probabilities, new ScriptedRNG([0, 0.5, 0.1]));
-        expect(value).toMatchObject({ type: 'score', chips: 1 });
+        const cash = drawCardFromProbabilities(probabilities, new ScriptedRNG([0, 0.199999, 0, 0, 0.95]));
+        expect(cash).toMatchObject({ rank: 'A', suit: 'hearts', specialEffect: { type: 'chip', value: 9 } });
+        const mult = drawCardFromProbabilities(probabilities, new ScriptedRNG([0.3, 0.2, 0.2, 0, 0.8]));
+        expect(mult).toMatchObject({ rank: 'K', suit: 'diamonds', specialEffect: { type: 'mult', value: 0.04 } });
+        const value = drawCardFromProbabilities(probabilities, new ScriptedRNG([0.8, 0.5, 0.99, 0.99, 0.1]));
+        expect(value).toMatchObject({ rank: '2', suit: 'spades', specialEffect: { type: 'score', value: 1 } });
+        for (const card of [cash, mult, value]) {
+            expect(card.type).toBeUndefined();
+            expect(card.chips).toBeUndefined();
+            expect(card.mult).toBeUndefined();
+        }
         const normal = drawCardFromProbabilities(probabilities, new ScriptedRNG([0, 0.6, 0, 0]));
         expect(normal.rank).toBe('A');
         expect(normal.type).toBeUndefined();
+        expect(normal.specialEffect).toBeUndefined();
+    });
+
+    it.each(SPECIAL_TYPES)('respects rank and suit weights even when every card has a %s bonus', type => {
+        const probabilities = { ...base, suits: { hearts: 0, diamonds: 0, clubs: 100, spades: 0 },
+            ranks: { ace: 100, face: 0, upper: 0, lower: 0 }, specialWeights: [{ type, chance: 1 }] };
+        for (let seed = 0; seed < 100; seed++) {
+            expect(drawCardFromProbabilities(probabilities, new SeededRNG(seed)))
+                .toMatchObject({ rank: 'A', suit: 'clubs', specialEffect: { type } });
+        }
     });
 
     it('pools legacy strengths and folds generic chance into each type without changing total draw rates', () => {

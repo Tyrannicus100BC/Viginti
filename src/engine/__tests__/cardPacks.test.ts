@@ -218,8 +218,8 @@ describe('Deck probability changes', () => {
             const effect = changed.specialWeights[0];
             expect(effect.chance).toBeCloseTo(0.05);
             const draws = Array.from({ length: 10000 }, (_, seed) => drawCardFromProbabilities(changed, new SeededRNG(seed + 1)));
-            const strengths = [...new Set(draws.filter(draw => draw.type === effect.type).map(draw => effect.type === 'mult' ? draw.mult : draw.chips))].sort((a, b) => a! - b!);
-            expect(strengths).toEqual(effect.type === 'chip' ? [5, 10, 20, 50] : [1, 2, 3, 4]);
+            const strengths = [...new Set(draws.filter(draw => draw.specialEffect?.type === effect.type).map(draw => draw.specialEffect!.value))].sort((a, b) => a - b);
+            expect(strengths).toEqual(effect.type === 'chip' ? [4, 7, 9] : effect.type === 'mult' ? [0.02, 0.04, 0.06] : [1, 2, 3, 4]);
             const reduced = applyPackCard(changed, getPackCard(`deck_v3_0_${target * 4 + 2}`)!);
             expect(reduced.specialWeights[0].chance).toBeCloseTo(0.05 * 2 / 3);
         }

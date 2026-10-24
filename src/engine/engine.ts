@@ -1,4 +1,4 @@
-import { getBustLimit } from './bosses';
+import { getBustLimit, getDealerBustLimit } from './bosses';
 import { processDebugAdvanceRound, processDebugAdvanceAnte } from './actions/debugProgression';
 import { advanceChallenges, completeChallenges, getHandChallengeProgress, type ChallengeReward } from './challenges';
 import { canAcquireRelic, INITIAL_RELIC_SLOTS } from '../logic/relics/inventory';
@@ -223,7 +223,10 @@ export function getValidActions(state: GameState): PlayerAction[] {
                 if (state.interactionMode === 'select_hand') {
                     // Hand targeting: double_down, surrender, hold (place)
                     for (const hand of state.playerHands) {
-                        if (canPlayHand(hand) && (hand.cards.length > 0 || state.activeTableActionId === 'hold')) {
+                        const canTarget = state.activeTableActionId === 'surrender'
+                            ? !hand.isBust && !hand.isHeld && hand.blackjackValue !== 21
+                            : canPlayHand(hand);
+                        if (canTarget && (hand.cards.length > 0 || state.activeTableActionId === 'hold')) {
                             actions.push({ type: 'select_table_action_target', handIndex: hand.id });
                         }
                     }
@@ -266,7 +269,7 @@ export function getValidActions(state: GameState): PlayerAction[] {
                     switch (relic.id) {
                         case 'double_down':
                         case 'surrender': {
-                            const hasPlayable = state.playerHands.some(h => !h.isBust && !h.isHeld && h.blackjackValue !== 21 && h.cards.length > 0);
+                            const hasPlayable = state.playerHands.some(h => !h.isBust && !h.isHeld && h.blackjackValue !== 21 && h.cards.length > 0 && (relic.id !== 'double_down' || canPlayHand(h)));
                             canActivate = charges >= ta.chargeCost && !hasDrawn && hasPlayable;
                             break;
                         }
@@ -590,7 +593,7 @@ function processDeal(state: GameState, _forceContinue?: boolean): ActionResult {
         dealer: {
             cards: dealerCards,
             isRevealed: false,
-            blackjackValue: getBlackjackScore(dealerCards.filter(c => c.isFaceUp), state.inventory as RelicInstance[], true, getBustLimit(state)),
+            blackjackValue: getBlackjackScore(dealerCards.filter(c => c.isFaceUp), state.inventory as RelicInstance[], true, getDealerBustLimit(state)),
         },
         drawnCards: [],
         selectedDrawIndex: null,
@@ -891,7 +894,7 @@ function processResolveDealerTurn(state: GameState): ActionResult {
 
     if (!state.dealer.isRevealed && dCards.length >= 2) {
         dCards[0] = { ...dCards[0], isFaceUp: true };
-        dVal = getBlackjackScore(dCards, invArr, true, getBustLimit(state));
+        dVal = getBlackjackScore(dCards, invArr, true, getDealerBustLimit(state));
         events.push({ type: 'dealer_reveal', card: dCards[0], newValue: dVal });
     }
 
@@ -900,7 +903,9 @@ function processResolveDealerTurn(state: GameState): ActionResult {
     let debugDeck = (state as any).deck ? [...(state as any).deck] : null;
     const isDebugWin = (state as any).debugWin === true;
 
-    while (dVal < dealerStopValue || (isDebugWin && dVal <= getBustLimit(state))) {
+    const shouldHit = () => dVal <= getDealerBustLimit(state) && executeValueHook('shouldDealerHit', dVal < dealerStopValue,
+        { inventory: invArr, blackjackValue: dVal });
+    while (shouldHit() || (isDebugWin && dVal <= getDealerBustLimit(state))) {
         let c: Card;
         if (debugDeck && debugDeck.length > 0) {
             c = debugDeck.pop()!;
@@ -911,12 +916,12 @@ function processResolveDealerTurn(state: GameState): ActionResult {
         c.isFaceUp = true;
         c.origin = 'deck';
         dCards.push(c);
-        dVal = getBlackjackScore(dCards, invArr, true, getBustLimit(state));
+        dVal = getBlackjackScore(dCards, invArr, true, getDealerBustLimit(state));
 
         events.push({ type: 'dealer_hit', card: c, newValue: dVal, burnedCards: [] });
     }
 
-    if (dVal > getBustLimit(state)) {
+    if (dVal > getDealerBustLimit(state)) {
         events.push({ type: 'dealer_bust', value: dVal });
     } else {
         events.push({ type: 'dealer_stand', value: dVal });
@@ -958,8 +963,8 @@ function processResolveHandOutcome(state: GameState): ActionResult {
         } else if (h.isBust) {
             outcome = 'bust';
         } else if (h.blackjackValue === 21) {
-            outcome = dVal > getBustLimit(state) || h.blackjackValue >= dVal ? 'win' : 'loss';
-        } else if (dVal > getBustLimit(state)) {
+            outcome = dVal > getDealerBustLimit(state) || h.blackjackValue >= dVal ? 'win' : 'loss';
+        } else if (dVal > getDealerBustLimit(state)) {
             outcome = 'win';
         } else if (h.blackjackValue >= dVal) {
             outcome = 'win';

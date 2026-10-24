@@ -12,7 +12,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "cli": "npx tsx src/engine/cli.ts",
-    "simulate": "node scripts/simulate.mjs"
+    "simulate": "node scripts/simulate.mjs",
+    "simulate:raises": "node scripts/simulate-raises.mjs"
   },
   "dependencies": {
     "@types/canvas-confetti": "^1.9.0",

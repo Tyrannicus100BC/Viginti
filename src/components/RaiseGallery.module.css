@@ -1,0 +1,24 @@
+.gallery { height: 100dvh; overflow: auto; touch-action: pan-y; background: radial-gradient(ellipse at top, #20384b, #101923 70%); color: #ecf0f1; }
+.content { width: min(100%, 980px); margin: 0 auto; padding: 32px 32px 48px; }
+.header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
+.eyebrow { color: #9cd7ff; font-size: 11px; letter-spacing: 3px; }
+.header h1 { font-size: 34px; margin: 8px 0; }
+.header p { margin: 0; color: #aebfcb; }
+.header nav { display: flex; gap: 18px; font-size: 13px; padding-top: 8px; }
+.gallery a { color: #9cd7ff; }
+.toolbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin: 28px 0 18px; }
+.rarities { display: flex; gap: 8px; }
+.toolbar button { color: #c6d9e8; background: #1a2b3b; border: 1px solid #526477; font-size: 14px; }
+.toolbar button:hover { border-color: #9cd7ff; }
+.toolbar button[aria-pressed=true] { color: #101923; background: #9cd7ff; border-color: #9cd7ff; }
+.batchInfo { display: flex; justify-content: space-between; color: #aebfcb; font-size: 12px; margin-bottom: 16px; }
+.batchInfo strong { color: #ecf0f1; font-weight: 500; }
+.grid { --reward-card-width: 240px; --reward-card-height: 260px; display: grid; grid-template-columns: repeat(3, var(--reward-card-width)); justify-content: space-between; gap: 24px; text-align: center; }
+.tuning { margin-top: 32px; border-top: 1px solid #526477; padding-top: 18px; color: #aebfcb; font-size: 13px; }
+.tuning summary { cursor: pointer; color: #9cd7ff; }
+.tuning p { line-height: 1.7; }
+.tableWrap { overflow-x: auto; }
+.tuning table { width: 100%; border-collapse: collapse; white-space: nowrap; text-align: left; }
+.tuning td, .tuning th { padding: 10px; border-bottom: 1px solid #ffffff12; }
+@media (max-width: 830px) { .grid { justify-content: center; grid-template-columns: repeat(2, var(--reward-card-width)); } .header { flex-direction: column; gap: 12px; } }
+@media (max-width: 560px) { .content { padding: 24px 16px; } .toolbar { flex-direction: column; align-items: stretch; } .rarities button { flex: 1; padding-inline: 8px; } .grid { grid-template-columns: var(--reward-card-width); } }

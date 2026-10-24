@@ -1,5 +1,8 @@
 import type { Card } from '../types';
 
+export const MAX_HAND_CARDS = 5;
+export const MAX_HAND_PAIRS = 3;
+
 export const RANK_VALUES: Record<string, number> = {
   '2': 2, '3': 3, '4': 4, '5': 5,
   '6': 6, '7': 7, '8': 8, '9': 9,
@@ -12,9 +15,12 @@ export const POKER_ORDER: Record<string, number> = {
   '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14
 };
 
-export function getBaseBlackjackScore(cards: Card[], ignoreSpecialEffects: boolean = false, bustLimit = 21): number {
+export function getBaseBlackjackScore(cards: Card[], ignoreSpecialEffects: boolean = false, bustLimit = 21,
+  options: { flexibleJacks?: boolean; pairedFaces?: boolean } = {}): number {
   let score = 0;
   let aces = 0;
+  let jacks = 0;
+  let faces = 0;
 
   for (const card of cards) {
     if (!ignoreSpecialEffects && card.specialEffect?.type === 'score') {
@@ -33,12 +39,25 @@ export function getBaseBlackjackScore(cards: Card[], ignoreSpecialEffects: boole
     if (val !== undefined) {
       score += val;
       if (card.rank === 'A') aces += 1;
+      if (card.rank === 'J') jacks += 1;
+      if (['J', 'Q', 'K'].includes(card.rank)) faces += 1;
     }
   }
 
-  while (score > bustLimit && aces > 0) {
-    score -= 10;
-    aces -= 1;
+  if (options.pairedFaces) {
+    score -= Math.floor(faces / 2) * 10;
+    // Paired face cards already count as a combined 10. Joker can only
+    // soften an unpaired Jack; never subtract its discount twice.
+    jacks = faces % 2 && jacks > 0 ? 1 : 0;
   }
-  return score;
+  let best = -Infinity;
+  let smallestBust = Infinity;
+  for (let softJacks = 0; softJacks <= (options.flexibleJacks ? jacks : 0); softJacks++) {
+    let value = score - softJacks * 9;
+    let softAces = aces;
+    while (value > bustLimit && softAces > 0) { value -= 10; softAces--; }
+    if (value <= bustLimit) best = Math.max(best, value);
+    else smallestBust = Math.min(smallestBust, value);
+  }
+  return best !== -Infinity ? best : smallestBust;
 }

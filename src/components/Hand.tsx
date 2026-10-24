@@ -1,4 +1,5 @@
 import { formatCash, formatChipMultiplier } from '../logic/formatters';
+import { MAX_HAND_CARDS } from '../logic/rules';
 
 
 import React, { useEffect, useState, useRef, useLayoutEffect } from 'react';
@@ -36,6 +37,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
   // Determine if we should show overlay (bust or result revealed)
   const isViginti = hand.blackjackValue === 21;
   const isDealerHand = hand.id === -1;
+  const isFull = !isDealerHand && hand.cards.length >= MAX_HAND_CARDS;
 
   // Is this a winning hand that needs scoring animation?
   const isWin = hand.outcome === 'win';
@@ -383,7 +385,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
       <div
         className={`${styles.hand} ${canSelect ? styles.activeTarget : ''} ${isSelected ? styles.selected : ''}`}
       >
-        <div className={`${styles.cardsContainer} ${showOverlay && !useOverlayScrim ? styles.tinted : ''}`}>
+        <div className={`${styles.cardsContainer} ${(isFull || showOverlay && !useOverlayScrim) ? styles.tinted : ''}`}>
           <div className={styles.cards}>
             {visualCards.map(({ card, isDiscarding, posIndex, hasEntered }, idx) => {
               // const styles = require('./Hand.module.css').default; 

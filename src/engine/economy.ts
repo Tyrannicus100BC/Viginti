@@ -1,4 +1,5 @@
 import type { PlayerHand } from '../types';
+import { MAX_HAND_CARDS } from '../logic/rules';
 
 /** Prototype tuning values shared by the engine and presentation. */
 export const STARTING_CASH = 100;
@@ -12,4 +13,4 @@ export const getRemovalCashCost = (removalCount: number) => 20 + removalCount * 
 
 /** Every hand is available without an opening cost. */
 export const canPlayHand = (hand: PlayerHand): boolean =>
-    !hand.isBust && !hand.isHeld && hand.blackjackValue !== 21;
+    !hand.isBust && !hand.isHeld && hand.blackjackValue !== 21 && hand.cards.length < MAX_HAND_CARDS;

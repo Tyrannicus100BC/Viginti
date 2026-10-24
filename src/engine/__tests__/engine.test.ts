@@ -419,7 +419,7 @@ describe('Game Engine', () => {
 
             expect(events.filter(e => e.type === 'scoring_hand_focus').map(e => e.handIndex)).toEqual([0, 1, 2]);
             expect(nextState.playerHands[0].finalScore?.criteria.some(c => c.id === 'pair')).toBe(true);
-            expect(nextState.playerHands[0].finalScore?.criteria.some(c => c.id === 'special_cards')).toBe(true);
+            expect(nextState.playerHands[0].finalScore?.criteria.some(c => c.id === 'special_cards')).toBe(false);
             expect(nextState.playerHands[0].finalScore?.criteria.some(c => c.id === 'loss')).toBe(true);
             expect(nextState.playerHands[1].finalScore?.criteria.some(c => c.id === 'flush')).toBe(true);
             expect(nextState.playerHands[1].finalScore?.criteria.some(c => c.id === 'bust')).toBe(true);

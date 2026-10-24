@@ -37,13 +37,15 @@ export function setSpecialChance(weights: readonly SpecialWeight[], type: Specia
         .filter(weight => weight.chance > 0);
 }
 
-const STRENGTHS: Record<SpecialType, readonly number[]> = {
-    chip: [5, 10, 20, 50], mult: [1, 2, 3, 4], score: [1, 2, 3, 4],
+export const SPECIAL_STRENGTHS: Record<SpecialType, readonly number[]> = {
+    chip: [4, 7, 9], mult: [0.02, 0.04, 0.06], score: [1, 2, 3, 4],
 };
 
 /** Roll 70% low, 25% middle, 5% high independently of the type's draw rate. */
 export function rollSpecialStrength(type: SpecialType, rng: SeededRNG): number {
-    const strengths = STRENGTHS[type];
+    const strengths = SPECIAL_STRENGTHS[type];
     const roll = rng.next();
-    return roll < 0.7 ? strengths[0] : roll < 0.95 ? strengths[1 + rng.roll(2)] : strengths[3];
+    if (roll < 0.7) return strengths[0];
+    if (roll < 0.95) return strengths.length === 3 ? strengths[1] : strengths[1 + rng.roll(2)];
+    return strengths[strengths.length - 1];
 }

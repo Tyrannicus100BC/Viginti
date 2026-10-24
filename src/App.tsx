@@ -1,5 +1,5 @@
 import type { RelicInstance } from './logic/relics/types';
-import { getBoss, getBustLimit } from './engine/bosses';
+import { getBoss, getBustLimit, getDealerBustLimit } from './engine/bosses';
 import { canPlayHand } from './engine/economy';
 import React, { useState, useRef, useEffect } from 'react';
 import styles from './App.module.css';
@@ -203,6 +203,7 @@ export default function App() {
     const anteNumber = useGameBridge(state => state.gameState.challengeStage + 1);
     const boss = useGameBridge(state => getBoss(state.gameState));
     const bustLimit = useGameBridge(state => getBustLimit(state.gameState));
+    const dealerBustLimit = useGameBridge(state => getDealerBustLimit(state.gameState));
     const passiveRelicCount = inventory.filter((instance: RelicInstance) => !RelicManager.getRelicConfig(instance.id)?.tableAction).length;
     const tableActionSlots = inventory.flatMap(instance => {
         const config = RelicManager.getRelicConfig(instance.id);
@@ -1051,10 +1052,10 @@ export default function App() {
     const isDrawAreaVisible = phase === 'playing' && !isDealerPlaying && !isInitialDeal && (interactionMode === 'default' || interactionMode === 'select_draw' || hasDrawnCards);
     const showTableActions = phase === 'playing' && !dealer.isRevealed && !isInitialDeal;
     const hasDealerFaceUpCard = dealer.cards.some(card => card.isFaceUp);
-    const hasPlayableHandForActions = playerHands.some(h => !h.isBust && !h.isHeld && h.blackjackValue !== 21 && h.cards.length > 0);
+    const hasPlayableHandForActions = playerHands.some(h => canPlayHand(h) && h.cards.length > 0);
     const hasSurrenderTarget = playerHands.some(h => !h.isBust && !h.isHeld && h.blackjackValue !== 21 && h.cards.length > 0);
     const hasDiscardPlayerTargets = playerHands.some(h => !h.isBust && h.blackjackValue !== 21 && h.cards.length > 0);
-    const hasDiscardDealerTargets = hasDealerFaceUpCard && dealer.blackjackValue < bustLimit;
+    const hasDiscardDealerTargets = hasDealerFaceUpCard && dealer.blackjackValue < dealerBustLimit;
     const hasHoldPlacementTargets = playerHands.some(h => canPlayHand(h));
     const hasSwitchTargets = hasDealerFaceUpCard && playerHands.some(h => !h.isBust && h.blackjackValue !== 21 && h.cards.length > 0);
     const dealerSelectableCardIds = (interactionMode === 'select_card' && activeTableActionId === 'discard' && hasDiscardDealerTargets)
@@ -1246,11 +1247,14 @@ export default function App() {
                     >
                         Start Run
                     </button>
-                    {debugEnabled && (
+                    {debugEnabled && (<>
                         <a href="/balance" target="_blank" rel="noreferrer" className={styles.debugMenuButton} style={{ marginTop: 10 }}>
                             Balance Lab ↗
                         </a>
-                    )}
+                        <a href="/raises" target="_blank" rel="noreferrer" className={styles.debugMenuButton} style={{ marginTop: 10 }}>
+                            Raise Gallery (Debug) ↗
+                        </a>
+                    </>)}
                     {debugEnabled && (
                         <button
                             className={styles.debugMenuButton}
@@ -1380,7 +1384,7 @@ export default function App() {
         id: -1,
         cards: dealer.cards,
         isHeld: true,
-        isBust: dealer.blackjackValue > bustLimit,
+        isBust: dealer.blackjackValue > dealerBustLimit,
         blackjackValue: dealer.blackjackValue
     };
 
@@ -1547,7 +1551,6 @@ export default function App() {
                     labelId="total-winnings"
                     onCollectionComplete={() => { }}
                     onItemArrived={() => { }}
-                    labelPrefix="$"
                     forceHide={isTotalWinningsVisible && !hasMult}
                 />
             )}
@@ -1564,8 +1567,17 @@ export default function App() {
                     isFinalScore={!!isTotalWinningsVisible}
                     onCollectionComplete={() => { }}
                     onItemArrived={() => { }}
-                    labelPrefix="x"
                 />
+            )}
+
+            {showPotLabels && hasMult && runningSummary && runningSummary.chips !== 0 && (
+                <div
+                    className={`${styles.scoreMultiplication} ${isTotalWinningsVisible ? styles.scoreMultiplicationFinal : ''}`}
+                    style={{ left: centerX, top: currentPotY - 140 }}
+                    aria-hidden="true"
+                >
+                    ×
+                </div>
             )}
 
             {/* Total Winnings Label (Center) - Only visible when we have a full summary */}
@@ -1979,7 +1991,7 @@ export default function App() {
                                     const canSelectForAction = (() => {
                                         if (!isHandActionMode || !activeTableActionId) return false;
                                         if (activeTableActionId === 'double_down' || activeTableActionId === 'surrender') {
-                                            return !hand.isBust && !hand.isHeld && hand.blackjackValue !== 21 && hand.cards.length > 0;
+                                            return !hand.isBust && !hand.isHeld && hand.blackjackValue !== 21 && hand.cards.length > 0 && (activeTableActionId !== 'double_down' || canPlayHand(hand));
                                         }
                                         if (activeTableActionId === 'hold') {
                                             return canPlayHand(hand);

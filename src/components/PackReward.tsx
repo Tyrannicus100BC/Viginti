@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { useGameBridge } from '../store/gameBridge';
 import { getPackDefinition, PACK_QUALITY_LABELS, type PackId } from '../logic/packs';
-import { PACK_FAMILY_COLORS, PACK_FAMILY_LABELS, RaisePackArt } from './RaisePackArt';
+import { PACK_FAMILY_COLORS } from './RaisePackArt';
 import { RaisePackChoice, type PackSourceRect } from './RaisePackChoice';
+import { PackVisual } from './PackVisual';
 import { ChallengeRewardIntro } from './ChallengeRewardIntro';
 import { formatChallengeProgress } from './ChallengeProgress';
 import styles from './PackReward.module.css';
@@ -92,20 +93,12 @@ export function PackReward() {
                 <div className={styles.packs}>
                     {offeredPacks.map(packId => {
                         const pack = getPackDefinition(packId);
-                        const familyLabel = PACK_FAMILY_LABELS[pack.family];
                         return <button key={packId} type="button" disabled={processing || exiting || introStage !== 'ready'}
                             ref={element => { if (element) packOptions.current.set(packId, element); else packOptions.current.delete(packId); }}
                             className={styles.pack} style={{ '--pack-color': PACK_FAMILY_COLORS[pack.family] } as CSSProperties}
                             aria-label={`Open ${pack.name}, choose ${pack.pickCount} of ${pack.offerCount}, ${PACK_QUALITY_LABELS[pack.quality]} choices`}
                             onClick={event => void open(packId, event.currentTarget)}>
-                            <span className={styles.seal} aria-hidden="true" />
-                            <span className={styles.brand}>VIGINTI</span>
-                            <span className={styles.identity}>
-                                <RaisePackArt family={pack.family} sparkles />
-                                <strong>{familyLabel} Pack</strong>
-                            </span>
-                            <span className={styles.contents}>Choose {pack.pickCount} of {pack.offerCount}<strong className={styles.quality}>{PACK_QUALITY_LABELS[pack.quality]} choices</strong></span>
-                            <span className={styles.open}>OPEN PACK</span>
+                            <PackVisual packId={packId} />
                         </button>;
                     })}
                 </div>
@@ -115,9 +108,11 @@ export function PackReward() {
             {!opening && !offeredPacks.length && <button className={styles.resume}
                 disabled={processing || exiting} onClick={() => setExiting(true)}>{rewards.length > 1 && !debug ? 'Next Reward' : 'Back to Table'}</button>}
         </section>
-        {introStage !== 'ready' && challenge && <ChallengeRewardIntro challenge={challenge} onDepart={departChallenge} onReveal={revealPacks} onComplete={finishIntro} />}
+        {introStage !== 'ready' && challenge && <ChallengeRewardIntro challenge={challenge}
+            packId={pendingPack?.packId ?? offeredPacks[0] ?? (reward?.tier === 'minor' ? 'mixed_minor' : 'mixed_major')}
+            onDepart={departChallenge} onReveal={revealPacks} onComplete={finishIntro} />}
         {opening && introStage !== 'moving' && <div className={`${styles.reveal} ${exiting ? styles.exiting : ''}`}>
-            <RaisePackChoice sourceRect={source} onComplete={() => setExiting(true)} />
+            <RaisePackChoice sourceRect={source} arrivedFromChallenge={!!challenge && !!reward && !debug} onComplete={() => setExiting(true)} />
         </div>}
     </>;
 }

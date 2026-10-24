@@ -108,11 +108,13 @@ export type RelicHooks = {
     // Value Hooks (Sync, expected to return modified value)
     getDealsPerCasino?: ValueHook<(value: number, context: GameContext, relicState: any, config: RelicConfig) => number>;
     getDealerStopValue?: ValueHook<(value: number, context: GameContext, relicState: any, config: RelicConfig) => number>;
+    shouldDealerHit?: ValueHook<(value: boolean, context: GameContext & { blackjackValue: number }, relicState: any, config: RelicConfig) => boolean>;
+    getBustLimit?: ValueHook<(value: number, context: GameContext, relicState: any, config: RelicConfig) => number>;
     getDealerRevealed?: ValueHook<(value: boolean, context: GameContext, relicState: any, config: RelicConfig) => boolean>;
     getDrawCount?: ValueHook<(value: number, context: GameContext, relicState: any, config: RelicConfig) => number>;
     getPlaceCount?: ValueHook<(value: number, context: GameContext, relicState: any, config: RelicConfig) => number>;
     getCardValue?: ValueHook<(value: number, context: CardValueContext, relicState: any, config: RelicConfig) => number>;
-    adjustBlackjackScore?: ValueHook<(value: number, context: { handCards: Card[] }, relicState: any, config: RelicConfig) => number>;
+    adjustBlackjackScore?: ValueHook<(value: number, context: GameContext & { handCards: Card[]; ignoreSpecialEffects?: boolean; bustLimit?: number }, relicState: any, config: RelicConfig) => number>;
     onEvaluateHandScore?: ValueHook<(score: HandScore, context: HandContext, relicState: any, config: RelicConfig) => HandScore>;
     
     // Check Hooks (Synchronous, returns boolean)

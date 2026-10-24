@@ -52,13 +52,13 @@ describe('four-round progression', () => {
         expect(state.challengeRewards).toEqual([]);
     });
 
-    it('renews a completed side challenge immediately and progresses it on later hands in the same round', () => {
+    it('assigns the replacement after claiming rewards and only counts hands from the next round', () => {
         const before = start();
         const almost = { ...before, challenges: before.challenges.map(goal => goal.main ? goal : { ...goal, progress: 3 }) };
         const straight: PlayerHand = { ...pair, id: 1, cards: [{ id: 's1', rank: '2', suit: 'hearts' }, { id: 's2', rank: '3', suit: 'clubs' }], blackjackValue: 5 };
         let state = settle(almost, 0, [pair, straight]);
         expect(state.challengeRewards).toMatchObject([{ tier: 'minor' }]);
-        expect(state.challenges.find(goal => !goal.completed && !goal.main)).toMatchObject({ metric: 'straights', progress: 1 });
+        expect(state.challenges.find(goal => !goal.completed && !goal.main)).toBeUndefined();
         const rounds = state.challenges[0];
         state = act(state, { type: 'deal' });
         expect(state.pendingPack?.packId).toBe('mixed_minor');
@@ -66,17 +66,69 @@ describe('four-round progression', () => {
         expect(state.ante).toBe(50);
         expect(state.challenges[0]).toEqual(rounds);
         expect(state.challenges).toHaveLength(2);
+        expect(state.challenges[1]).toMatchObject({ metric: 'straights', progress: 0 });
+        state = settle(state, 0, [straight]);
         expect(state.challenges[1]).toMatchObject({ metric: 'straights', progress: 1 });
     });
 
     it('can earn a second side reward within the same ante without duplicate rewards', () => {
-        const first = completeChallenges(advanceChallenges(createChallenges(), { pairs: 4 }));
-        const second = completeChallenges(advanceChallenges(first.challenges, { straights: 5 }));
+        const before = start();
+        const first = completeChallenges(advanceChallenges(before.challenges, { pairs: 4 }));
+        const returned = finishOpeningPack(act({ ...before, phase: 'deal_over',
+            challenges: first.challenges, challengeRewards: first.rewards }, { type: 'deal' }));
+        const second = completeChallenges(advanceChallenges(returned.challenges, { straights: 5 }));
         expect(first.rewards).toHaveLength(1);
         expect(second.rewards).toHaveLength(1);
         expect(second.rewards[0].id).not.toBe(first.rewards[0].id);
-        expect(second.challenges.find(goal => !goal.main && !goal.completed)?.metric).toBe('flushes');
+        expect(second.challenges.find(goal => !goal.main)).toMatchObject({ metric: 'straights', completed: true });
         expect(completeChallenges(second.challenges).rewards).toEqual([]);
+    });
+
+    it.each([0, 1, 2, 3])('starts the replacement at zero after completing side challenge %i', stage => {
+        const hands: PlayerHand[] = [pair,
+            { ...pair, id: 1, cards: [{ id: 's1', rank: '2', suit: 'hearts' }, { id: 's2', rank: '3', suit: 'hearts' }], blackjackValue: 5 },
+            { ...pair, id: 2, outcome: 'win' },
+        ];
+        const before = { ...start(), challenges: createChallenges(stage).map(goal => goal.main
+            ? goal : { ...goal, progress: goal.target - 1 }) };
+        const result = processAction({ ...before, phase: 'scoring', playerHands: hands,
+            runningSummary: { chips: 0, mult: 1 } }, { type: 'score_round' });
+        expect(result.nextState.challengeRewards).toHaveLength(1);
+        for (const event of result.events) {
+            if (event.type === 'challenges_updated') expect(event.challenges.map(goal => goal.id))
+                .toEqual(before.challenges.map(goal => goal.id));
+        }
+        const returned = finishOpeningPack(act(result.nextState, { type: 'deal' }));
+        expect(returned.challenges[1]).toMatchObject({ metric: createChallenges((stage + 1) % 4)[1].metric,
+            progress: 0, completed: false });
+    });
+
+    it('waits through multiple minor rewards and preserves progress on existing extra goals', () => {
+        const base = start();
+        const extra = { ...base.challenges[1], id: 'extra', source: 'pack' as const };
+        const unfinished = { ...extra, id: 'unfinished', progress: 2 };
+        const completed = completeChallenges([...base.challenges, extra].map(goal => goal.main
+            ? goal : { ...goal, progress: goal.target }));
+        const board = [...completed.challenges, unfinished];
+        let state = act({ ...base, phase: 'deal_over', challenges: board,
+            challengeRewards: completed.rewards }, { type: 'deal' });
+        state = finishOpeningPack(state);
+        expect(state.phase).toBe('pack_choice');
+        expect(state.challenges).toEqual(board);
+        state = finishOpeningPack(state);
+        expect(state.challenges).toEqual([base.challenges[0],
+            expect.objectContaining({ metric: 'straights', progress: 0, completed: false }), unfinished]);
+        expect(state.ante).toBe(base.ante);
+    });
+
+    it('replaces an early-generated goal from an older save with one fresh goal after rewards', () => {
+        const base = start();
+        const completed = completeChallenges(advanceChallenges(base.challenges, { pairs: 4 }));
+        const early = { ...createChallenges(1)[1], id: `${base.challenges[1].id}-next`, progress: 1 };
+        const returned = finishOpeningPack(act({ ...base, phase: 'deal_over',
+            challenges: [...completed.challenges, early], challengeRewards: completed.rewards }, { type: 'deal' }));
+        expect(returned.challenges).toHaveLength(2);
+        expect(returned.challenges[1]).toMatchObject({ id: early.id, metric: 'straights', progress: 0 });
     });
 
     it('counts all three scored pairs in three of a kind, then completes on the next pair', () => {
@@ -165,14 +217,15 @@ describe('hand-pattern challenge progress', () => {
         expect(state.challenges.find(goal => goal.metric === 'flushes')?.progress).toBe(1);
     });
 
-    it('earns a pattern reward from an intentional bust and immediately renews the challenge', () => {
+    it('earns a pattern reward from an intentional bust and waits to renew the challenge', () => {
         const before = start();
         const state = settle({ ...before, challenges: before.challenges.map(goal => goal.metric === 'pairs'
             ? { ...goal, progress: goal.target - 1 } : goal) }, 0, [{ ...pair, cards: [
                 { id: 'a', rank: 'K', suit: 'hearts' }, { id: 'b', rank: 'K', suit: 'clubs' }, { id: 'c', rank: '9', suit: 'spades' },
             ], blackjackValue: 29, isBust: true, outcome: 'bust' }]);
         expect(state.challengeRewards).toMatchObject([{ tier: 'minor', title: 'Pair Collector' }]);
-        expect(state.challenges.find(goal => !goal.main && !goal.completed)?.metric).toBe('straights');
+        expect(state.challenges.find(goal => !goal.main)).toMatchObject({ metric: 'pairs', completed: true });
+        expect(state.challenges.some(goal => goal.metric === 'straights')).toBe(false);
     });
 });
 

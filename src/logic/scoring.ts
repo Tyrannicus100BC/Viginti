@@ -6,7 +6,12 @@ import { getBaseBlackjackScore } from './rules';
 import { evaluateBaseHands, type HandUpgrades } from './handScoring';
 export { POKER_ORDER, RANK_VALUES } from './rules';
 
+export function getPlayerBustLimit(inventory: readonly RelicInstance[], baseLimit = 21): number {
+  return RelicManager.executeValueHook('getBustLimit', baseLimit, { inventory: [...inventory] });
+}
+
 export function getBlackjackScore(cards: Card[], inventory: RelicInstance[] = [], ignoreSpecialEffects: boolean = false, bustLimit = 21): number {
+  if (!ignoreSpecialEffects) bustLimit = getPlayerBustLimit(inventory, bustLimit);
   let score = getBaseBlackjackScore(cards, ignoreSpecialEffects, bustLimit);
 
   // Relic: Adjust Blackjack Score (e.g. Joker)
@@ -20,6 +25,7 @@ export function getBlackjackScore(cards: Card[], inventory: RelicInstance[] = []
 }
 
 export function evaluateHandScore(cards: Card[], isWin: boolean, isDoubled: boolean = false, inventory: RelicInstance[] = [], handsRemaining: number = 0, categoryCounts?: Record<string, number>, outcome?: 'win' | 'loss' | 'bust' | 'push' | null, handUpgrades: HandUpgrades = {}, bustLimit = 21): HandScore {
+  bustLimit = getPlayerBustLimit(inventory, bustLimit);
   const blackjackScore = getBlackjackScore(cards, inventory, false, bustLimit);
 
   // Initial Empty Score
@@ -31,12 +37,13 @@ export function evaluateHandScore(cards: Card[], isWin: boolean, isDoubled: bool
     scoringCards: cards
   };
 
-  // Special Cards Calculation (Chip & Mult cards)
+  // Cash and mult bonuses pay only with a winning outcome, including Viginti.
+  const awardsSpecialBonuses = initialScore.criteria.some(row => row.id === 'win' || row.id === 'viginti');
   let specialChips = 0;
   let specialMult = 0;
   const specialCardIds: string[] = [];
 
-  for (const card of cards) {
+  for (const card of awardsSpecialBonuses ? cards : []) {
     // Check for inline special effects
     if (card.specialEffect) {
       if (card.specialEffect.type === 'chip') {

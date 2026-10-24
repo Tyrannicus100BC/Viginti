@@ -915,6 +915,28 @@
     transform: translateX(50%) scale(1.322);
 }
 
+.scoreMultiplication {
+    position: fixed;
+    transform: translate(-50%, -50%);
+    opacity: 1;
+    color: #fff;
+    font-size: 3.75rem;
+    font-weight: 900;
+    text-shadow: 0 0 20px #000, 0 0 40px #000;
+    z-index: 900;
+    pointer-events: none;
+    transition:
+        transform 0.5s cubic-bezier(0.22, 1, 0.36, 1),
+        left 0.5s cubic-bezier(0.22, 1, 0.36, 1),
+        top 0.5s cubic-bezier(0.22, 1, 0.36, 1),
+        opacity 0.5s ease-out;
+}
+
+.scoreMultiplicationFinal {
+    transform: translate(-50%, -50%) scale(0.6);
+    opacity: 0;
+}
+
 .totalWinningsLabel {
     position: fixed;
     transform: translate(-50%, -50%);

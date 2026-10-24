@@ -1,21 +1,29 @@
-import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 import type { Challenge } from '../engine/challenges';
+import type { PackId } from '../logic/packs';
 import { ChallengeProgress, formatChallengeProgress } from './ChallengeProgress';
+import { PackVisual } from './PackVisual';
+import { useLayout } from './ResponsiveLayout';
 import challengeStyles from './ChallengeBoard.module.css';
+import packStyles from './RaisePackChoice.module.css';
 import styles from './PackReward.module.css';
 
 /** Presentation only: the queued engine reward stays untouched throughout the flight. */
-export function ChallengeRewardIntro({ challenge, onDepart, onReveal, onComplete }: {
-    challenge: Challenge; onDepart: () => void; onReveal: () => void; onComplete: () => void;
+export function ChallengeRewardIntro({ challenge, packId, onDepart, onReveal, onComplete }: {
+    challenge: Challenge; packId: PackId; onDepart: () => void; onReveal: () => void; onComplete: () => void;
 }) {
     const scene = useRef<HTMLDivElement>(null);
     const token = useRef<HTMLDivElement>(null);
-    const [bursting, setBursting] = useState(false);
+    const row = useRef<HTMLDivElement>(null);
+    const pack = useRef<HTMLDivElement>(null);
+    const { idealWidth, referencePanelsFit } = useLayout();
 
     useLayoutEffect(() => {
         const root = scene.current;
         const element = token.current;
-        if (!root || !element) { onReveal(); onComplete(); return; }
+        const challengeRow = row.current;
+        const packFace = pack.current;
+        if (!root || !element || !challengeRow || !packFace) { onReveal(); onComplete(); return; }
         const source = Array.from(document.querySelectorAll<HTMLElement>('[data-challenge-id]'))
             .find(row => row.dataset.challengeId === challenge.id);
         const origin = source?.getBoundingClientRect();
@@ -29,31 +37,41 @@ export function ChallengeRewardIntro({ challenge, onDepart, onReveal, onComplete
         let revealed = false;
         const reveal = () => { if (!revealed) { revealed = true; onReveal(); } };
         const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        const play = async (frames: Keyframe[], duration: number) => {
-            const animation = element.animate(frames, { duration, fill: 'both', easing: 'cubic-bezier(.2,.8,.2,1)' });
+        const play = async (target: HTMLElement, frames: Keyframe[], duration: number) => {
+            const animation = target.animate(frames, { duration, fill: 'both', easing: 'cubic-bezier(.2,.8,.2,1)' });
             animations.push(animation);
             await animation.finished;
         };
         const run = async () => {
             try {
                 if (reducedMotion) {
-                    await play([{ opacity: 1 }, { opacity: 0 }], 120);
-                    if (!alive) return;
-                    reveal();
-                    await play([{ opacity: 0 }, { opacity: 0 }], 160);
+                    await Promise.all([
+                        play(challengeRow, [{ opacity: 1 }, { opacity: 0 }], 120),
+                        play(packFace, [{ opacity: 0 }, { opacity: 1 }], 120),
+                    ]);
                 } else {
-                    await play([
-                        { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(1)`, opacity: 1 },
-                        { transform: 'translate(-50%, -50%) scale(1.8)', opacity: 0, offset: 0.76 },
-                        { transform: 'translate(-50%, -50%) scale(1.8)', opacity: 0 },
-                    ], 1000);
-                    if (!alive) return;
-                    setBursting(true);
-                    reveal();
-                    // Keep the token invisible throughout the burst and card reveal.
-                    await play([{ opacity: 0 }, { opacity: 0 }], 700);
+                    // Both faces share one flight, so the pack replaces the row in place.
+                    await Promise.all([
+                        play(element, [
+                            { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))` },
+                            { transform: 'translate(-50%, -50%)' },
+                        ], 1000),
+                        play(challengeRow, [
+                            { opacity: 1, scale: '1' },
+                            { opacity: 1, offset: .15 },
+                            { opacity: 0, scale: '1.8', offset: .8 },
+                            { opacity: 0, scale: '1.8' },
+                        ], 1000),
+                        play(packFace, [
+                            { opacity: 0, transform: 'scale(.28)' },
+                            { opacity: 0, offset: .15 },
+                            { opacity: 1, offset: .8 },
+                            { opacity: 1, transform: 'scale(1)' },
+                        ], 1000),
+                    ]);
                 }
-                if (alive) onComplete();
+                // Hand off the full-size sealed pack directly to its opening animation.
+                if (alive) { reveal(); onComplete(); }
             } catch {
                 // A missing animation API must never block a reward; unmounts simply cancel.
                 if (alive) { reveal(); onComplete(); }
@@ -66,22 +84,16 @@ export function ChallengeRewardIntro({ challenge, onDepart, onReveal, onComplete
         };
     }, [challenge.id, onDepart, onReveal, onComplete]);
 
-    return <div ref={scene} className={`${styles.challengeIntro} ${bursting ? styles.bursting : ''}`}
+    return <div ref={scene} className={`${packStyles.scene} ${styles.challengeIntro}`}
+        style={referencePanelsFit ? { left: '50%', width: idealWidth, transform: 'translateX(-50%)' } : undefined}
         role="status" aria-label={`${formatChallengeProgress(challenge)} complete. ${challenge.main ? 'Major' : 'Minor'} pack reward.`}>
-        <div ref={token} aria-hidden="true"
-            className={`${challengeStyles.challenge} ${challenge.main ? challengeStyles.main : ''} ${styles.challengeToken}`}>
-            <span className={challengeStyles.goal}>{formatChallengeProgress(challenge)}</span>
-            <ChallengeProgress challenge={challenge} />
+        <div ref={token} className={packStyles.packPosition} aria-hidden="true">
+            <div ref={row}
+                className={`${challengeStyles.challenge} ${challenge.main ? challengeStyles.main : ''} ${styles.challengeToken}`}>
+                <span className={challengeStyles.goal}>{formatChallengeProgress(challenge)}</span>
+                <ChallengeProgress challenge={challenge} />
+            </div>
+            <div ref={pack} className={styles.challengePack}><PackVisual packId={packId} /></div>
         </div>
-        <div className={styles.introCaption} aria-hidden="true">CHALLENGE COMPLETE</div>
-        {bursting && <div className={styles.challengeBurst} aria-hidden="true">
-            <div className={styles.burstRing} />
-            {Array.from({ length: 12 }, (_, index) => {
-                const angle = index / 12 * Math.PI * 2;
-                return <i key={index} className={styles.spark} style={{
-                    '--spark-x': `${Math.cos(angle) * 310}px`, '--spark-y': `${Math.sin(angle) * 230}px`,
-                } as CSSProperties} />;
-            })}
-        </div>}
     </div>;
 }

@@ -32,7 +32,7 @@ function ChallengeTooltip({ challenge, id, offset }: { challenge: Challenge; id:
 export function ChallengeBoard() {
     const allChallenges = useGameBridge(state => state.challenges);
     // Retain the completed goal's row until the reward queue returns to the table.
-    // Replacement goals can accrue progress internally while that row is still present.
+    // Older saves may already contain a replacement alongside its completed goal.
     const pendingReplacements = new Set(allChallenges.filter(challenge => challenge.completed)
         .map(challenge => `${challenge.id}-next`));
     const challenges = allChallenges.filter(challenge => !pendingReplacements.has(challenge.id));

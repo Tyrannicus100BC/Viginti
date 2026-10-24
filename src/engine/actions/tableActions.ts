@@ -1,4 +1,4 @@
-import { getBustLimit } from '../bosses';
+import { getBustLimit, getDealerBustLimit } from '../bosses';
 /**
  * Pure table action processing functions.
  * Handles: double_down, surrender, discard, redraw, hold, switch
@@ -83,7 +83,7 @@ export function processActivateTableAction(state: GameState, relicId: string): A
         case 'double_down':
         case 'surrender': {
             const hasPlayableHand = state.playerHands.some(
-                h => !h.isBust && !h.isHeld && h.blackjackValue !== 21 && h.cards.length > 0
+                h => !h.isBust && !h.isHeld && h.blackjackValue !== 21 && h.cards.length > 0 && (relicId !== 'double_down' || canPlayHand(h))
             );
             if (!hasPlayableHand || hasDrawnCards || charges < action.chargeCost) return { nextState: state, events: [] };
             nextMode = 'select_hand';
@@ -200,7 +200,7 @@ function processDoubleDown(state: GameState, handIndex: number): ActionResult {
     if (charges < action.chargeCost) return { nextState: state, events: [] };
 
     const hand = state.playerHands[handIndex];
-    if (!hand || hand.isBust || hand.isHeld || hand.blackjackValue === 21 || hand.cards.length === 0) {
+    if (!hand || !canPlayHand(hand) || hand.cards.length === 0) {
         return { nextState: state, events: [] };
     }
 
@@ -388,13 +388,13 @@ function processDiscard(
 
     const targetCard = dealer.cards[cardIndex];
     if (!dealer.isRevealed && !targetCard.isFaceUp) return { nextState: state, events: [] };
-    if (dealer.blackjackValue >= getBustLimit(state)) return { nextState: state, events: [] };
+    if (dealer.blackjackValue >= getDealerBustLimit(state)) return { nextState: state, events: [] };
 
     const nextDealerCards = dealer.cards.filter((_, idx) => idx !== cardIndex);
     const nextDealer: DealerHand = {
         ...dealer,
         cards: nextDealerCards,
-        blackjackValue: getDealerDisplayValue({ ...dealer, cards: nextDealerCards }, invArr, getBustLimit(state)),
+        blackjackValue: getDealerDisplayValue({ ...dealer, cards: nextDealerCards }, invArr, getDealerBustLimit(state)),
     };
 
     events.push({ type: 'charge_spent', relicId, newCharges: Math.max(0, charges - action.chargeCost) });
@@ -596,7 +596,7 @@ function processSwitch(state: GameState, handIndex: number | undefined, cardId: 
     const updatedDealer: DealerHand = {
         ...state.dealer,
         cards: newDealerCards,
-        blackjackValue: getDealerDisplayValue({ ...state.dealer, cards: newDealerCards }, invArr, getBustLimit(state)),
+        blackjackValue: getDealerDisplayValue({ ...state.dealer, cards: newDealerCards }, invArr, getDealerBustLimit(state)),
     };
 
     const events: GameEvent[] = [];

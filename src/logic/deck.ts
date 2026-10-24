@@ -82,27 +82,20 @@ export function shuffleDeck(deck: Card[]): Card[] {
 export function drawCardFromProbabilities(probs: DeckProbabilities, rng: SeededRNG): Card {
     const suit = pickSuit(probs.suits, rng);
 
-    // Choose the special type first; its strength is an independent follow-up roll.
+    // Bonuses enhance a normal ranked, suited card rather than replacing it.
     const specials = getSpecialWeights(probs);
-    if (specials.length > 0) {
-        const roll = rng.next();
-        let cumulative = 0;
-        for (const sw of specials) {
-            cumulative += sw.chance;
-            if (roll < cumulative) {
-                const strength = rollSpecialStrength(sw.type, rng);
-                if (sw.type === 'chip') return createChipCard(strength);
-                if (sw.type === 'mult') return createMultCard(strength);
-                return createScoreCard(strength);
-            }
+    const roll = rng.next();
+    const rank = pickRank(probs.ranks, rng);
+    const card = createCard(suit, rank, false);
+    let cumulative = 0;
+    for (const sw of specials) {
+        cumulative += sw.chance;
+        if (roll < cumulative) {
+            card.specialEffect = { type: sw.type, value: rollSpecialStrength(sw.type, rng) };
+            break;
         }
     }
-
-    // Preserve the ordinary-card RNG sequence when no special types are enabled.
-    if (!specials.length) rng.next();
-
-    const rank = pickRank(probs.ranks, rng);
-    return createCard(suit, rank, false);
+    return card;
 }
 
 function pickSuit(weights: SuitWeights, rng: SeededRNG): Suit {

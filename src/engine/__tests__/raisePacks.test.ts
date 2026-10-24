@@ -2,14 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { createInitialState, getValidActions, processAction } from '../engine';
 import type { GameState } from '../GameState';
 import type { PlayerAction } from '../PlayerAction';
-import { generateRaise, generateRaiseChoices, getHandPayout, getHandRaiseChanges, getRaise, HAND_TYPES, PACK_RAISES, RAISE_AFFIXES, RAISE_AFFIX_SLOTS, formatRaiseCash, formatRaiseMult } from '../../logic/handScoring';
+import { generateRaise, generateRaiseChoices, getHandPayout, getHandRaiseChanges, getRaise, HAND_TYPES, RAISE_HAND_TYPES, PACK_RAISES, RAISE_AFFIX_SLOTS, formatRaiseCash, formatRaiseMult } from '../../logic/handScoring';
 import { getRelicSide, getSideSlotCount } from '../../logic/relics/inventory';
 import { SeededRNG } from '../rng';
+import { generateShopItems } from '../../logic/rewards/generator';
 import { TUTORIAL_STEPS } from '../tutorial/definitions';
 import { useGameBridge } from '../../store/gameBridge';
 import { evaluateHandScore } from '../../logic/scoring';
 import { PACKS, rollPackDefinition } from '../../logic/packs';
-import { SMALL_UPGRADE_UNITS } from '../../logic/upgradeTuning';
+import { RAISE_BONUS_RANGES, V9_RAISE_BONUS_RANGES, RAISE_LOSS_PENALTY_RANGES, RAISE_VALUE_WEIGHTS } from '../../logic/upgradeTuning';
 
 const act = (state: GameState, action: PlayerAction) => processAction(state, action).nextState;
 const shop = (): GameState => act(createInitialState(), {
@@ -71,7 +72,7 @@ describe('relic slots and raise packs', () => {
             for (const raise of offers) {
                 rarityCounts.add(raise.rarity);
                 effectCounts.add(raise.modifiers.length);
-                expect(raise.modifiers.some(effect => effect.chips > 0 || effect.mult > 0)).toBe(true);
+                expect(raise.affixes!.every(affix => affix.modifiers[0].chips >= 0 && affix.modifiers[0].mult >= 0)).toBe(true);
                 expect(raise.modifiers.filter(effect => effect.chips < 0 || effect.mult < 0).length).toBeLessThanOrEqual(1);
                 expect(getRaise(raise.id)).toEqual(raise);
                 if (raise.modifiers.some(effect => effect.chips < 0 || effect.mult < 0)) drawbacks++;
@@ -91,7 +92,7 @@ describe('relic slots and raise packs', () => {
             const rng = new SeededRNG(seed);
             const copy = rng.clone();
             const raise = generateRaise(rng, rarity);
-            expect(raise.id).toMatch(/^raise_v5_/);
+            expect(raise.id).toMatch(/^raise_v10_/);
             expect(generateRaise(copy, rarity)).toEqual(raise);
             expect(copy.getState()).toBe(rng.getState());
             expect(raise.affixes!.reduce((total, affix) => total + affix.slotCost, 0)).toBe(RAISE_AFFIX_SLOTS[rarity]);
@@ -105,11 +106,15 @@ describe('relic slots and raise packs', () => {
             expect(negative.length).toBeLessThanOrEqual(1);
             for (const affix of raise.affixes!) {
                 kinds.add(affix.kind);
-                const benefit = affix.modifiers.filter(effect => effect.chips > 0 || effect.mult > 0);
-                expect(benefit).toHaveLength(1);
-                const unit = SMALL_UPGRADE_UNITS[benefit[0].handTypeId];
-                const units = affix.kind === 'simple' ? 1 : 3;
-                expect(benefit[0].chips || benefit[0].mult).toBeCloseTo(benefit[0].chips ? units * unit.cash : units * unit.multPercent / 100);
+                const benefit = [affix.modifiers[0]];
+                expect(benefit[0].chips).toBeGreaterThanOrEqual(0);
+                expect(benefit[0].mult).toBeGreaterThanOrEqual(0);
+                expect(['loss', 'bust']).not.toContain(benefit[0].handTypeId);
+                const ranges = RAISE_BONUS_RANGES[benefit[0].handTypeId as keyof typeof RAISE_BONUS_RANGES][affix.kind === 'simple' ? 'regular' : 'strong'];
+                const [min, max] = benefit[0].chips ? ranges.cash : ranges.multPercent;
+                const amount = benefit[0].chips || Math.round(benefit[0].mult * 100);
+                expect(amount).toBeGreaterThanOrEqual(min);
+                expect(amount).toBeLessThanOrEqual(max);
                 for (const effect of affix.modifiers) {
                     expect(Number.isInteger(effect.chips)).toBe(true);
                     expect(effect.mult * 100).toBeCloseTo(Math.round(effect.mult * 100));
@@ -119,8 +124,11 @@ describe('relic slots and raise packs', () => {
                     expect(affix.modifiers).toHaveLength(2);
                     const drawback = affix.modifiers[1];
                     expect(drawback.handTypeId).not.toBe(benefit[0].handTypeId);
-                    const penaltyUnit = SMALL_UPGRADE_UNITS[drawback.handTypeId];
-                    expect(drawback.chips || drawback.mult).toBeCloseTo(drawback.chips ? -penaltyUnit.cash : -penaltyUnit.multPercent / 100);
+                    const penaltyRanges = drawback.handTypeId === 'loss' || drawback.handTypeId === 'bust' ? RAISE_LOSS_PENALTY_RANGES : V9_RAISE_BONUS_RANGES[drawback.handTypeId].regular;
+                    const [min, max] = drawback.chips ? penaltyRanges.cash : penaltyRanges.multPercent;
+                    const amount = -(drawback.chips || Math.round(drawback.mult * 100));
+                    expect(amount).toBeGreaterThanOrEqual(min);
+                    expect(amount).toBeLessThanOrEqual(max);
                 } else {
                     expect(affix.modifiers).toHaveLength(1);
                     expect(affix.slotCost).toBe(affix.kind === 'double' ? 2 : 1);
@@ -131,39 +139,252 @@ describe('relic slots and raise packs', () => {
         expect(penalties).toEqual(new Set([0, 1]));
     });
 
-    it.each([
-        ['simple_pair_mult', 'tradeoff_pair_mult_flush_mult'],
-        ['simple_pair_mult', 'tradeoff_flush_cash_pair_mult'],
-        ['tradeoff_pair_mult_flush_mult', 'simple_pair_mult'],
-        ['tradeoff_pair_mult_flush_mult', 'simple_flush_mult'],
-        ['simple_pair_cash', 'simple_pair_cash'],
-        ['simple_pair_mult', 'double_pair_mult'],
-    ])('prevents %s from overlapping with %s on one card', (firstId, secondId) => {
-        const first = RAISE_AFFIXES.find(affix => affix.id === firstId)!;
-        const second = RAISE_AFFIXES.find(affix => affix.id === secondId)!;
-        const pickRoll = (id: string, kind: typeof first.kind) => {
-            const pool = RAISE_AFFIXES.filter(affix => affix.kind === kind);
-            return (pool.findIndex(affix => affix.id === id) + 0.5) / pool.length;
-        };
-        const kindRoll = { simple: 0, tradeoff: 0.8, double: 0.99 };
-        const rolls = [kindRoll[first.kind], pickRoll(firstId, first.kind), kindRoll[second.kind], pickRoll(secondId, second.kind)];
-        const rng = new SeededRNG(1);
-        rng.next = () => rolls.shift()!;
-        const raise = generateRaise(rng, second.kind === 'double' ? 'Rare' : 'Uncommon');
-        expect(raise.affixes![0].id).toBe(firstId);
-        expect(raise.affixes![1].id).not.toBe(secondId);
-        const bonuses = raise.modifiers.map(effect => `${effect.handTypeId}:${effect.chips ? 'chips' : 'mult'}`);
-        expect(new Set(bonuses).size).toBe(bonuses.length);
+    it('uses ranged cards for direct Raise rewards and excludes historical positive Lose offers', () => {
+        for (let seed = 1; seed <= 100; seed++) {
+            const rewards = generateShopItems([{ type: 'Raise', count: 3 }], [], undefined, new SeededRNG(seed));
+            expect(rewards).toHaveLength(3);
+            expect(new Set(rewards.map(item => item.id)).size).toBe(3);
+            for (const item of rewards) {
+                expect(item.id).toMatch(/^raise_v10_/);
+                expect(getRaise(item.id)!.modifiers.some(effect => (effect.handTypeId === 'loss' || effect.handTypeId === 'bust') && (effect.chips > 0 || effect.mult > 0))).toBe(false);
+            }
+        }
+        expect(generateShopItems([{ type: 'Raise', count: 1, specificIds: ['raise_loss_cash', 'raise_v5_0_simple_loss_mult'] }], [], undefined, new SeededRNG(1))).toEqual([]);
     });
 
-    it('allows chips and multiplier modifiers for the same hand on one card', () => {
-        const rolls = [0, 0.45, 0, 0.5];
+    it('splits drawbacks 25% Lose / 25% Bust / 50% other and varies amounts across the full ranges', () => {
+        let lossPenalties = 0, bustPenalties = 0, penalties = 0;
+        const seen = new Map<string, Set<number>>();
+        for (let seed = 1; seed <= 10000; seed++) {
+            const raise = generateRaise(new SeededRNG(seed), 'Rare');
+            expect(getRaise(raise.id)).toEqual(raise);
+            for (const affix of raise.affixes!) for (const [index, effect] of affix.modifiers.entries()) {
+                const penalty = index > 0;
+                if (penalty) {
+                    penalties++;
+                    if (effect.handTypeId === 'loss') lossPenalties++;
+                    if (effect.handTypeId === 'bust') bustPenalties++;
+                } else expect(['loss', 'bust']).not.toContain(effect.handTypeId);
+                const key = `${effect.handTypeId}:${effect.chips ? 'cash' : 'multPercent'}:${penalty ? 'penalty' : affix.kind === 'simple' ? 'regular' : 'strong'}`;
+                if (!seen.has(key)) seen.set(key, new Set());
+                seen.get(key)!.add(Math.abs(effect.chips || Math.round(effect.mult * 100)));
+            }
+        }
+        expect(penalties).toBeGreaterThan(3000);
+        for (const count of [lossPenalties, bustPenalties]) {
+            expect(count / penalties).toBeGreaterThan(.22);
+            expect(count / penalties).toBeLessThan(.28);
+        }
+        expect((penalties - lossPenalties - bustPenalties) / penalties).toBeGreaterThan(.47);
+        expect((penalties - lossPenalties - bustPenalties) / penalties).toBeLessThan(.53);
+        for (const [hand, ranges] of Object.entries(RAISE_BONUS_RANGES)) {
+            for (const strength of ['regular', 'strong'] as const) for (const stat of ['cash', 'multPercent'] as const) {
+                const [min, max] = ranges[strength][stat];
+                expect(seen.get(`${hand}:${stat}:${strength}`)).toEqual(new Set(Array.from({ length: max - min + 1 }, (_, i) => min + i)));
+            }
+        }
+    });
+
+    it.each([
+        ['Common', 0, .45, [2, 3, 4, 5], [0, .16, .50, .84]],
+        ['Uncommon', .99, .45, [8, 9, 10, 11, 12], [0, .16, .36, .64, .84]],
+        ['Common', 0, .99, [1, 2, 3], [0, .42, .84]],
+    ] as const)('uses exact weighted boundaries for %s rolls (%s, %s)', (rarity, kindRoll, pickRoll, amounts, boundaries) => {
+        for (let index = 0; index < amounts.length; index++) {
+            for (const valueRoll of [boundaries[index], (boundaries[index + 1] ?? 1) - .000001]) {
+                const rolls = [kindRoll, pickRoll, valueRoll];
+                const rng = new SeededRNG(1);
+                rng.next = () => rolls.shift()!;
+                const raise = generateRaise(rng, rarity);
+                const effect = raise.modifiers[0];
+                expect(effect.chips || Math.round(effect.mult * 100)).toBe(amounts[index]);
+                expect(getRaise(raise.id)).toEqual(raise);
+            }
+        }
+    });
+
+    it('favors central values and rolls Flush multipliers at 42/42/16 percent without zeros', () => {
+        const counts = new Map<number, number>();
+        const flushCounts = new Map<number, number>();
+        for (let seed = 1; seed <= 30000; seed++) {
+            const raise = generateRaise(new SeededRNG(seed), 'Common');
+            if (raise.affixes![0].kind !== 'simple') continue;
+            const effect = raise.modifiers[0];
+            if (effect.handTypeId === 'pair' && effect.chips) counts.set(effect.chips, (counts.get(effect.chips) ?? 0) + 1);
+            if (effect.handTypeId === 'flush' && effect.chips === 0) {
+                expect(effect.mult).toBeGreaterThanOrEqual(.01);
+                const amount = Math.round(effect.mult * 100);
+                flushCounts.set(amount, (flushCounts.get(amount) ?? 0) + 1);
+            }
+        }
+        const total = [...counts.values()].reduce((sum, count) => sum + count, 0);
+        for (const [index, amount] of [2, 3, 4, 5].entries()) {
+            expect((counts.get(amount) ?? 0) / total).toBeCloseTo(RAISE_VALUE_WEIGHTS[4][index] / 100, 1);
+        }
+        const flushTotal = [...flushCounts.values()].reduce((sum, count) => sum + count, 0);
+        expect(new Set(flushCounts.keys())).toEqual(new Set([1, 2, 3]));
+        for (const [index, amount] of [1, 2, 3].entries()) {
+            expect((flushCounts.get(amount) ?? 0) / flushTotal).toBeCloseTo(RAISE_VALUE_WEIGHTS[3][index] / 100, 1);
+        }
+    });
+
+    it('reduces both Pair benefit ranges while preserving earlier cards and current drawbacks', () => {
+        expect(RAISE_BONUS_RANGES.pair).toEqual({ regular: { cash: [2, 5], multPercent: [1, 4] }, strong: { cash: [8, 12], multPercent: [6, 10] } });
+        expect(getRaise('raise_v9_0_simple_pair_cash~6')?.chips).toBe(6);
+        expect(getRaise('raise_v9_1_double_pair_mult~11')?.mult).toBe(.11);
+        expect(getRaise('raise_v10_0_simple_pair_cash~2')?.chips).toBe(2);
+        expect(getRaise('raise_v10_0_simple_pair_mult~1')?.mult).toBe(.01);
+        expect(getRaise('raise_v10_1_double_pair_cash~12')?.chips).toBe(12);
+        expect(getRaise('raise_v10_0_tradeoff_pair_mult_bust_cash~10~7')?.mult).toBe(.1);
+        expect(getRaise('raise_v10_0_tradeoff_flush_cash_pair_mult~6~5')?.modifiers[1].mult).toBe(-.05);
+        expect(getRaise('raise_v10_0_simple_pair_cash~6')).toBeUndefined();
+        expect(getRaise('raise_v10_1_double_pair_mult~11')).toBeUndefined();
+        for (const hand of ['win', 'viginti', 'straight', 'flush'] as const) expect(RAISE_BONUS_RANGES[hand]).toEqual(V9_RAISE_BONUS_RANGES[hand]);
+        const upgrades = { 'raise_v10_0_simple_win_cash~4': 1, 'raise_v10_0_tradeoff_pair_cash_loss_mult~10~4': 1 };
+        expect(getHandPayout('win', upgrades)).toMatchObject({ chips: 14, variant: { chips: 20 } });
+        expect(getHandPayout('loss', upgrades)).toMatchObject({ mult: -.04, variant: { mult: -.1 } });
+    });
+
+    it('rejects zero-strength new Flush cards while preserving previously saved zero rolls', () => {
+        expect(getRaise('raise_v9_0_simple_flush_mult~0')).toBeUndefined();
+        expect(getRaise('raise_v9_0_tradeoff_pair_cash_flush_mult~11~0')).toBeUndefined();
+        expect(getRaise('raise_v8_0_simple_flush_mult~0')?.mult).toBe(0);
+        expect(getRaise('raise_v8_0_tradeoff_pair_cash_flush_mult~11~0')?.modifiers[1].mult).toBeCloseTo(0);
+        for (let seed = 1; seed <= 500; seed++) {
+            const raise = generateRaise(new SeededRNG(seed), 'Rare');
+            expect(raise.modifiers.every(effect => effect.chips !== 0 || effect.mult !== 0)).toBe(true);
+        }
+        const upgrades = { 'raise_v9_0_simple_win_cash~4': 1, 'raise_v9_0_tradeoff_pair_cash_bust_mult~11~5': 1 };
+        expect(getHandPayout('win', upgrades)).toMatchObject({ chips: 14, variant: { chips: 20 } });
+        expect(getHandPayout('loss', upgrades)).toMatchObject({ mult: 0, variant: { mult: -.15 } });
+    });
+
+    it('increases Lose/Bust penalties and preserves earlier v6 cards unchanged', () => {
+        expect(RAISE_LOSS_PENALTY_RANGES).toEqual({ cash: [4, 7], multPercent: [2, 6] });
+        const id = 'raise_v7_0_tradeoff_pair_cash_loss_mult~12~5';
+        expect(getRaise(id)?.modifiers).toEqual([
+            { handTypeId: 'pair', chips: 12, mult: 0 }, { handTypeId: 'loss', chips: 0, mult: -.05 },
+        ]);
+        const upgrades = { [id]: 2 };
+        expect(getHandPayout('loss', upgrades)).toMatchObject({ chips: -10, mult: -.1, variant: { chips: -20, mult: -.2 } });
+        expect(getRaise('raise_v6_0_tradeoff_pair_cash_loss_cash~11~3')?.modifiers[1].chips).toBe(-3);
+        expect(getRaise('raise_v6_0_tradeoff_pair_cash_loss_mult~11~2')?.modifiers[1].mult).toBe(-.02);
+        expect(getRaise('raise_v7_0_tradeoff_pair_cash_loss_cash~11~7')?.modifiers[1].chips).toBe(-7);
+        expect(getRaise('raise_v7_0_simple_flush_mult~0')?.mult).toBe(0);
+        expect(getRaise('raise_v6_0_simple_flush_mult~0')).toBeUndefined();
+        for (const badId of ['raise_v7_0_simple_loss_cash~5', 'raise_v7_0_simple_pair_cash~2',
+            'raise_v7_0_simple_pair_cash~7', 'raise_v7_0_tradeoff_pair_cash_loss_cash~11~3',
+            'raise_v7_0_simple_flush_mult~00', 'raise_v7_0_simple_flush_mult~-1']) expect(getRaise(badId)).toBeUndefined();
+    });
+
+    it('rolls Viginti benefits and independent Viginti / Bust drawbacks across all rarities', () => {
+        expect(RAISE_HAND_TYPES.map(hand => hand.id)).toEqual(['win', 'viginti', 'loss', 'bust', 'pair', 'straight', 'flush']);
+        for (const rarity of ['Common', 'Uncommon', 'Rare'] as const) {
+            const targets = new Set<string>();
+            for (let seed = 1; seed <= 2000; seed++) {
+                const raise = generateRaise(new SeededRNG(seed), rarity);
+                for (const affix of raise.affixes!) for (const [index, effect] of affix.modifiers.entries()) {
+                    targets.add(`${index === 0 ? 'benefit' : 'penalty'}:${effect.handTypeId}`);
+                }
+            }
+            for (const target of ['benefit:win', 'benefit:viginti', 'penalty:viginti', 'penalty:loss', 'penalty:bust']) expect(targets).toContain(target);
+            expect(targets).not.toContain('benefit:loss');
+            expect(targets).not.toContain('benefit:bust');
+        }
+    });
+
+    it.each([
+        [0, 'loss'], [.249999, 'loss'], [.25, 'bust'], [.499999, 'bust'], [.5, 'viginti'], [.999999, 'viginti'],
+    ] as const)('selects the correct drawback group at roll %s', (penaltyRoll, expected) => {
+        // First affix within each group: Win benefit, Viginti ordinary penalty.
+        const rolls = [.8, penaltyRoll, 0, .5, .5];
         const rng = new SeededRNG(1);
         rng.next = () => rolls.shift()!;
-        expect(generateRaise(rng, 'Uncommon').modifiers).toEqual([
-            { handTypeId: 'pair', chips: 4, mult: 0 },
-            { handTypeId: 'pair', chips: 0, mult: 0.03 },
+        const raise = generateRaise(rng, 'Common');
+        expect(raise.affixes![0].kind).toBe('tradeoff');
+        expect(raise.modifiers[1].handTypeId).toBe(expected);
+    });
+
+    it('scores and persists Win, Viginti, Lose and Bust Raises independently', () => {
+        const ids = [
+            'raise_v8_0_simple_win_cash~4', 'raise_v8_0_simple_viginti_mult~3',
+            'raise_v8_0_tradeoff_pair_cash_loss_cash~11~6',
+            'raise_v8_0_tradeoff_straight_mult_bust_mult~7~5',
+        ];
+        const upgrades = Object.fromEntries(ids.map(id => [id, 1]));
+        expect(getHandPayout('win', upgrades)).toMatchObject({ chips: 14, mult: 0, variant: { chips: 20, mult: .13 } });
+        expect(getHandPayout('loss', upgrades)).toMatchObject({ chips: -16, mult: 0, variant: { chips: -20, mult: -.15 } });
+        expect(getHandRaiseChanges('win', upgrades).map(change => change.value)).toEqual([4]);
+        expect(getHandRaiseChanges('viginti', upgrades).map(change => change.value)).toEqual([.03]);
+        expect(getHandRaiseChanges('loss', upgrades).map(change => change.value)).toEqual([-6]);
+        expect(getHandRaiseChanges('bust', upgrades).map(change => change.value)).toEqual([-.05]);
+        const cards = [{ id: 'ten', rank: '10' as const, suit: 'hearts' as const }, { id: 'nine', rank: '9' as const, suit: 'clubs' as const }];
+        const score = (cards: Parameters<typeof evaluateHandScore>[0], win: boolean, outcome: 'win' | 'loss' | 'bust', values = upgrades) => evaluateHandScore(cards, win, false, [], 0, undefined, outcome, values).criteria[0];
+        const twentyOne = [...cards, { id: 'two', rank: '2' as const, suit: 'spades' as const }];
+        const bust = [...cards, { id: 'three', rank: '3' as const, suit: 'spades' as const }];
+        expect(score(cards, true, 'win')).toMatchObject({ id: 'win', chips: 14, multiplier: 0 });
+        expect(score(twentyOne, true, 'win')).toMatchObject({ id: 'viginti', chips: 20, multiplier: .13 });
+        expect(score(cards, false, 'loss')).toMatchObject({ id: 'loss', chips: -16, multiplier: 0 });
+        expect(score(bust, false, 'bust')).toMatchObject({ id: 'bust', chips: -20, multiplier: -.15 });
+        const drawback = { 'raise_v8_0_tradeoff_pair_cash_viginti_cash~11~4': 1 };
+        expect(score(cards, true, 'win', drawback)).toMatchObject({ id: 'win', chips: 10 });
+        expect(score(twentyOne, true, 'win', drawback)).toMatchObject({ id: 'viginti', chips: 16 });
+        let state = shop();
+        for (const id of ids) {
+            const pending = { ...state, phase: 'pack_choice' as const, pendingRaiseChoices: [id], pendingPack: { packId: 'raise_basic' as const, picksRemaining: 1 } };
+            state = act(pending, { type: 'choose_raise', raiseId: id });
+        }
+        expect(state.handUpgrades).toEqual(upgrades);
+        expect(useGameBridge.getState().loadGameState(JSON.stringify(state))).toBe(true);
+        expect(useGameBridge.getState().gameState.handUpgrades).toEqual(upgrades);
+        expect(getHandPayout('loss', useGameBridge.getState().gameState.handUpgrades)).toEqual(getHandPayout('loss', upgrades));
+        for (const id of ['raise_v7_0_simple_viginti_cash~4', 'raise_v7_0_tradeoff_pair_cash_bust_cash~11~6',
+            'raise_v8_0_simple_bust_cash~5', 'raise_v8_0_double_bust_mult~7', 'raise_v8_0_tradeoff_bust_cash_win_mult~6~2']) expect(getRaise(id)).toBeUndefined();
+    });
+
+    it('allows cash and multiplier bonuses for the same hand on one card', () => {
+        let found = false;
+        for (let seed = 1; seed <= 500; seed++) {
+            const raise = generateRaise(new SeededRNG(seed), 'Uncommon');
+            if (raise.modifiers.some(effect => effect.handTypeId === 'pair' && effect.chips > 0)
+                && raise.modifiers.some(effect => effect.handTypeId === 'pair' && effect.mult > 0)) found = true;
+        }
+        expect(found).toBe(true);
+    });
+
+    it('stores rolled values in IDs through choosing, stacking, export and import', () => {
+        const id = 'raise_v6_2_tradeoff_pair_cash_loss_mult~11~3.double_win_mult~7';
+        const raise = getRaise(id)!;
+        expect(raise.modifiers).toEqual([
+            { handTypeId: 'pair', chips: 11, mult: 0 },
+            { handTypeId: 'loss', chips: 0, mult: -.03 },
+            { handTypeId: 'win', chips: 0, mult: .07 },
         ]);
+        const pending = { ...shop(), pendingRaiseChoices: [id], pendingPack: { packId: 'raise_basic' as const, picksRemaining: 1 } };
+        const chosen = act(pending, { type: 'choose_raise', raiseId: id });
+        expect(chosen.handUpgrades[id]).toBe(1);
+        expect(useGameBridge.getState().loadGameState(JSON.stringify(chosen))).toBe(true);
+        const upgrades = { ...useGameBridge.getState().gameState.handUpgrades, [id]: 2 };
+        expect(getHandPayout('pair', upgrades).chips).toBe(27);
+        expect(getHandPayout('loss', upgrades)).toMatchObject({ chips: -10, mult: -.06, variant: { chips: -20, mult: -.16 } });
+        expect(getHandRaiseChanges('loss', upgrades).map(change => change.value)).toEqual([-.03, -.03]);
+        const cards = [{ id: 'a', rank: 'K' as const, suit: 'hearts' as const }, { id: 'b', rank: '9' as const, suit: 'spades' as const }];
+        expect(evaluateHandScore(cards, false, false, [], 0, undefined, 'loss', upgrades).criteria.find(row => row.id === 'loss'))
+            .toMatchObject({ chips: -10, multiplier: -.06 });
+        expect(evaluateHandScore([...cards, { id: 'c', rank: '5', suit: 'clubs' }], false, false, [], 0, undefined, 'bust', upgrades).criteria.find(row => row.id === 'bust'))
+            .toMatchObject({ chips: -20, multiplier: -.16 });
+    });
+
+    it('rejects malformed ranged cards, positive Lose rolls, overlapping stats and out-of-range values', () => {
+        for (const id of [
+            'raise_v6_0_simple_loss_cash~3', 'raise_v6_0_tradeoff_loss_cash_pair_mult~9~3',
+            'raise_v6_0_simple_pair_cash~3', 'raise_v6_0_simple_pair_cash~6', 'raise_v6_0_simple_pair_cash~4.5',
+            'raise_v6_0_simple_pair_cash~04', 'raise_v6_0_simple_pair_cash~4~5',
+            'raise_v6_0_double_pair_cash~11', 'raise_v6_0_tradeoff_pair_cash_loss_mult~11~4',
+            'raise_v6_1_simple_pair_cash~4.simple_pair_cash~5',
+            'raise_v6_1_tradeoff_pair_cash_flush_mult~11~1.simple_flush_mult~2',
+            'raise_v6_1_tradeoff_pair_cash_loss_mult~11~3.tradeoff_win_mult_flush_cash~7~2',
+        ]) expect(getRaise(id)).toBeUndefined();
     });
 
     it('rejects compositions with unknown affixes, an incorrect budget or two penalties', () => {
@@ -232,9 +453,9 @@ describe('relic slots and raise packs', () => {
     it('formats increases and decreases without visible signs', () => {
         expect(formatRaiseCash(15)).toBe('$15');
         expect(formatRaiseCash(-5)).toBe('$5');
-        expect(formatRaiseMult(0.1)).toBe('x10%');
-        expect(formatRaiseMult(-0.1)).toBe('x10%');
-        expect(formatRaiseMult(0.1 + 0.2)).toBe('x30%');
+        expect(formatRaiseMult(0.1)).toBe('10%');
+        expect(formatRaiseMult(-0.1)).toBe('10%');
+        expect(formatRaiseMult(0.1 + 0.2)).toBe('30%');
     });
 
     it('applies a pair cash bonus and flush penalty together, stacks both and scores the drawback', () => {

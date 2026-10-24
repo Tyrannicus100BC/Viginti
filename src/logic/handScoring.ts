@@ -1,14 +1,15 @@
 import { formatCash, formatChipMultiplier } from './formatters';
 import { rollPackRarity, type PackQuality } from './packs';
 import type { Card, ScoringDetail } from '../types';
-import { POKER_ORDER, RANK_VALUES } from './rules';
+import { MAX_HAND_PAIRS, POKER_ORDER, RANK_VALUES } from './rules';
 import type { Relic, RelicRarity } from './relics/types';
 import type { SeededRNG } from '../engine/rng';
 import { RAISE_PACK_COST } from './packs';
-import { SMALL_UPGRADE_UNITS } from './upgradeTuning';
+import { SMALL_UPGRADE_UNITS, RAISE_BONUS_RANGES, RAISE_LOSS_PENALTY_RANGES, RAISE_PENALTY_WEIGHTS, V9_RAISE_BONUS_RANGES, V8_RAISE_BONUS_RANGES, V7_RAISE_BONUS_RANGES, V6_RAISE_BONUS_RANGES, V6_RAISE_LOSS_PENALTY_RANGES, RAISE_VALUE_WEIGHTS, type RaiseRange } from './upgradeTuning';
 export { RAISE_PACK_COST } from './packs';
 
 export type HandTypeId = 'win' | 'loss' | 'pair' | 'straight' | 'flush';
+export type RaiseHandTypeId = HandTypeId | 'viginti' | 'bust';
 // Counts retain the history of every Raise without occupying relic slots.
 export type HandUpgrades = Readonly<Record<string, number>>;
 
@@ -26,20 +27,26 @@ interface HandTypeDefinition {
 export const HAND_TYPES: readonly HandTypeDefinition[] = [
     { id: 'win', name: 'Win', icon: '/hands/win.svg', chips: 10, mult: 0, description: 'Beat the dealer. Exactly 21 has a higher base payout.', chipCards: false, variant: { id: 'viginti', name: '21', icon: '/hands/viginti.svg', chips: 20, mult: 0.1 } },
     { id: 'loss', name: 'Lose', icon: '/hands/lose.svg', chips: -10, mult: 0, description: 'Lose to the dealer. Busts have a larger base penalty. A push has no outcome payout.', chipCards: false, variant: { id: 'bust', name: 'Bust', icon: '/hands/bust.svg', chips: -20, mult: -0.1 } },
-    { id: 'pair', name: 'Pair', icon: '/hands/pair.svg', chips: 5, mult: 0.05, description: 'Every two cards of the same rank. Three of a kind contains three pairs.', chipCards: true },
+    { id: 'pair', name: 'Pair', icon: '/hands/pair.svg', chips: 5, mult: 0.05, description: 'Every two cards of the same rank, up to three pairs per hand. Three and four of a kind both score three pairs.', chipCards: true },
     { id: 'straight', name: 'Straight', icon: '/hands/straight.svg', chips: 10, mult: 0, description: 'Every separate run of two or more ranks. Aces can be high or low.', chipCards: true },
     { id: 'flush', name: 'Flush', icon: '/hands/flush.svg', chips: 0, mult: 0, description: 'Every suit group of two or more cards.', chipCards: true },
 ] as const;
 
+/** Rollable labels include outcome variants as independent Raise targets. */
+export const RAISE_HAND_TYPES: readonly { id: RaiseHandTypeId; name: string; icon: string }[] = HAND_TYPES.flatMap(hand => [
+    { id: hand.id, name: hand.name, icon: hand.icon },
+    ...(hand.variant ? [{ id: hand.variant.id, name: hand.variant.id === 'viginti' ? 'Viginti' : hand.variant.name, icon: hand.variant.icon ?? hand.icon }] : []),
+]);
+
 export interface RaiseModifier {
-    handTypeId: HandTypeId;
+    handTypeId: RaiseHandTypeId;
     chips: number;
     mult: number;
 }
 
 export interface Raise extends Relic {
     modifiers: readonly RaiseModifier[];
-    handTypeId: HandTypeId;
+    handTypeId: RaiseHandTypeId;
     chips: number;
     mult: number;
     cost: number;
@@ -73,10 +80,26 @@ const buildAffixes = (modifier: (handTypeId: HandTypeId, stat: 'cash' | 'mult', 
         modifiers: [modifier(hand.id, stat, 3), modifier(other.id, penaltyStat, -1)],
     }))),
 ]));
-export const RAISE_AFFIXES = buildAffixes(modifier);
+const V5_AFFIX_BY_ID = new Map(buildAffixes(modifier).map(affix => [affix.id, affix]));
+// Templates select hand/stat combinations; actual values are rolled independently.
+const templateModifier = (handTypeId: RaiseHandTypeId, stat: 'cash' | 'mult', sign: number): RaiseModifier => ({
+    handTypeId, chips: stat === 'cash' ? sign : 0, mult: stat === 'mult' ? sign : 0,
+});
+const V67_AFFIX_BY_ID = new Map(buildAffixes(templateModifier)
+    .filter(affix => affix.modifiers[0].handTypeId !== 'loss').map(affix => [affix.id, affix]));
+export const RAISE_AFFIXES: readonly RaiseAffix[] = RAISE_HAND_TYPES
+    .filter(hand => hand.id !== 'loss' && hand.id !== 'bust')
+    .flatMap(hand => (['cash', 'mult'] as const).flatMap(stat => [
+        { id: `simple_${hand.id}_${stat}`, kind: 'simple' as const, slotCost: 1 as const, modifiers: [templateModifier(hand.id, stat, 1)] },
+        { id: `double_${hand.id}_${stat}`, kind: 'double' as const, slotCost: 2 as const, modifiers: [templateModifier(hand.id, stat, 1)] },
+        ...RAISE_HAND_TYPES.filter(other => other.id !== hand.id).flatMap(other => (['cash', 'mult'] as const).map(penaltyStat => ({
+            id: `tradeoff_${hand.id}_${stat}_${other.id}_${penaltyStat}`, kind: 'tradeoff' as const, slotCost: 1 as const,
+            modifiers: [templateModifier(hand.id, stat, 1), templateModifier(other.id, penaltyStat, -1)],
+        }))),
+    ]));
 const AFFIX_BY_ID = new Map(RAISE_AFFIXES.map(affix => [affix.id, affix]));
 // Earlier IDs retain their original values in earned upgrades, pending packs,
-// and exported lab fixtures. Newly rolled cards use version five.
+// and exported lab fixtures. Newly rolled cards use v10, with reduced Pair benefits; earlier cards keep their rolled values.
 const V3_AFFIX_BY_ID = new Map(buildAffixes((handTypeId, stat, units) => ({
     handTypeId, chips: stat === 'cash' ? units * 5 : 0, mult: stat === 'mult' ? units / 20 : 0,
 })).map(affix => [affix.id, affix]));
@@ -92,31 +115,62 @@ const modifierKey = (effect: RaiseModifier) => `${effect.handTypeId}:${effect.ch
 
 export const getSmallRaiseId = (handTypeId: HandTypeId, stat: 'cash' | 'mult') => `raise_v5_0_simple_${handTypeId}_${stat}`;
 
-function buildAffixRaise(rarity: RelicRarity, affixes: readonly RaiseAffix[], version: 'v3' | 'v4' | 'v5' = 'v5'): Raise {
+function buildAffixRaise(rarity: RelicRarity, affixes: readonly RaiseAffix[], version: 'v3' | 'v4' | 'v5' | 'v6' | 'v7' | 'v8' | 'v9' | 'v10' = 'v10'): Raise {
     const modifiers = affixes.flatMap(affix => affix.modifiers);
     const primary = modifiers[0];
-    const hand = HAND_TYPES.find(hand => hand.id === primary.handTypeId)!;
+    const hand = RAISE_HAND_TYPES.find(hand => hand.id === primary.handTypeId)!;
     return {
         // Composition IDs retain the rolled affixes across save/import.
         id: `raise_${version}_${RAISE_RARITIES.indexOf(rarity)}_${affixes.map(affix => affix.id).join('.')}`,
         name: `${hand.name} Raise`, rarity, categories: ['Raise'], icon: hand.icon,
-        description: modifiers.map(effect => `[${HAND_TYPES.find(hand => hand.id === effect.handTypeId)!.name}] ${effect.chips ? formatRaiseCash(effect.chips, true) : formatRaiseMult(effect.mult, true)}`).join(' · '),
+        description: modifiers.map(effect => `[${RAISE_HAND_TYPES.find(hand => hand.id === effect.handTypeId)!.name}] ${effect.chips ? formatRaiseCash(effect.chips, true) : formatRaiseMult(effect.mult, true)}`).join(' · '),
         affixes, modifiers, handTypeId: primary.handTypeId, chips: primary.chips, mult: primary.mult, cost: RAISE_PACK_COST,
     };
 }
 
 function decodeAffixRaise(id: string): Raise | undefined {
-    const match = /^raise_(v3|v4|v5)_([012])_(.+)$/.exec(id);
+    const match = /^raise_(v3|v4|v5|v6|v7|v8|v9|v10)_([012])_(.+)$/.exec(id);
     if (!match) return undefined;
-    const version = match[1] as 'v3' | 'v4' | 'v5';
+    const version = match[1] as 'v3' | 'v4' | 'v5' | 'v6' | 'v7' | 'v8' | 'v9' | 'v10';
     const rarity = RAISE_RARITIES[Number(match[2])];
-    const affixMap = version === 'v3' ? V3_AFFIX_BY_ID : version === 'v4' ? V4_AFFIX_BY_ID : AFFIX_BY_ID;
-    const affixes = match[3].split('.').map(id => affixMap.get(id));
+    const affixMap = version === 'v3' ? V3_AFFIX_BY_ID : version === 'v4' ? V4_AFFIX_BY_ID : V5_AFFIX_BY_ID;
+    const affixes = match[3].split('.').map(id => version === 'v6' || version === 'v7' || version === 'v8' || version === 'v9' || version === 'v10' ? decodeRolledAffix(id, version) : affixMap.get(id));
     if (affixes.some(affix => !affix)) return undefined;
     const valid = affixes as RaiseAffix[];
     if (valid.reduce((slots, affix) => slots + affix.slotCost, 0) !== RAISE_AFFIX_SLOTS[rarity]
-        || valid.filter(affix => affix.kind === 'tradeoff').length > 1) return undefined;
+        || valid.filter(affix => affix.kind === 'tradeoff').length > 1
+        || (version === 'v6' || version === 'v7' || version === 'v8' || version === 'v9' || version === 'v10') && new Set(valid.flatMap(affix => affix.modifiers.map(modifierKey))).size !== valid.flatMap(affix => affix.modifiers).length) return undefined;
     return buildAffixRaise(rarity, valid, version);
+}
+
+function effectRange(effect: RaiseModifier, kind: RaiseAffix['kind'], penalty: boolean, version: 'v6' | 'v7' | 'v8' | 'v9' | 'v10' = 'v10'): RaiseRange {
+    const bonuses = version === 'v6' ? V6_RAISE_BONUS_RANGES : version === 'v7' ? V7_RAISE_BONUS_RANGES : version === 'v8' ? V8_RAISE_BONUS_RANGES : version === 'v9' ? V9_RAISE_BONUS_RANGES : RAISE_BONUS_RANGES;
+    const lossPenalty = version === 'v6' ? V6_RAISE_LOSS_PENALTY_RANGES : RAISE_LOSS_PENALTY_RANGES;
+    const ranges = effect.handTypeId === 'loss' || effect.handTypeId === 'bust' ? lossPenalty
+        // Pair benefits are reduced in v10; their drawbacks keep the v9 intensity.
+        : effect.handTypeId === 'pair' && penalty && version === 'v10' ? V9_RAISE_BONUS_RANGES.pair.regular
+        : (effect.handTypeId === 'viginti' ? RAISE_BONUS_RANGES.viginti : bonuses[effect.handTypeId])[penalty || kind === 'simple' ? 'regular' : 'strong'];
+    return effect.chips ? ranges.cash : ranges.multPercent;
+}
+
+function valuedAffix(template: RaiseAffix, values: readonly number[]): RaiseAffix {
+    return { ...template, id: `${template.id}~${values.join('~')}`, modifiers: template.modifiers.map((effect, index) => ({
+        handTypeId: effect.handTypeId,
+        chips: effect.chips ? values[index] * (index === 0 ? 1 : -1) : 0,
+        mult: effect.mult ? values[index] * (index === 0 ? 1 : -1) / 100 : 0,
+    })) };
+}
+
+function decodeRolledAffix(id: string, version: 'v6' | 'v7' | 'v8' | 'v9' | 'v10'): RaiseAffix | undefined {
+    const [templateId, ...encoded] = id.split('~');
+    const template = (version === 'v8' || version === 'v9' || version === 'v10' ? AFFIX_BY_ID : V67_AFFIX_BY_ID).get(templateId);
+    if (!template || encoded.length !== template.modifiers.length) return undefined;
+    const values = encoded.map(Number);
+    if (values.some((value, index) => {
+        const [min, max] = effectRange(template.modifiers[index], template.kind, index > 0, version);
+        return !/^(0|[1-9]\d*)$/.test(encoded[index]) || !Number.isInteger(value) || value < min || value > max;
+    })) return undefined;
+    return valuedAffix(template, values);
 }
 
 export function generateRaise(rng: SeededRNG, rarity: RelicRarity): Raise {
@@ -133,7 +187,27 @@ export function generateRaise(rng: SeededRNG, rarity: RelicRarity): Raise {
             .filter(kind => candidates.some(affix => affix.kind === kind));
         let roll = rng.next() * kinds.reduce((total, kind) => total + AFFIX_KIND_WEIGHTS[kind], 0);
         const kind = kinds.find(kind => { roll -= AFFIX_KIND_WEIGHTS[kind]; return roll < 0; })!;
-        const affix = rng.pick(candidates.filter(affix => affix.kind === kind));
+        let pool = candidates.filter(affix => affix.kind === kind);
+        if (kind === 'tradeoff') {
+            // Choose the penalty group first; pool size must not dilute 25/25/50 odds.
+            const groups = (['loss', 'bust', 'other'] as const).map(group => ({
+                weight: RAISE_PENALTY_WEIGHTS[group],
+                affixes: pool.filter(affix => {
+                    const target = affix.modifiers[1].handTypeId;
+                    return group === 'other' ? target !== 'loss' && target !== 'bust' : target === group;
+                }),
+            })).filter(group => group.affixes.length);
+            let penaltyRoll = rng.next() * groups.reduce((total, group) => total + group.weight, 0);
+            pool = groups.find(group => { penaltyRoll -= group.weight; return penaltyRoll < 0; })!.affixes;
+        }
+        const template = rng.pick(pool);
+        const affix = valuedAffix(template, template.modifiers.map((effect, index) => {
+            const [min, max] = effectRange(effect, kind, index > 0);
+            const weights = RAISE_VALUE_WEIGHTS[max - min + 1];
+            let roll = rng.next() * 100;
+            const offset = weights.findIndex(weight => { roll -= weight; return roll < 0; });
+            return min + offset;
+        }));
         affixes.push(affix);
         affix.modifiers.forEach(effect => usedBonuses.add(modifierKey(effect)));
         remaining -= affix.slotCost;
@@ -196,11 +270,20 @@ export interface HandRaiseChange {
     value: number;
 }
 
+// Before v8, Win/Lose upgrades also applied to their Viginti/Bust variants.
+function modifierAppliesTo(raise: Raise, effect: RaiseModifier, outcome: RaiseHandTypeId): boolean {
+    if (effect.handTypeId === outcome) return true;
+    if (/^raise_(v8|v9|v10)_/.test(raise.id)) return false;
+    return outcome === 'viginti' && effect.handTypeId === 'win'
+        || outcome === 'bust' && effect.handTypeId === 'loss';
+}
+
 // Show each earned effect separately, including repeated Raises and drawbacks.
-export function getHandRaiseChanges(id: HandTypeId, upgrades: HandUpgrades = {}): HandRaiseChange[] {
+export function getHandRaiseChanges(id: RaiseHandTypeId, upgrades: HandUpgrades = {}): HandRaiseChange[] {
     const changes: HandRaiseChange[] = [];
     for (const [raiseId, owned] of Object.entries(upgrades)) {
-        const modifiers = getRaise(raiseId)?.modifiers.filter(effect => effect.handTypeId === id) ?? [];
+        const raise = getRaise(raiseId);
+        const modifiers = raise?.modifiers.filter(effect => modifierAppliesTo(raise, effect, id)) ?? [];
         for (let occurrence = 0; occurrence < owned; occurrence++) {
             for (const modifier of modifiers) {
                 if (modifier.chips) changes.push({ raiseId, occurrence, stat: 'chips', value: modifier.chips });
@@ -228,26 +311,30 @@ export function generateRaiseChoices(rng: SeededRNG, count = 3, quality: PackQua
     return choices;
 }
 
-export function getHandPayout(id: HandTypeId, upgrades: HandUpgrades = {}) {
-    const hand = HAND_TYPES.find(hand => hand.id === id)!;
-    let chips: number = hand.chips;
-    let mult: number = hand.mult;
-    let count = 0;
+function getRaiseTotals(id: RaiseHandTypeId, upgrades: HandUpgrades) {
+    let chips = 0, mult = 0, count = 0;
     for (const [raiseId, owned] of Object.entries(upgrades)) {
         const raise = getRaise(raiseId);
-        const modifiers = raise?.modifiers.filter(effect => effect.handTypeId === id) ?? [];
+        const modifiers = raise?.modifiers.filter(effect => modifierAppliesTo(raise, effect, id)) ?? [];
         for (const modifier of modifiers) {
             chips += owned * modifier.chips;
             mult += owned * modifier.mult;
         }
         if (modifiers.length) count += owned;
     }
-    mult = Number(mult.toFixed(2));
-    return { ...hand, chips, mult, count, variant: hand.variant ? {
-        ...hand.variant,
-        chips: hand.variant.chips + chips - hand.chips,
-        mult: Number((hand.variant.mult + mult - hand.mult).toFixed(2)),
-    } : undefined };
+    return { chips, mult, count };
+}
+
+export function getHandPayout(id: HandTypeId, upgrades: HandUpgrades = {}) {
+    const hand = HAND_TYPES.find(hand => hand.id === id)!;
+    const bonus = getRaiseTotals(id, upgrades);
+    const variantBonus = hand.variant ? getRaiseTotals(hand.variant.id, upgrades) : undefined;
+    return { ...hand, chips: hand.chips + bonus.chips, mult: Number((hand.mult + bonus.mult).toFixed(2)), count: bonus.count,
+        variant: hand.variant && variantBonus ? {
+            ...hand.variant,
+            chips: hand.variant.chips + variantBonus.chips,
+            mult: Number((hand.variant.mult + variantBonus.mult).toFixed(2)),
+        } : undefined };
 }
 
 export function evaluateBaseHands(cards: Card[], isWin: boolean, blackjackValue: number, outcome?: 'win' | 'loss' | 'bust' | 'push' | null, upgrades: HandUpgrades = {}, bustLimit = 21): ScoringDetail[] {
@@ -276,9 +363,13 @@ export function evaluateBaseHands(cards: Card[], isWin: boolean, blackjackValue:
 export function getHandPatterns(cards: readonly Card[]): { id: 'pair' | 'straight' | 'flush'; cards: Card[] }[] {
     const patterns: { id: 'pair' | 'straight' | 'flush'; cards: Card[] }[] = [];
     const standard = cards.filter(card => !card.type || card.type === 'standard');
-    for (let i = 0; i < standard.length; i++) {
-        for (let j = i + 1; j < standard.length; j++) {
-            if (standard[i].rank === standard[j].rank) patterns.push({ id: 'pair', cards: [standard[i], standard[j]] });
+    let pairCount = 0;
+    for (let i = 0; i < standard.length && pairCount < MAX_HAND_PAIRS; i++) {
+        for (let j = i + 1; j < standard.length && pairCount < MAX_HAND_PAIRS; j++) {
+            if (standard[i].rank === standard[j].rank) {
+                patterns.push({ id: 'pair', cards: [standard[i], standard[j]] });
+                pairCount++;
+            }
         }
     }
     for (const suit of ['hearts', 'diamonds', 'clubs', 'spades']) {

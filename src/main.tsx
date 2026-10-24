@@ -11,13 +11,14 @@ const Game = lazy(async () => {
   return { default: () => <ResponsiveLayout><App /></ResponsiveLayout> }
 })
 const BalanceLab = lazy(() => import('./simulation/BalanceLab'))
-const isBalanceLab = window.location.pathname.replace(/\/$/, '') === '/balance'
+const RaiseGallery = lazy(() => import('./components/RaiseGallery'))
+const route = window.location.pathname.replace(/\/$/, '')
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
       <Suspense fallback={<div style={{ padding: 32 }}>Loading…</div>}>
-        {isBalanceLab ? <BalanceLab /> : <Game />}
+        {route === '/balance' ? <BalanceLab /> : route === '/raises' ? <RaiseGallery /> : <Game />}
       </Suspense>
     </ErrorBoundary>
   </StrictMode>,

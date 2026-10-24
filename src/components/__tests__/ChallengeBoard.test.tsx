@@ -37,7 +37,7 @@ describe('replacement challenge presentation', () => {
         expect(displayedIds()).toEqual(['1-rounds', '1-straights']);
     });
 
-    it('shows the completed challenge until returning from its reward, retaining replacement progress', () => {
+    it('shows the completed challenge until returning from its reward, then shows a fresh replacement', () => {
         const ready = finishOpeningPack(processAction(createInitialState(), {
             type: 'start_game', cityId: 'las_vegas', gamblerId: 'default', seed: 42,
         }).nextState);
@@ -57,7 +57,7 @@ describe('replacement challenge presentation', () => {
         expect(bridge.loadGameState(JSON.stringify(settled))).toBe(true);
         expect(displayedIds()).toEqual(['0-rounds', oldId]);
         expect(useGameBridge.getState().challenges.find(challenge => challenge.id === oldId)?.completed).toBe(true);
-        expect(useGameBridge.getState().challenges.find(challenge => challenge.id === nextId)?.progress).toBe(1);
+        expect(useGameBridge.getState().challenges.find(challenge => challenge.id === nextId)).toBeUndefined();
 
         bridge.dispatchSync({ type: 'deal' });
         expect(useGameBridge.getState().phase).toBe('pack_choice');
@@ -67,6 +67,6 @@ describe('replacement challenge presentation', () => {
         bridge.dispatchSync({ type: 'finish_pack' });
         expect(useGameBridge.getState().phase).toBe('deal_over');
         expect(displayedIds()).toEqual(['0-rounds', nextId]);
-        expect(useGameBridge.getState().challenges.find(challenge => challenge.id === nextId)?.progress).toBe(1);
+        expect(useGameBridge.getState().challenges.find(challenge => challenge.id === nextId)?.progress).toBe(0);
     });
 });
