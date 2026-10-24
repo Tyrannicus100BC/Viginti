@@ -1,0 +1,26 @@
+Use case: stylized-concept / precise composition revision.
+Create the next revision of the supplied VIGINTI portrait robot-space-casino cabinet concept. Keep the worn chunky low-poly petrol-blue/red/cream art direction, warm amber light, compact blank-center playing cards, relics/dealer/challenges upper layout, central multi-card draw tray, and three player hands HORIZONTALLY SIDE BY SIDE. This is a concept render of a real 3D object, not a flat UI composited over a photograph.
+
+CRITICAL PERSPECTIVE CORRECTION:
+The previous image stretched the lower UI edge-to-edge without obeying the cabinet surface. Abandon that forced framing. Zoom OUT modestly until BOTH left and right cabinet bezels are visible continuously along the full gameplay display, including beside the player hand row. Show the entire playfield bounded INSIDE its physical screen frame. The cabinet is a single convincing 3D solid with a flat rectangular display tilted slightly back. Camera near eye height, looking toward the display, only about 5 degrees off center horizontally to give a subtle credible three-quarter perspective. Keep the screen easy to read. ALL gameplay elements—the header, lists, dealer well, draw well, three player wells, numbers and borders—must be projected onto the EXACT SAME DISPLAY PLANE and share its vanishing points, foreshortening, angle and scale gradient. Nothing is aligned to the image frame independently. No flat screen-space HUD, no fake frontal overlay, no fisheye, no lower screen ballooning outside its bezel. Rectangular hand wells are rectangles in the screen's local coordinates and become consistent quadrilaterals under perspective. Their top/bottom edges run parallel to the physical display's top/bottom edges in 3D. Small card mesh thickness and shadows are fine, but cards sit in the local space of that display.
+
+FIVE-CARD LIMIT:
+Every player hand now has EXACTLY FIVE cards, never six or seven. Each fan tightly overlaps so only each earlier card's upper-left rank/suit strip is exposed. About 75 percent overlap, almost upright, only a shallow +/-3 degree fan. Cards have a bold rank with compact suit underneath in UPPER LEFT and the identical pair rotated 180 degrees in LOWER RIGHT. Card CENTERS completely BLANK: no large suits or central pips. Card sizes and corner indices remain readable. Do not enlarge cards just because there are fewer.
+
+THREE DISTINCT PLAYER WELLS:
+Three equal recessed wells in ONE HORIZONTAL ROW across the lower part of the actual cabinet screen. All three fit FULLY WITHIN the physical display frame. Add obvious clear blue GUTTERS between them: gaps approximately 10-12 percent of one well's width (roughly one exposed card-index-strip width). Their frames MUST NOT touch, meet, share an edge or form one connected frame. Leave a modest consistent blue margin between outer wells and inner screen bezel. Keep wells gently recessed with a fine muted brass border, clipped corners, dark-blue bevel and blue floor. Match the draw well's construction. Not heavy metallic frames.
+Left hand exactly FIVE cards A hearts, 2 clubs, 3 diamonds, 5 spades, 7 hearts. Bare number 18 centered below.
+Middle hand exactly FIVE cards 2 hearts, 3 clubs, 4 diamonds, 5 hearts, 6 spades. Bare number 20 centered below.
+Right hand exactly FIVE cards A spades, 3 hearts, 4 clubs, 5 diamonds, 6 clubs. Bare number 19 centered below.
+No HAND 1/2/3 labels. No word TOTAL. Totals remain INSIDE their originating wells, not detached boxes. Comfortable padding between card fan and well edge.
+
+OTHER CONTENT:
+Slim CASH $250 | ROUND 3 | ANTE $50 header.
+Relics on left: icons before Star Bead, Heart Button, Lucky Acorn, Faded Tag, Mini Shoe, Cozy Socks.
+Dealer upper center: compact overlapped face-down star card behind 9 spades, shallow well, heading DEALER, number 9 below.
+Challenges upper right with icons AFTER the text: Rounds 2/4; Pairs 1/4; Flushes 2/8.
+Draw area in middle: shallow recessed tray, three positions, face-up 2 spades, a 4 hearts midway through flipping, face-down star card. Labels DRAW and REVEALING.
+Comfortable vertical separation between upper information area, draw and lower player row. No excess ornaments or inserted filler content.
+Physical control ledge beneath screen: HAND SCORES left, orange STAND center, DECK right. A small sliver of robot fingers at the very bottom is enough. No knees, lap or forearms.
+
+Framing is SECONDARY to a coherent layout on the cabinet surface. Portrait 9:16, zoom out just enough to show left and right cabinet sides, a little environment at the sides and upper background. Don't use screen cropping to solve layout. Keep the gameplay area large and readable, simple low-poly construction, mildly coarse textures and restrained lighting, not glossy photorealism. The result should feel like one internally consistent in-engine 3D scene with five-card hands separated cleanly across the display.

@@ -1,0 +1,15 @@
+Edit ONLY the three lower PLAYER HAND WELLS and their contents in this portrait VIGINTI concept. Keep the cabinet, its visible continuous left/right bezels, camera, perspective, upper game UI, dealer, draw tray, lighting, physical controls and robot fingers unchanged.
+
+THE CURRENT HAND FRAMES STILL TOUCH. Fix that decisively. Make each of the THREE equal player-hand frames roughly 15-18 percent NARROWER while keeping all three on the same horizontal row, at their current vertical positions. The saved horizontal space MUST become OBVIOUS OPEN BLUE GUTTERS BETWEEN THE FRAMES. They must not touch at edges OR corners.
+
+Use this layout in the LOCAL COORDINATES of the real 3D display:
+4 percent outside blue margin; 26 percent width left well; 7 percent width EMPTY BLUE GAP; 26 percent width middle well; 7 percent width EMPTY BLUE GAP; 26 percent width right well; 4 percent outside blue margin.
+The two gutters each need to be about one quarter of a well's width, conspicuously visible blue table with no lines, no connecting borders, no gold bridges, no metallic seams. Each well must have its own fully separate fine brass outline and dark inset bevel. There must be a visibly continuous strip of plain blue table from above to below the wells through BOTH gutters.
+
+Slightly tighten each five-card fan (more overlap, not just tiny text) to fit the narrower wells with comfortable internal padding. All hands still contain EXACTLY FIVE cards:
+Left: A hearts, 2 clubs, 3 diamonds, 5 spades, 7 hearts. Number 18 below.
+Middle: 2 hearts, 3 clubs, 4 diamonds, 5 hearts, 6 spades. Number 20 below.
+Right: A spades, 3 hearts, 4 clubs, 5 diamonds, 6 clubs. Number 19 below.
+Retain bold corner indices: rank and suit upper left and mirrored upside-down lower right, ENTIRELY BLANK CENTERS, no giant central symbols. Cards overlap tightly, revealing every upper-left rank and suit. No HAND labels or TOTAL prefix.
+
+All wells, cards, numbers and bevels MUST share the perspective of the physical cabinet display plane, including foreshortening. No flat screen-space overlays. Do not change the camera or widen the cabinet to create space. The corrected spacing is achieved by shrinking the three local well widths and tightening fans. No other edits.
