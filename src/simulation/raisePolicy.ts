@@ -5,16 +5,16 @@ import { SeededRNG } from '../engine/rng';
 import { RANKS, SUITS } from '../logic/deck';
 import { getHandPayout, getRaise, type HandUpgrades, type RaiseHandTypeId } from '../logic/handScoring';
 import { evaluateHandScore, getBlackjackScore } from '../logic/scoring';
-import { RANK_VALUES } from '../logic/rules';
+import { RANK_VALUES, handBeatsDealer } from '../logic/rules';
 import type { Card, PlayerHand } from '../types';
 import { observe, type BotObservation } from './bot';
 
-export const BUILD_STRATEGIES = ['random', 'pair', 'straight', 'flush', 'pair-straight', 'adaptive'] as const;
+export const BUILD_STRATEGIES = ['random', 'pair', 'straight', 'flush', 'royalty', 'pair-straight', 'adaptive'] as const;
 export type BuildStrategy = typeof BUILD_STRATEGIES[number];
-export const PATTERNS = ['pair', 'straight', 'flush'] as const;
+export const PATTERNS = ['pair', 'straight', 'flush', 'royalty'] as const;
 export type Pattern = typeof PATTERNS[number];
 export type RowCounts = Record<RaiseHandTypeId, number>;
-export const INITIAL_ROW_COUNTS: RowCounts = { win: 1.4, viginti: .4, loss: .8, bust: .4, pair: 1, straight: 1.5, flush: 2 };
+export const INITIAL_ROW_COUNTS: RowCounts = { win: 1.4, viginti: .4, loss: .8, bust: .4, pair: 1, straight: 1.5, flush: 2, royalty: 1 };
 
 export type RaiseObservation = BotObservation & Pick<GameState, 'deckProbabilities'>;
 export const observeRaises = (state: GameState): RaiseObservation => ({ ...observe(state), deckProbabilities: state.deckProbabilities });
@@ -33,7 +33,7 @@ export function ordinaryCards(probabilities: DeckProbabilities): { card: Card; p
 
 /** Integrate the unknown dealer card and subsequent hits; never read its actual rank. */
 export function dealerDistribution(observation: RaiseObservation): { value: number; probability: number }[] {
-    const limit = observation.bustLimit ?? 21;
+    const limit = observation.dealerBustLimit ?? observation.bustLimit ?? 21;
     const cards = ordinaryCards(observation.deckProbabilities);
     // Aggregate suits separately so this also works with a zero Hearts weight.
     const rankWeights = RANKS.map(rank => ({ rank, probability: cards
@@ -68,7 +68,7 @@ export function dealerDistribution(observation: RaiseObservation): { value: numb
 export function payoutTable(upgrades: HandUpgrades): Record<RaiseHandTypeId, { chips: number; mult: number }> {
     const win = getHandPayout('win', upgrades), loss = getHandPayout('loss', upgrades);
     return { win, loss, viginti: win.variant!, bust: loss.variant!, pair: getHandPayout('pair', upgrades),
-        straight: getHandPayout('straight', upgrades), flush: getHandPayout('flush', upgrades) };
+        straight: getHandPayout('straight', upgrades), flush: getHandPayout('flush', upgrades), royalty: getHandPayout('royalty', upgrades) };
 }
 
 /** Build-aware expectimax. Settlement is always done by processAction, never this estimate.
@@ -80,8 +80,10 @@ export class RaisePlayPolicy {
     private readonly dealer;
     private readonly payouts;
     private readonly base = payoutTable({});
-    private readonly cache = new Map<string, { value: number; chips: number; mult: number }>();
+    private readonly cache = new Map<string, { value: number; chips: number; mult: number; cardCount: number }>();
     private readonly limit;
+    private readonly dealerLimit;
+    private readonly rules;
 
     constructor(observation: RaiseObservation) {
         if (observation.inventory.length || observation.deckProbabilities.specialChance || observation.deckProbabilities.specialWeights.some(weight => weight.chance > 0)) {
@@ -91,6 +93,8 @@ export class RaisePlayPolicy {
         this.dealer = dealerDistribution(observation);
         this.payouts = payoutTable(observation.handUpgrades);
         this.limit = observation.bustLimit ?? 21;
+        this.dealerLimit = observation.dealerBustLimit ?? this.limit;
+        this.rules = observation.handRules ?? {};
     }
 
     private hand(cards: Card[]) {
@@ -99,7 +103,7 @@ export class RaisePlayPolicy {
         const cached = this.cache.get(key); if (cached) return cached;
         // Obtain pattern membership/base values from production scoring, then use
         // production payout totals compiled once per round for the earned Raises.
-        const patterns = evaluateHandScore(cards, false).criteria;
+        const patterns = evaluateHandScore(cards, false, false, [], 0, undefined, undefined, {}, this.limit, this.rules).criteria;
         let chips = 0, mult = 0;
         for (const row of patterns) {
             if (!PATTERNS.includes(row.id as Pattern)) continue;
@@ -107,7 +111,7 @@ export class RaisePlayPolicy {
             chips += row.chips + row.count * (this.payouts[id].chips - this.base[id].chips);
             mult += row.multiplier + row.count * (this.payouts[id].mult - this.base[id].mult);
         }
-        const result = { value: getBlackjackScore(cards, [], false, this.limit), chips, mult };
+        const result = { value: getBlackjackScore(cards, [], false, this.limit, this.rules), chips, mult, cardCount: cards.length };
         this.cache.set(key, result); return result;
     }
 
@@ -118,7 +122,7 @@ export class RaisePlayPolicy {
             let chips = 0, mult = 1;
             for (const hand of scores) if (hand) {
                 const outcome = hand.value > this.limit ? 'bust'
-                    : dealer.value > this.limit || hand.value >= dealer.value ? hand.value === 21 ? 'viginti' : 'win' : 'loss';
+                    : handBeatsDealer(hand.value, hand.cardCount, dealer.value, this.dealerLimit, this.rules) ? hand.value === 21 ? 'viginti' : 'win' : 'loss';
                 chips += hand.chips + this.payouts[outcome].chips;
                 mult += hand.mult + this.payouts[outcome].mult;
             }
@@ -137,7 +141,7 @@ export class RaisePlayPolicy {
     }
 
     expectedDraw(hands: readonly PlayerHand[]): number {
-        const playable = hands.flatMap((hand, index) => canPlayHand(hand) ? [index] : []);
+        const playable = hands.flatMap((hand, index) => canPlayHand(hand, this.rules) ? [index] : []);
         if (!playable.length) return this.expectedPayout(hands);
         let expected = 0;
         for (const item of this.cards) {
@@ -152,7 +156,7 @@ export class RaisePlayPolicy {
         const available = observation.drawnCards.flatMap((card, index) => card ? [{ card, index }] : []);
         if (!available.length) return { type: this.expectedDraw(hands) > this.expectedPayout(hands) + .01 ? 'draw' : 'stand' };
         let best = -Infinity, drawIndex = -1, handIndex = -1;
-        for (const item of available) for (let index = 0; index < hands.length; index++) if (canPlayHand(hands[index])) {
+        for (const item of available) for (let index = 0; index < hands.length; index++) if (canPlayHand(hands[index], this.rules)) {
             const next = this.place(hands, item.card, index);
             const immediate = this.expectedPayout(next);
             // One optional further draw values setting up a future pattern. This

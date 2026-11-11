@@ -7,6 +7,7 @@ export const SMALL_UPGRADE_UNITS: Readonly<Record<HandTypeId, { readonly cash: n
     pair: { cash: 4, multPercent: 3 },
     straight: { cash: 4, multPercent: 3 },
     flush: { cash: 3, multPercent: 2 },
+    royalty: { cash: 4, multPercent: 3 },
 };
 
 export type RaiseRange = readonly [min: number, max: number];
@@ -22,6 +23,7 @@ export const V6_RAISE_BONUS_RANGES: Readonly<Record<LegacyRaiseBenefitHand, {
     pair: { regular: { cash: [4, 5], multPercent: [3, 4] }, strong: { cash: [10, 12], multPercent: [8, 10] } },
     straight: { regular: { cash: [3, 4], multPercent: [2, 3] }, strong: { cash: [8, 10], multPercent: [6, 8] } },
     flush: { regular: { cash: [2, 3], multPercent: [1, 2] }, strong: { cash: [5, 7], multPercent: [4, 6] } },
+    royalty: { regular: { cash: [3, 4], multPercent: [2, 3] }, strong: { cash: [8, 10], multPercent: [6, 8] } },
 };
 export const V6_RAISE_LOSS_PENALTY_RANGES: RaiseStatRanges = { cash: [3, 4], multPercent: [2, 3] };
 export const RAISE_PENALTY_WEIGHTS = { loss: 25, bust: 25, other: 50 } as const;
@@ -32,6 +34,7 @@ export const V7_RAISE_BONUS_RANGES: typeof V6_RAISE_BONUS_RANGES = {
     pair: { regular: { cash: [3, 6], multPercent: [2, 5] }, strong: { cash: [9, 13], multPercent: [7, 11] } },
     straight: { regular: { cash: [2, 5], multPercent: [1, 4] }, strong: { cash: [7, 11], multPercent: [5, 9] } },
     flush: { regular: { cash: [1, 4], multPercent: [0, 3] }, strong: { cash: [4, 8], multPercent: [3, 7] } },
+    royalty: { regular: { cash: [2, 5], multPercent: [1, 4] }, strong: { cash: [7, 11], multPercent: [5, 9] } },
 };
 // Scale the former core penalties by 1.5, round to whole units ($5–6 / 3–5pp),
 // then add the same one-unit extremes as the bonus ranges.

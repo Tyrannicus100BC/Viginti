@@ -51,9 +51,9 @@ describe('permanent hand scoring and Raises', () => {
         }
     });
 
-    it('starts with five core hand types and no scoring relics to equip', () => {
+    it('starts with six core hand types and no scoring relics to equip', () => {
         const state = stocked();
-        expect(HAND_TYPES.map(hand => hand.id)).toEqual(['win', 'loss', 'pair', 'straight', 'flush']);
+        expect(HAND_TYPES.map(hand => hand.id)).toEqual(['win', 'loss', 'pair', 'straight', 'flush', 'royalty']);
         expect(state.inventory).toEqual([]);
         expect(state.handUpgrades).toEqual({});
         expect(evaluateHandScore(cards, true).criteria.map(row => row.id)).toEqual(['win', 'pair']);

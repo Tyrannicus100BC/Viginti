@@ -189,7 +189,7 @@ describe('ranked cards with special bonuses', () => {
     });
 
     it.each(['loss', 'push', 'bust'] as const)('does not pay non-pattern cards on %s', outcome => {
-        const cards = makeCards(['10', outcome === 'bust' ? 'K' : '5']);
+        const cards = makeCards(['10', '5']);
         cards[1].suit = 'clubs';
         const plain = evaluateHandScore(cards, false, false, [], 0, undefined, outcome);
         cards[0].specialEffect = { type: 'chip', value: 9 };

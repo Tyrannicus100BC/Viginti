@@ -27,7 +27,7 @@ export interface RaiseRun {
     seed: number; stop: 'bankrupt' | 'horizon'; rounds: RaiseRound[]; picks: RaisePick[]; upgrades: HandUpgrades;
 }
 
-const blankCounts = (): RowCounts => ({ win: 0, viginti: 0, loss: 0, bust: 0, pair: 0, straight: 0, flush: 0 });
+const blankCounts = (): RowCounts => ({ win: 0, viginti: 0, loss: 0, bust: 0, pair: 0, straight: 0, flush: 0, royalty: 0 });
 const countRaises = (upgrades: HandUpgrades) => Object.values(upgrades).reduce((a, b) => a + b, 0);
 
 export function startRaiseRun(seed: number): GameState {
@@ -183,7 +183,7 @@ export function runStackSweep(config: RaiseRunConfig, stacks: number[], progress
     validateRaiseRuns(config);
     if (!stacks.length || stacks.some(n => !Number.isInteger(n) || n < 0 || n > 100)) throw new Error('Stacks must be integers from 0–100.');
     const focuses = config.strategies.filter((strategy): strategy is Exclude<BuildStrategy, 'adaptive' | 'random'> => strategy !== 'random' && strategy !== 'adaptive');
-    if (!focuses.length) throw new Error('Choose pair, straight, flush, or pair-straight for the synthetic sweep.');
+    if (!focuses.length) throw new Error('Choose pair, straight, flush, royalty, or pair-straight for the synthetic sweep.');
     if (!['Common', 'Uncommon'].includes(rarity)) throw new Error('Sweep rarity must be Common or Uncommon.');
     return { kind: 'raise-stack-sweep', version: 1, config, synthetic: true, rarity,
         description: 'Independent, unlimited-cash rounds with synthetic current no-drawback Raises. Not survival or obtainable-build statistics.',

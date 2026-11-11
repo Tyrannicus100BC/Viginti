@@ -1,6 +1,7 @@
 import { animationDuration } from '../utils/animationTiming';
 import { formatCash, formatChipMultiplier } from '../logic/formatters';
-import { MAX_HAND_CARDS } from '../logic/rules';
+import { MAX_HAND_CARDS, type HandRules } from '../logic/rules';
+import { isCompletedTwentyOne } from '../engine/economy';
 
 
 import React, { useEffect, useState, useRef, useLayoutEffect } from 'react';
@@ -11,6 +12,7 @@ import styles from './Hand.module.css';
 
 interface HandProps {
   hand: PlayerHand;
+  handRules?: HandRules;
   isStanding?: boolean;
   onSelect?: () => void;
   canSelect?: boolean;
@@ -33,14 +35,15 @@ interface HandProps {
 
 import { useGameStore } from '../store/gameStore';
 
-export const Hand: React.FC<HandProps> = ({ hand, isStanding = false, onSelect, canSelect, baseDelay = 0, stagger = true, isScoringFocus = false, isEnlarged = false, isSelected = false, id, onDealAnimationComplete, onCardDealSound, onCardFlipSound, onCardDiscardSound, selectableCardIds, onCardSelect, tableActionColor, hiddenCardIds, entryAnimationOverrides }) => {
+export const Hand: React.FC<HandProps> = ({ hand, handRules = {}, isStanding = false, onSelect, canSelect, baseDelay = 0, stagger = true, isScoringFocus = false, isEnlarged = false, isSelected = false, id, onDealAnimationComplete, onCardDealSound, onCardFlipSound, onCardDiscardSound, selectableCardIds, onCardSelect, tableActionColor, hiddenCardIds, entryAnimationOverrides }) => {
   const triggerScoringRow = useGameStore(state => state.triggerScoringRow);
   const triggerVigintiSound = useGameStore(state => state.triggerVigintiSound);
   const playScoreRowSfx = useGameStore(state => state.playScoreRowSfx);
   // Determine the terminal hand result to show over the cards.
-  const isViginti = hand.blackjackValue === 21;
   const isDealerHand = hand.id === -1;
-  const isFull = !isDealerHand && hand.cards.length >= MAX_HAND_CARDS;
+  const isViginti = isCompletedTwentyOne(hand, isDealerHand ? {} : handRules)
+    && (!hand.resultRevealed || isDealerHand || hand.outcome === 'win');
+  const isFull = !isDealerHand && hand.cards.length >= (handRules.maxCards ?? MAX_HAND_CARDS);
 
   // Is this a winning hand that needs scoring animation?
   const isWin = hand.outcome === 'win';

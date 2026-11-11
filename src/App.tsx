@@ -1,7 +1,7 @@
 import { animationDuration } from './utils/animationTiming';
 import type { RelicInstance } from './logic/relics/types';
-import { getBoss, getBustLimit, getDealerBustLimit } from './engine/bosses';
-import { canPlayHand } from './engine/economy';
+import { getBoss, getDealerBustLimit, getHandRules } from './engine/bosses';
+import { canPlayHand, isCompletedTwentyOne } from './engine/economy';
 import React, { useState, useRef, useEffect } from 'react';
 import styles from './App.module.css';
 import { useGameBridge } from './store/gameBridge';
@@ -202,7 +202,7 @@ export default function App() {
 
     const anteNumber = useGameBridge(state => state.gameState.challengeStage + 1);
     const boss = useGameBridge(state => getBoss(state.gameState));
-    const bustLimit = useGameBridge(state => getBustLimit(state.gameState));
+    const handRules = useGameBridge(state => getHandRules(state.gameState));
     const dealerBustLimit = useGameBridge(state => getDealerBustLimit(state.gameState));
     const passiveRelicCount = inventory.filter((instance: RelicInstance) => !RelicManager.getRelicConfig(instance.id)?.tableAction).length;
     const tableActionSlots = inventory.flatMap(instance => {
@@ -1043,7 +1043,7 @@ export default function App() {
         selectTableActionCard({ target, handIndex, cardId });
     };
 
-    const areAllHandsUnplayable = Array.isArray(playerHands) && playerHands.every(h => h && !canPlayHand(h));
+    const areAllHandsUnplayable = Array.isArray(playerHands) && playerHands.every(h => h && !canPlayHand(h, handRules));
     const hasDrawnCards = drawnCards.some(c => c !== null);
     const isDrawAreaClear = !hasDrawnCards;
     const canDraw = phase === 'playing' && isDrawAreaClear && !isDealerPlaying && !isInitialDeal && interactionMode === 'default' && !areAllHandsUnplayable && !isRedrawAnimating;
@@ -1052,12 +1052,12 @@ export default function App() {
     const isDrawAreaVisible = phase === 'playing' && !isDealerPlaying && !isInitialDeal && (interactionMode === 'default' || interactionMode === 'select_draw' || hasDrawnCards);
     const showTableActions = phase === 'playing' && !dealer.isRevealed && !isInitialDeal;
     const hasDealerFaceUpCard = dealer.cards.some(card => card.isFaceUp);
-    const hasPlayableHandForActions = playerHands.some(h => canPlayHand(h) && h.cards.length > 0);
-    const hasSurrenderTarget = playerHands.some(h => !h.isBust && !h.isHeld && h.blackjackValue !== 21 && h.cards.length > 0);
-    const hasDiscardPlayerTargets = playerHands.some(h => !h.isBust && h.blackjackValue !== 21 && h.cards.length > 0);
+    const hasPlayableHandForActions = playerHands.some(h => canPlayHand(h, handRules) && h.cards.length > 0);
+    const hasSurrenderTarget = playerHands.some(h => !h.isBust && !h.isHeld && !isCompletedTwentyOne(h, handRules) && h.cards.length > 0);
+    const hasDiscardPlayerTargets = playerHands.some(h => !h.isBust && !isCompletedTwentyOne(h, handRules) && h.cards.length > 0);
     const hasDiscardDealerTargets = hasDealerFaceUpCard && dealer.blackjackValue < dealerBustLimit;
-    const hasHoldPlacementTargets = playerHands.some(h => canPlayHand(h));
-    const hasSwitchTargets = hasDealerFaceUpCard && playerHands.some(h => !h.isBust && h.blackjackValue !== 21 && h.cards.length > 0);
+    const hasHoldPlacementTargets = playerHands.some(h => canPlayHand(h, handRules));
+    const hasSwitchTargets = hasDealerFaceUpCard && playerHands.some(h => !h.isBust && !isCompletedTwentyOne(h, handRules) && h.cards.length > 0);
     const dealerSelectableCardIds = (interactionMode === 'select_card' && activeTableActionId === 'discard' && hasDiscardDealerTargets)
         ? dealer.cards.filter(card => card.isFaceUp).map(card => card.id)
         : undefined;
@@ -1516,7 +1516,6 @@ export default function App() {
                         <span className={styles.statValue}>${ante.toLocaleString()}</span>
                     </div>
                 </header>
-                {boss && <div className={styles.bossRule} role="status"><strong>{boss.name}</strong> · Bust above {bustLimit}<span>Player & dealer · 4 rounds</span></div>}
 
                 <div className={styles.rightButtons}>
                     <DeckButton 
@@ -1657,7 +1656,17 @@ export default function App() {
                                         Log
                                     </button>
                                 )}
-                                <div className={styles.zoneLabel} style={{ marginBottom: 0 }}>Dealer</div>
+                                {boss ? (
+                                    <button type="button" className={styles.bossRule}
+                                        aria-label={boss.name} aria-describedby="boss-rule-description"
+                                        onClick={event => event.stopPropagation()}>
+                                        {boss.name}
+                                        <span id="boss-rule-description" role="tooltip" className={styles.bossTooltip}>
+                                            {boss.description}
+                                            <span className={styles.bossDuration}>Applies for all four rounds of this ante.</span>
+                                        </span>
+                                    </button>
+                                ) : <div className={styles.zoneLabel} style={{ marginBottom: 0 }}>Dealer</div>}
                                 {debugEnabled && (
                                     <button 
                                         className={styles.subtleDebugBtn} 
@@ -1985,21 +1994,22 @@ export default function App() {
                                     const canSelectForAction = (() => {
                                         if (!isHandActionMode || !activeTableActionId) return false;
                                         if (activeTableActionId === 'double_down' || activeTableActionId === 'surrender') {
-                                            return !hand.isBust && !hand.isHeld && hand.blackjackValue !== 21 && hand.cards.length > 0 && (activeTableActionId !== 'double_down' || canPlayHand(hand));
+                                            return !hand.isBust && !hand.isHeld && !isCompletedTwentyOne(hand, handRules) && hand.cards.length > 0 && (activeTableActionId !== 'double_down' || canPlayHand(hand, handRules));
                                         }
                                         if (activeTableActionId === 'hold') {
-                                            return canPlayHand(hand);
+                                            return canPlayHand(hand, handRules);
                                         }
                                         return false;
                                     })();
-                                    const canSelectHand = (isAssignMode && canPlayHand(hand)) || canSelectForAction;
-                                    const selectableCardIds = (interactionMode === 'select_card' && activeTableActionId && (activeTableActionId === 'discard' || activeTableActionId === 'switch') && !hand.isBust && hand.blackjackValue !== 21)
+                                    const canSelectHand = (isAssignMode && canPlayHand(hand, handRules)) || canSelectForAction;
+                                    const selectableCardIds = (interactionMode === 'select_card' && activeTableActionId && (activeTableActionId === 'discard' || activeTableActionId === 'switch') && !hand.isBust && !isCompletedTwentyOne(hand, handRules))
                                         ? hand.cards.map(card => card.id)
                                         : undefined;
                                     return (
                                         <Hand
                                             key={`${hand.id}-${deal}`}
                                             hand={hand}
+                                            handRules={handRules}
                                             canSelect={canSelectHand}
                                             isSelected={false}
                                             onSelect={() => handleHandClick(idx)}

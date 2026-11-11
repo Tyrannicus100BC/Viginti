@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <title>Royalty: Jack and King</title>
+  <g transform="translate(7 14) rotate(-10 14.5 23)">
+    <rect width="29" height="46" rx="4" fill="#fff7e8" stroke="#243545" stroke-width="2.5"/>
+    <g stroke="#171b20" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 9H21M17 9V23C17 32 6 32 6 23"/></g>
+  </g>
+  <g transform="translate(29 7) rotate(9 14.5 23)">
+    <rect width="29" height="46" rx="4" fill="#fff7e8" stroke="#243545" stroke-width="2.5"/>
+    <g stroke="#171b20" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V29M21 9L6 20L21 29"/></g>
+  </g>
+</svg>

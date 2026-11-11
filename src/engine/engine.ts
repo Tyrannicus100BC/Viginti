@@ -1,4 +1,4 @@
-import { getBustLimit, getDealerBustLimit } from './bosses';
+import { getBustLimit, getDealerBustLimit, getHandRules } from './bosses';
 import { processDebugAdvanceRound, processDebugAdvanceAnte } from './actions/debugProgression';
 import { advanceChallenges, completeChallenges, getHandChallengeProgress, type ChallengeReward } from './challenges';
 import { acquireRelicEffect, canAcquireRelic, INITIAL_RELIC_SLOTS } from '../logic/relics/inventory';
@@ -23,8 +23,9 @@ import { GAMBLER_DEFINITIONS } from '../logic/gamblers/definitions';
 import { CITY_DEFINITIONS } from '../logic/cities/definitions';
 // RelicManager access is now via relicEngine.ts
 import { drawCardFromProbabilities } from '../logic/deck';
-import { STARTING_CASH, BASE_ANTE, canPlayHand } from './economy';
+import { STARTING_CASH, BASE_ANTE, canPlayHand, isCompletedTwentyOne } from './economy';
 import { getBlackjackScore, evaluateHandScore } from '../logic/scoring';
+import { handBeatsDealer } from '../logic/rules';
 import {
     executeValueHook,
     executeCheckHook,
@@ -186,7 +187,7 @@ export function getValidActions(state: GameState): PlayerAction[] {
         case 'playing': {
             const hasDrawn = state.drawnCards.some(c => c !== null);
             const anyPlayable = state.playerHands.some(
-                h => canPlayHand(h)
+                h => canPlayHand(h, getHandRules(state))
             );
 
             if (!hasDrawn) {
@@ -208,7 +209,7 @@ export function getValidActions(state: GameState): PlayerAction[] {
                 // Can place into any non-bust, non-held hand
                 if (state.selectedDrawIndex !== null && anyPlayable) {
                     for (const hand of state.playerHands) {
-                        if (canPlayHand(hand)) {
+                        if (canPlayHand(hand, getHandRules(state))) {
                             actions.push({ type: 'place_card', handIndex: hand.id });
                         }
                     }
@@ -224,8 +225,8 @@ export function getValidActions(state: GameState): PlayerAction[] {
                     // Hand targeting: double_down, surrender, hold (place)
                     for (const hand of state.playerHands) {
                         const canTarget = state.activeTableActionId === 'surrender'
-                            ? !hand.isBust && !hand.isHeld && hand.blackjackValue !== 21
-                            : canPlayHand(hand);
+                            ? !hand.isBust && !hand.isHeld && !isCompletedTwentyOne(hand, getHandRules(state))
+                            : canPlayHand(hand, getHandRules(state));
                         if (canTarget && (hand.cards.length > 0 || state.activeTableActionId === 'hold')) {
                             actions.push({ type: 'select_table_action_target', handIndex: hand.id });
                         }
@@ -233,7 +234,7 @@ export function getValidActions(state: GameState): PlayerAction[] {
                 } else if (state.interactionMode === 'select_card') {
                     // Card targeting: discard, switch
                     for (const hand of state.playerHands) {
-                        if (!hand.isBust && hand.blackjackValue !== 21) {
+                        if (!hand.isBust && !isCompletedTwentyOne(hand, getHandRules(state))) {
                             for (const card of hand.cards) {
                                 actions.push({ type: 'select_table_action_card', target: 'player', handIndex: hand.id, cardId: card.id });
                             }
@@ -269,7 +270,7 @@ export function getValidActions(state: GameState): PlayerAction[] {
                     switch (relic.id) {
                         case 'double_down':
                         case 'surrender': {
-                            const hasPlayable = state.playerHands.some(h => !h.isBust && !h.isHeld && h.blackjackValue !== 21 && h.cards.length > 0 && (relic.id !== 'double_down' || canPlayHand(h)));
+                            const hasPlayable = state.playerHands.some(h => !h.isBust && !h.isHeld && !isCompletedTwentyOne(h, getHandRules(state)) && h.cards.length > 0 && (relic.id !== 'double_down' || canPlayHand(h, getHandRules(state))));
                             canActivate = charges >= ta.chargeCost && !hasDrawn && hasPlayable;
                             break;
                         }
@@ -286,7 +287,7 @@ export function getValidActions(state: GameState): PlayerAction[] {
                         }
                         case 'switch': {
                             const hasDealerFaceUp = state.dealer.cards.some(c => c.isFaceUp);
-                            const hasPlayerCard = state.playerHands.some(h => !h.isBust && h.blackjackValue !== 21 && h.cards.length > 0);
+                            const hasPlayerCard = state.playerHands.some(h => !h.isBust && !isCompletedTwentyOne(h, getHandRules(state)) && h.cards.length > 0);
                             canActivate = charges >= ta.chargeCost && hasDealerFaceUp && hasPlayerCard;
                             break;
                         }
@@ -549,7 +550,7 @@ function processDeal(state: GameState, _forceContinue?: boolean): ActionResult {
     playerHands[1] = {
         ...playerHands[1],
         cards: [playerCard],
-        blackjackValue: getBlackjackScore([playerCard], state.inventory as RelicInstance[], false, getBustLimit(state)),
+        blackjackValue: getBlackjackScore([playerCard], state.inventory as RelicInstance[], false, getBustLimit(state), getHandRules(state)),
     };
 
     // Deal dealer cards
@@ -616,7 +617,7 @@ function processDeal(state: GameState, _forceContinue?: boolean): ActionResult {
 }
 
 function processDraw(state: GameState): ActionResult {
-    if (state.phase !== 'playing' || state.drawnCards.some(c => c !== null) || !state.playerHands.some(h => canPlayHand(h))) {
+    if (state.phase !== 'playing' || state.drawnCards.some(c => c !== null) || !state.playerHands.some(h => canPlayHand(h, getHandRules(state)))) {
         return { nextState: state, events: [] };
     }
 
@@ -681,7 +682,7 @@ function processPlaceCard(state: GameState, handIndex: number): ActionResult {
 
     // Place card into hand
     const targetHand = playerHands[handIndex];
-    if (!targetHand || !canPlayHand(targetHand)) {
+    if (!targetHand || !canPlayHand(targetHand, getHandRules(state))) {
         return { nextState: state, events: [] };
     }
 
@@ -695,7 +696,7 @@ function processPlaceCard(state: GameState, handIndex: number): ActionResult {
         animationOffset: drawOffset,
     };
     const newCards = isSpecial ? [cardToAdd, ...targetHand.cards] : [...targetHand.cards, cardToAdd];
-    const newBJValue = getBlackjackScore(newCards, invArr, false, getBustLimit(state));
+    const newBJValue = getBlackjackScore(newCards, invArr, false, getBustLimit(state), getHandRules(state));
     const isBust = newBJValue > getBustLimit(state);
 
     let updatedHand: PlayerHand = {
@@ -759,7 +760,7 @@ function processPlaceCard(state: GameState, handIndex: number): ActionResult {
             updatedHand = {
                 ...updatedHand,
                 cards: modifiedEvent.newCards,
-                blackjackValue: getBlackjackScore(modifiedEvent.newCards, invArr, false, getBustLimit(state)),
+                blackjackValue: getBlackjackScore(modifiedEvent.newCards, invArr, false, getBustLimit(state), getHandRules(state)),
                 isBust: false,
             };
             updatedHands = updatedHands.map((h, idx) => idx === handIndex ? updatedHand : h);
@@ -781,7 +782,7 @@ function processPlaceCard(state: GameState, handIndex: number): ActionResult {
                 (e): e is Extract<GameEvent, { type: 'hand_modified' }> => e.type === 'hand_modified' && e.handIndex === handIndex
             );
             if (modifiedEvent) {
-                const newBJ = getBlackjackScore(modifiedEvent.newCards, invArr, false, getBustLimit(state));
+                const newBJ = getBlackjackScore(modifiedEvent.newCards, invArr, false, getBustLimit(state), getHandRules(state));
                 updatedHand = {
                     ...updatedHand,
                     cards: modifiedEvent.newCards,
@@ -818,7 +819,7 @@ function processPlaceCard(state: GameState, handIndex: number): ActionResult {
     let totalPlaceCount = 1 + modifiers.placeCountMod;
     totalPlaceCount = executeValueHook('getPlaceCount', totalPlaceCount, { inventory: invArr });
 
-    const anyPlayable = updatedHands.some(h => canPlayHand(h));
+    const anyPlayable = updatedHands.some(h => canPlayHand(h, getHandRules(state)));
     const hasRemainingCards = remainingDrawn.some(c => c !== null);
     const canPlaceMore = newPlacedCount < totalPlaceCount && hasRemainingCards && anyPlayable;
 
@@ -849,7 +850,7 @@ function processPlaceCard(state: GameState, handIndex: number): ActionResult {
     });
 
     // Auto-stand detection
-    const allUnplayable = updatedHands.every(h => !canPlayHand(h));
+    const allUnplayable = updatedHands.every(h => !canPlayHand(h, getHandRules(state)));
     if (!canPlaceMore && allUnplayable) {
         events.push({ type: 'auto_stand_triggered' });
     }
@@ -962,11 +963,7 @@ function processResolveHandOutcome(state: GameState): ActionResult {
             outcome = 'loss';
         } else if (h.isBust) {
             outcome = 'bust';
-        } else if (h.blackjackValue === 21) {
-            outcome = dVal > getDealerBustLimit(state) || h.blackjackValue >= dVal ? 'win' : 'loss';
-        } else if (dVal > getDealerBustLimit(state)) {
-            outcome = 'win';
-        } else if (h.blackjackValue >= dVal) {
+        } else if (handBeatsDealer(h.blackjackValue, h.cards.length, dVal, getDealerBustLimit(state), getHandRules(state))) {
             outcome = 'win';
         }
 
@@ -1029,7 +1026,7 @@ function processScoreRound(state: GameState): ActionResult {
     scoredHands.forEach(hand => {
         if (hand.cards.length === 0) return;
         const isWin = hand.outcome === 'win';
-        const preScore = evaluateHandScore(hand.cards, isWin, hand.isDoubled ?? false, currentInv, state.handsRemaining, undefined, hand.outcome, state.handUpgrades, getBustLimit(state));
+        const preScore = evaluateHandScore(hand.cards, isWin, hand.isDoubled ?? false, currentInv, state.handsRemaining, undefined, hand.outcome, state.handUpgrades, getBustLimit(state), getHandRules(state));
         preScore.criteria.forEach(c => {
             if (c.id === 'flush' || c.id.startsWith('flush_')) categoryCounts.flush++;
             if (c.id === 'straight' || c.id.startsWith('straight_')) categoryCounts.straight++;
@@ -1053,7 +1050,8 @@ function processScoreRound(state: GameState): ActionResult {
             categoryCounts,
             hand.outcome,
             state.handUpgrades,
-            getBustLimit(state)
+            getBustLimit(state),
+            getHandRules(state)
         );
 
         events.push({ type: 'scoring_hand_focus', handIndex: i });
@@ -1121,7 +1119,7 @@ function processScoreRound(state: GameState): ActionResult {
         currentInv = handCompResult.inventory;
 
         events.push({ type: 'scoring_hand_complete', handIndex: i });
-        const handCompletion = completeChallenges(advanceChallenges(challenges, getHandChallengeProgress(hand)));
+        const handCompletion = completeChallenges(advanceChallenges(challenges, getHandChallengeProgress(hand, getHandRules(state))));
         challenges = handCompletion.challenges;
         sideRewards.push(...handCompletion.rewards);
         events.push({ type: 'challenges_updated', challenges });

@@ -32,6 +32,8 @@ def card_symbol(value):
         7: '<path d="M6 9H21L11 29"/>',
         8: ('<path d="M13 19C3 19 3 8 13 8C23 8 23 19 13 19Z'
             'M13 19C2 19 2 30 13 30C24 30 24 19 13 19Z"/>'),
+        'J': '<path d="M7 9H21M17 9V23C17 32 6 32 6 23"/>',
+        'K': '<path d="M6 9V29M21 9L6 20L21 29"/>',
     }
     return f'<g stroke="{BLACK}" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">{shapes[value]}</g>'
 
@@ -71,6 +73,7 @@ def main():
         'pair': svg('Pair: two twos', two_cards(2, 2)),
         'straight': svg('Straight: seven followed by eight', two_cards(7, 8)),
         'flush': svg('Flush: two spades', two_cards('spade', 'spade')),
+        'royalty': svg('Royalty: Jack and King', two_cards('J', 'K')),
         'win': svg('Win: crown', crown()),
         'viginti': svg('Viginti: crown with an orange 21', crown(viginti=True)),
         'lose': svg('Lose: card marked with a cross', f'''

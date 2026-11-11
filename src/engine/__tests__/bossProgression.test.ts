@@ -110,9 +110,12 @@ describe('boss cadence and rewards', () => {
         let state = finishOpeningPack(start());
         for (let stage = 0; stage < 9; stage++) {
             expect(!!state.bossId).toBe(isBossStage(stage));
+            const anteBossId = state.bossId;
+            const bustLimit = state.bossId === 'high_limit' ? 25 : 21;
             for (let round = 0; round < 4; round++) {
                 state = act({ ...state, phase: 'scoring', playerHands: [], runningSummary: { chips: 100, mult: 1 } }, { type: 'score_round' });
-                expect(getBustLimit(state)).toBe(isBossStage(stage) ? 25 : 21);
+                expect(state.bossId).toBe(anteBossId);
+                expect(getBustLimit(state)).toBe(bustLimit);
                 expect(state.challengeRewards).toHaveLength(round === 3 ? isBossStage(stage) ? 2 : 1 : 0);
             }
             state = act(state, { type: 'deal' });
@@ -124,7 +127,8 @@ describe('boss cadence and rewards', () => {
                 expect(state.pendingPackChoices).toHaveLength(6);
                 expect(state.pendingPackChoices.every(id => !!getRewardCard(id))).toBe(true);
                 expect(state.ante).toBe(currentAnte);
-                expect(getBustLimit(state)).toBe(25);
+                expect(state.bossId).toBe(anteBossId);
+                expect(getBustLimit(state)).toBe(bustLimit);
                 const id = state.pendingPackChoices[0];
                 state = act(state, { type: 'choose_pack_card', cardId: id });
                 expect(state.pendingPack).toBeNull();

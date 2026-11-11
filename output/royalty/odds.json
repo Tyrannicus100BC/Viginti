@@ -1,0 +1,308 @@
+{
+  "assumptions": {
+    "finiteDeck": "Uniform 52-card deck, drawn without replacement",
+    "uniformReplacement": "Independent uniform 52-card draws",
+    "game": "Independent draws at current initial weights",
+    "gameWeights": {
+      "suits": {
+        "hearts": 25,
+        "diamonds": 25,
+        "clubs": 25,
+        "spades": 25
+      },
+      "ranks": {
+        "ace": 10,
+        "face": 30,
+        "upper": 30,
+        "lower": 30
+      },
+      "specialChance": 0,
+      "specialWeights": []
+    },
+    "patterns": "At least one match anywhere in a random hand; A-2 and K-A count as straights; matches overlap; no player selection or modifiers"
+  },
+  "basePayouts": [
+    {
+      "id": "pair",
+      "chips": 5,
+      "mult": 0.05
+    },
+    {
+      "id": "straight",
+      "chips": 10,
+      "mult": 0
+    },
+    {
+      "id": "flush",
+      "chips": 0,
+      "mult": 0
+    },
+    {
+      "id": "royalty",
+      "chips": 0,
+      "mult": 0.05
+    }
+  ],
+  "rows": [
+    {
+      "cards": 2,
+      "models": {
+        "finiteDeck": {
+          "probabilities": {
+            "pair": 0.0588235294117647,
+            "royalty": 0.09049773755656108,
+            "straight": 0.15686274509803924,
+            "flush": 0.23529411764705888
+          },
+          "expectedBonuses": {
+            "pair": 0.0588235294117647,
+            "royalty": 0.09049773755656108,
+            "straight": 0.15686274509803924,
+            "flush": 0.23529411764705888
+          },
+          "safeMass": 0.9999999999999986,
+          "safeProbabilities": {
+            "pair": 0.05882352941176478,
+            "royalty": 0.09049773755656121,
+            "straight": 0.15686274509803946
+          }
+        },
+        "uniformReplacement": {
+          "probabilities": {
+            "pair": 0.07692307692307694,
+            "royalty": 0.09467455621301778,
+            "straight": 0.15384615384615388,
+            "flush": 0.25
+          },
+          "expectedBonuses": {
+            "pair": 0.07692307692307694,
+            "royalty": 0.09467455621301778,
+            "straight": 0.15384615384615388,
+            "flush": 0.25
+          },
+          "safeMass": 0.9999999999999984,
+          "safeProbabilities": {
+            "pair": 0.07692307692307707,
+            "royalty": 0.09467455621301793,
+            "straight": 0.15384615384615413
+          }
+        },
+        "game": {
+          "probabilities": {
+            "pair": 0.07749999999999999,
+            "royalty": 0.09,
+            "straight": 0.15375,
+            "flush": 0.25
+          },
+          "expectedBonuses": {
+            "pair": 0.07749999999999999,
+            "royalty": 0.09,
+            "straight": 0.15375,
+            "flush": 0.25
+          },
+          "safeMass": 0.9999999999999992,
+          "safeProbabilities": {
+            "pair": 0.07750000000000004,
+            "royalty": 0.09000000000000007,
+            "straight": 0.1537500000000001
+          }
+        }
+      }
+    },
+    {
+      "cards": 3,
+      "models": {
+        "finiteDeck": {
+          "probabilities": {
+            "pair": 0.17176470588235293,
+            "royalty": 0.22081447963800924,
+            "straight": 0.40470588235294136,
+            "flush": 0.6023529411764705
+          },
+          "expectedBonuses": {
+            "pair": 0.1764705882352941,
+            "royalty": 0.24615384615384603,
+            "straight": 0.4423529411764708,
+            "flush": 0.6541176470588237
+          },
+          "safeMass": 0.6217194570135721,
+          "safeProbabilities": {
+            "pair": 0.152256186317322,
+            "royalty": 0.03493449781659403,
+            "straight": 0.3924308588064064
+          }
+        },
+        "uniformReplacement": {
+          "probabilities": {
+            "pair": 0.21893491124260292,
+            "royalty": 0.22576240327719574,
+            "straight": 0.39053254437869717,
+            "flush": 0.625
+          },
+          "expectedBonuses": {
+            "pair": 0.2307692307692301,
+            "royalty": 0.2548930359581243,
+            "straight": 0.4260355029585787,
+            "flush": 0.6875
+          },
+          "safeMass": 0.6176604460628122,
+          "safeProbabilities": {
+            "pair": 0.19528371407516568,
+            "royalty": 0.0353721444362565,
+            "straight": 0.38025055268975655
+          }
+        },
+        "game": {
+          "probabilities": {
+            "pair": 0.22037499999999988,
+            "royalty": 0.21600000000000003,
+            "straight": 0.3900937500000001,
+            "flush": 0.625
+          },
+          "expectedBonuses": {
+            "pair": 0.2324999999999999,
+            "royalty": 0.24300000000000027,
+            "straight": 0.42553125000000014,
+            "flush": 0.6875
+          },
+          "safeMass": 0.6456249999999997,
+          "safeProbabilities": {
+            "pair": 0.2001936108422074,
+            "royalty": 0.04181994191674735,
+            "straight": 0.3807357212003875
+          }
+        }
+      }
+    },
+    {
+      "cards": 4,
+      "models": {
+        "finiteDeck": {
+          "probabilities": {
+            "pair": 0.3238895558223289,
+            "royalty": 0.3604395604395613,
+            "straight": 0.6455702280912344,
+            "flush": 0.8945018007202881
+          },
+          "expectedBonuses": {
+            "pair": 0.3527971188475399,
+            "royalty": 0.44835164835165026,
+            "straight": 0.8315006002400926,
+            "flush": 1.2152701080432173
+          },
+          "safeMass": 0.22631452581032516,
+          "safeProbabilities": {
+            "pair": 0.3983254174215325,
+            "royalty": 0,
+            "straight": 0.7016925361928525
+          }
+        },
+        "uniformReplacement": {
+          "probabilities": {
+            "pair": 0.39918070095585445,
+            "royalty": 0.3618920906130757,
+            "straight": 0.6181156121984512,
+            "flush": 0.90625
+          },
+          "expectedBonuses": {
+            "pair": 0.4601729631315509,
+            "royalty": 0.4604880781485244,
+            "straight": 0.7874374146563481,
+            "flush": 1.265625
+          },
+          "safeMass": 0.23265992087111764,
+          "safeProbabilities": {
+            "pair": 0.4799097065462776,
+            "royalty": 0,
+            "straight": 0.6669676448457499
+          }
+        },
+        "game": {
+          "probabilities": {
+            "pair": 0.4013593749999996,
+            "royalty": 0.34830000000000133,
+            "straight": 0.6172757812499994,
+            "flush": 0.90625
+          },
+          "expectedBonuses": {
+            "pair": 0.46356093750000116,
+            "royalty": 0.4401000000000028,
+            "straight": 0.7861101562499987,
+            "flush": 1.265625
+          },
+          "safeMass": 0.26353281250000105,
+          "safeProbabilities": {
+            "pair": 0.4918920200876294,
+            "royalty": 0,
+            "straight": 0.6490978945932954
+          }
+        }
+      }
+    },
+    {
+      "cards": 5,
+      "models": {
+        "finiteDeck": {
+          "probabilities": {
+            "pair": 0.4929171668667476,
+            "royalty": 0.49230769230769894,
+            "straight": 0.8177270908363525,
+            "flush": 1
+          },
+          "expectedBonuses": {
+            "pair": 0.5860744297719134,
+            "royalty": 0.6835164835164915,
+            "straight": 1.3023209283713357,
+            "flush": 1.8861344537815126
+          },
+          "safeMass": 0.053856927386339154,
+          "safeProbabilities": {
+            "pair": 0.751264538622011,
+            "royalty": 0,
+            "straight": 0.877889863687025
+          }
+        },
+        "uniformReplacement": {
+          "probabilities": {
+            "pair": 0.5840481775848353,
+            "royalty": 0.48755026353852204,
+            "straight": 0.7846363922832055,
+            "flush": 1
+          },
+          "expectedBonuses": {
+            "pair": 0.7584818458737809,
+            "royalty": 0.6974976635702996,
+            "straight": 1.2142431987675537,
+            "flush": 1.94921875
+          },
+          "safeMass": 0.06191606090069015,
+          "safeProbabilities": {
+            "pair": 0.8225238157379633,
+            "royalty": 0,
+            "straight": 0.8330070903475579
+          }
+        },
+        "game": {
+          "probabilities": {
+            "pair": 0.5865203125000035,
+            "royalty": 0.4717800000000062,
+            "straight": 0.783612011718744,
+            "flush": 1
+          },
+          "expectedBonuses": {
+            "pair": 0.7637988281249978,
+            "royalty": 0.6680700000000035,
+            "straight": 1.211651660156257,
+            "flush": 1.94921875
+          },
+          "safeMass": 0.07896355468750028,
+          "safeProbabilities": {
+            "pair": 0.8389189633073401,
+            "royalty": 0,
+            "straight": 0.806360553993708
+          }
+        }
+      }
+    }
+  ]
+}

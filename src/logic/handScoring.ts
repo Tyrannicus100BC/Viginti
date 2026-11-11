@@ -1,14 +1,14 @@
 import { formatCash, formatChipMultiplier } from './formatters';
 import { rollPackRarity, type PackQuality } from './packs';
 import type { Card, ScoreContribution, ScoringDetail } from '../types';
-import { MAX_HAND_PAIRS, POKER_ORDER, RANK_VALUES } from './rules';
+import { MAX_HAND_PAIRS, POKER_ORDER, RANK_VALUES, type HandRules } from './rules';
 import type { Relic, RelicRarity } from './relics/types';
 import type { SeededRNG } from '../engine/rng';
 import { RAISE_PACK_COST } from './packs';
 import { SMALL_UPGRADE_UNITS, RAISE_BONUS_RANGES, RAISE_LOSS_PENALTY_RANGES, RAISE_PENALTY_WEIGHTS, V9_RAISE_BONUS_RANGES, V8_RAISE_BONUS_RANGES, V7_RAISE_BONUS_RANGES, V6_RAISE_BONUS_RANGES, V6_RAISE_LOSS_PENALTY_RANGES, RAISE_VALUE_WEIGHTS, type RaiseRange } from './upgradeTuning';
 export { RAISE_PACK_COST } from './packs';
 
-export type HandTypeId = 'win' | 'loss' | 'pair' | 'straight' | 'flush';
+export type HandTypeId = 'win' | 'loss' | 'pair' | 'straight' | 'flush' | 'royalty';
 export type RaiseHandTypeId = HandTypeId | 'viginti' | 'bust';
 // Counts retain the history of every Raise without occupying relic slots.
 export type HandUpgrades = Readonly<Record<string, number>>;
@@ -30,6 +30,7 @@ export const HAND_TYPES: readonly HandTypeDefinition[] = [
     { id: 'pair', name: 'Pair', icon: '/hands/pair.svg', chips: 5, mult: 0.05, description: 'Every two cards of the same rank, up to three pairs per hand. Three and four of a kind both score three base bonuses; participating card values and special bonuses count once.', chipCards: true },
     { id: 'straight', name: 'Straight', icon: '/hands/straight.svg', chips: 10, mult: 0, description: 'Each run scores one bonus per card after the first, plus card values once. Aces can be high or low.', chipCards: true },
     { id: 'flush', name: 'Flush', icon: '/hands/flush.svg', chips: 0, mult: 0, description: 'Each suit group scores one bonus per card after the first, plus card values once.', chipCards: true },
+    { id: 'royalty', name: 'Royalty', icon: '/hands/royalty.svg', chips: 0, mult: 0.05, description: 'Two or more 10s, Jacks, Queens, or Kings, in any suits or order. Scores one bonus per qualifying card after the first, plus their card values once. Aces do not qualify.', chipCards: true },
 ] as const;
 
 /** Rollable labels include outcome variants as independent Raise targets. */
@@ -105,7 +106,7 @@ const V3_AFFIX_BY_ID = new Map(buildAffixes((handTypeId, stat, units) => ({
 })).map(affix => [affix.id, affix]));
 const V4_UNITS = {
     win: { cash: 3, multPercent: 3 }, loss: { cash: 6, multPercent: 6 },
-    pair: { cash: 4, multPercent: 3 }, straight: { cash: 4, multPercent: 3 }, flush: { cash: 3, multPercent: 2 },
+    pair: { cash: 4, multPercent: 3 }, straight: { cash: 4, multPercent: 3 }, flush: { cash: 3, multPercent: 2 }, royalty: { cash: 4, multPercent: 3 },
 } as const;
 const V4_AFFIX_BY_ID = new Map(buildAffixes((handTypeId, stat, units) => ({
     handTypeId, chips: stat === 'cash' ? units * V4_UNITS[handTypeId].cash : 0,
@@ -236,16 +237,18 @@ const LEGACY_RAISES: readonly Raise[] = HAND_TYPES.flatMap(hand => [
 })));
 
 // Version-two definitions stay available for already earned/pending Raises.
+// Their secondary targets depend on the original five-hand ordering.
+const V2_HAND_TYPES = HAND_TYPES.filter(hand => hand.id !== 'royalty');
 export const PACK_RAISES: readonly Raise[] = (['Common', 'Uncommon', 'Rare'] as const).flatMap((rarity, tier) =>
-    HAND_TYPES.flatMap((hand, handIndex) => (['cash', 'mult'] as const).flatMap(stat =>
+    V2_HAND_TYPES.flatMap((hand, handIndex) => (['cash', 'mult'] as const).flatMap(stat =>
         Array.from({ length: tier === 0 ? 1 : 4 }, (_, offset) => offset + 1).flatMap(offset =>
             (tier === 0 ? [false] : [false, true]).map(drawback => {
                 const primary = tier + 1 + (drawback ? 1 : 0);
                 const modifiers: RaiseModifier[] = [{ handTypeId: hand.id, chips: stat === 'cash' ? 5 * primary : 0, mult: stat === 'mult' ? primary / 20 : 0 }];
-                const second = HAND_TYPES[(handIndex + offset) % HAND_TYPES.length];
+                const second = V2_HAND_TYPES[(handIndex + offset) % V2_HAND_TYPES.length];
                 if (tier > 0) modifiers.push({ handTypeId: second.id, chips: stat === 'mult' ? (drawback ? -5 : 5) : 0, mult: stat === 'cash' ? (drawback ? -0.05 : 0.05) : 0 });
                 if (tier > 1) {
-                    const third = HAND_TYPES[(handIndex + offset % 4 + 1) % HAND_TYPES.length];
+                    const third = V2_HAND_TYPES[(handIndex + offset % 4 + 1) % V2_HAND_TYPES.length];
                     modifiers.push({ handTypeId: third.id, chips: stat === 'cash' ? 5 : 0, mult: stat === 'mult' ? 0.05 : 0 });
                 }
                 return {
@@ -337,13 +340,13 @@ export function getHandPayout(id: HandTypeId, upgrades: HandUpgrades = {}) {
         } : undefined };
 }
 
-export function evaluateBaseHands(cards: Card[], isWin: boolean, blackjackValue: number, outcome?: 'win' | 'loss' | 'bust' | 'push' | null, upgrades: HandUpgrades = {}, bustLimit = 21): ScoringDetail[] {
+export function evaluateBaseHands(cards: Card[], isWin: boolean, blackjackValue: number, outcome?: 'win' | 'loss' | 'bust' | 'push' | null, upgrades: HandUpgrades = {}, bustLimit = 21, rules: HandRules = {}): ScoringDetail[] {
     if (!cards.length) return [];
     const criteria: ScoringDetail[] = [];
     const paidPairCards = new Set<string>();
     const add = (id: HandTypeId, group: Card[], variant?: 'viginti' | 'bust') => {
         const hand = getHandPayout(id, upgrades);
-        const count = id === 'straight' || id === 'flush' ? group.length - 1 : 1;
+        const count = id === 'straight' || id === 'flush' || id === 'royalty' ? group.length - 1 : 1;
         const baseHand = HAND_TYPES.find(hand => hand.id === id)!;
         const base = variant ? baseHand.variant! : baseHand;
         const name = variant === 'viginti' ? 'Viginti' : variant === 'bust' ? 'Bust' : hand.name;
@@ -380,13 +383,15 @@ export function evaluateBaseHands(cards: Card[], isWin: boolean, blackjackValue:
     else if (isWin) add('win', cards, blackjackValue === 21 ? 'viginti' : undefined);
     else if (outcome === 'loss') add('loss', cards);
 
-    for (const pattern of getHandPatterns(cards)) add(pattern.id, pattern.cards);
+    if (!(rules.noBustPatterns && (blackjackValue > bustLimit || outcome === 'bust'))) {
+        for (const pattern of getHandPatterns(cards)) add(pattern.id, pattern.cards);
+    }
     return criteria;
 }
 
 /** Match card patterns independently of outcome, upgrades, or scoring bonuses. */
-export function getHandPatterns(cards: readonly Card[]): { id: 'pair' | 'straight' | 'flush'; cards: Card[] }[] {
-    const patterns: { id: 'pair' | 'straight' | 'flush'; cards: Card[] }[] = [];
+export function getHandPatterns(cards: readonly Card[]): { id: 'pair' | 'straight' | 'flush' | 'royalty'; cards: Card[] }[] {
+    const patterns: { id: 'pair' | 'straight' | 'flush' | 'royalty'; cards: Card[] }[] = [];
     const standard = cards.filter(card => !card.type || card.type === 'standard');
     let pairCount = 0;
     for (let i = 0; i < standard.length && pairCount < MAX_HAND_PAIRS; i++) {
@@ -421,5 +426,7 @@ export function getHandPatterns(cards: readonly Card[]): { id: 'pair' | 'straigh
     for (const run of allRuns) {
         if (!allRuns.some(other => other.length > run.length && run.every(card => other.some(candidate => candidate.id === card.id)))) patterns.push({ id: 'straight', cards: run });
     }
+    const royalty = standard.filter(card => ['10', 'J', 'Q', 'K'].includes(card.rank));
+    if (royalty.length >= 2) patterns.push({ id: 'royalty', cards: royalty });
     return patterns;
 }

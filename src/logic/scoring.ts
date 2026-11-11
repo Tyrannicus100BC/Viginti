@@ -2,7 +2,7 @@ import type { Card, HandScore, ScoringDetail } from '../types';
 
 import { RelicManager } from './relics/manager';
 import type { RelicInstance } from './relics/types';
-import { getBaseBlackjackScore } from './rules';
+import { getBaseBlackjackScore, type HandRules } from './rules';
 import { evaluateBaseHands, type HandUpgrades } from './handScoring';
 export { POKER_ORDER, RANK_VALUES } from './rules';
 
@@ -35,27 +35,28 @@ export function getPlayerBustLimit(inventory: readonly RelicInstance[], baseLimi
   return RelicManager.executeValueHook('getBustLimit', baseLimit, { inventory: [...inventory] });
 }
 
-export function getBlackjackScore(cards: Card[], inventory: RelicInstance[] = [], ignoreSpecialEffects: boolean = false, bustLimit = 21): number {
+export function getBlackjackScore(cards: Card[], inventory: RelicInstance[] = [], ignoreSpecialEffects: boolean = false, bustLimit = 21, rules: HandRules = {}): number {
   if (!ignoreSpecialEffects) bustLimit = getPlayerBustLimit(inventory, bustLimit);
-  let score = getBaseBlackjackScore(cards, ignoreSpecialEffects, bustLimit);
+  const hardAces = !ignoreSpecialEffects && rules.hardAces;
+  let score = getBaseBlackjackScore(cards, ignoreSpecialEffects, bustLimit, { hardAces });
 
   // Relic: Adjust Blackjack Score (e.g. Joker)
   score = RelicManager.executeValueHook('adjustBlackjackScore', score, {
     inventory,
     handCards: cards,
-    ignoreSpecialEffects, bustLimit
+    ignoreSpecialEffects, bustLimit, hardAces
   });
 
   return score;
 }
 
-export function evaluateHandScore(cards: Card[], isWin: boolean, isDoubled: boolean = false, inventory: RelicInstance[] = [], handsRemaining: number = 0, categoryCounts?: Record<string, number>, outcome?: 'win' | 'loss' | 'bust' | 'push' | null, handUpgrades: HandUpgrades = {}, bustLimit = 21): HandScore {
+export function evaluateHandScore(cards: Card[], isWin: boolean, isDoubled: boolean = false, inventory: RelicInstance[] = [], handsRemaining: number = 0, categoryCounts?: Record<string, number>, outcome?: 'win' | 'loss' | 'bust' | 'push' | null, handUpgrades: HandUpgrades = {}, bustLimit = 21, rules: HandRules = {}): HandScore {
   bustLimit = getPlayerBustLimit(inventory, bustLimit);
-  const blackjackScore = getBlackjackScore(cards, inventory, false, bustLimit);
+  const blackjackScore = getBlackjackScore(cards, inventory, false, bustLimit, rules);
 
   // Initial Empty Score
   const initialScore: HandScore = {
-    criteria: evaluateBaseHands(cards, isWin, blackjackScore, outcome, handUpgrades, bustLimit),
+    criteria: evaluateBaseHands(cards, isWin, blackjackScore, outcome, handUpgrades, bustLimit, rules),
     totalChips: 0,
     totalMultiplier: 0,
     finalScore: 0,
@@ -63,11 +64,11 @@ export function evaluateHandScore(cards: Card[], isWin: boolean, isDoubled: bool
   };
 
   // Overlapping pairs pay each participating card's bonus once. Longer
-  // straights/flushes still scale bonuses with their base payout count.
+  // straights, flushes, and royalty scale bonuses with their base payout count.
   const paidPairBonuses = new Set<string>();
   const suitSymbols = { hearts: '♥', diamonds: '♦', clubs: '♣', spades: '♠' };
   for (const row of initialScore.criteria) {
-    if (!['win', 'viginti', 'pair', 'straight', 'flush'].includes(row.id)) continue;
+    if (!['win', 'viginti', 'pair', 'straight', 'flush', 'royalty'].includes(row.id)) continue;
     for (const card of cards) {
       if (!row.cardIds?.includes(card.id)) continue;
       if (row.id === 'pair') {

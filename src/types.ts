@@ -32,6 +32,7 @@ export type ScoringCriterionId =
   | 'pair'
   | 'flush'
   | 'straight'
+  | 'royalty'
   | 'double_down'
   | 'double_down_bonus'
   | 'three_kind'

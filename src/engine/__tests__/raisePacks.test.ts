@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createInitialState, getValidActions, processAction } from '../engine';
 import type { GameState } from '../GameState';
 import type { PlayerAction } from '../PlayerAction';
-import { generateRaise, generateRaiseChoices, getHandPayout, getHandRaiseChanges, getRaise, HAND_TYPES, RAISE_HAND_TYPES, PACK_RAISES, RAISE_AFFIX_SLOTS, formatRaiseCash, formatRaiseMult } from '../../logic/handScoring';
+import { generateRaise, generateRaiseChoices, getHandPayout, getHandRaiseChanges, getRaise, HAND_TYPES, RAISE_HAND_TYPES, PACK_RAISES, RAISE_AFFIXES, RAISE_AFFIX_SLOTS, formatRaiseCash, formatRaiseMult } from '../../logic/handScoring';
 import { getRelicSide, getSideSlotCount } from '../../logic/relics/inventory';
 import { SeededRNG } from '../rng';
 import { generateShopItems } from '../../logic/rewards/generator';
@@ -186,10 +186,12 @@ describe('relic slots and raise packs', () => {
     });
 
     it.each([
-        ['Common', 0, .45, [2, 3, 4, 5], [0, .16, .50, .84]],
-        ['Uncommon', .99, .45, [8, 9, 10, 11, 12], [0, .16, .36, .64, .84]],
-        ['Common', 0, .99, [1, 2, 3], [0, .42, .84]],
-    ] as const)('uses exact weighted boundaries for %s rolls (%s, %s)', (rarity, kindRoll, pickRoll, amounts, boundaries) => {
+        ['Common', 0, 'simple_pair_cash', [2, 3, 4, 5], [0, .16, .50, .84]],
+        ['Uncommon', .99, 'double_pair_cash', [8, 9, 10, 11, 12], [0, .16, .36, .64, .84]],
+        ['Common', 0, 'simple_flush_mult', [1, 2, 3], [0, .42, .84]],
+    ] as const)('uses exact weighted boundaries for %s rolls (%s, %s)', (rarity, kindRoll, affixId, amounts, boundaries) => {
+        const pool = RAISE_AFFIXES.filter(affix => affix.kind === (kindRoll === 0 ? 'simple' : 'double'));
+        const pickRoll = (pool.findIndex(affix => affix.id === affixId) + .5) / pool.length;
         for (let index = 0; index < amounts.length; index++) {
             for (const valueRoll of [boundaries[index], (boundaries[index + 1] ?? 1) - .000001]) {
                 const rolls = [kindRoll, pickRoll, valueRoll];
@@ -278,7 +280,7 @@ describe('relic slots and raise packs', () => {
     });
 
     it('rolls Viginti benefits and independent Viginti / Bust drawbacks across all rarities', () => {
-        expect(RAISE_HAND_TYPES.map(hand => hand.id)).toEqual(['win', 'viginti', 'loss', 'bust', 'pair', 'straight', 'flush']);
+        expect(RAISE_HAND_TYPES.map(hand => hand.id)).toEqual(['win', 'viginti', 'loss', 'bust', 'pair', 'straight', 'flush', 'royalty']);
         for (const rarity of ['Common', 'Uncommon', 'Rare'] as const) {
             const targets = new Set<string>();
             for (let seed = 1; seed <= 2000; seed++) {

@@ -7,6 +7,10 @@ import { HandIcon } from './HandIcon';
 
 type ScoreRow = Omit<ReturnType<typeof getHandPayout>, 'id'> & { id: string; handTypeId: RaiseHandTypeId };
 
+// Rarest to most common for two cards at the starting deck probabilities.
+// Keep this presentation order independent of the seeded reward-generation order.
+const PATTERN_DISPLAY_ORDER: readonly RaiseHandTypeId[] = ['pair', 'royalty', 'straight', 'flush'];
+
 const HAND_DETAILS: Record<RaiseHandTypeId, { description: string; nuance: string; unit: string }> = {
     win: {
         description: 'Beat the dealer without busting.',
@@ -43,11 +47,17 @@ const HAND_DETAILS: Record<RaiseHandTypeId, { description: string; nuance: strin
         nuance: 'Each suit scores separately.',
         unit: 'Per suit group',
     },
+    royalty: {
+        description: '2+ cards ranked 10, J, Q, or K. Any suits or order.',
+        nuance: 'Aces do not qualify. Repeated ranks count. Only qualifying cards contribute.',
+        unit: 'Per royalty group',
+    },
 };
 
 function HandScoreDetails({ hand }: { hand: ScoreRow }) {
     const details = HAND_DETAILS[hand.handTypeId];
-    const isRun = hand.handTypeId === 'straight' || hand.handTypeId === 'flush';
+    const isRun = hand.handTypeId === 'straight' || hand.handTypeId === 'flush' || hand.handTypeId === 'royalty';
+    const bonusFactor = hand.handTypeId === 'royalty' ? ' × (qualifying cards − 1)' : ' × (cards − 1)';
     return <>
         <strong className={styles.tooltipTitle}>{hand.name}</strong>
         <p className={styles.handDescription}>{details.description}</p>
@@ -58,21 +68,21 @@ function HandScoreDetails({ hand }: { hand: ScoreRow }) {
                     {hand.chipCards && <span>Card sum + </span>}
                     <strong className={hand.chips < 0 ? styles.negativeChange : styles.cashChange}
                         aria-label={formatRaiseCash(hand.chips, true)}>{formatRaiseCash(hand.chips)}</strong>
-                    {isRun && ' × (cards − 1)'}
+                    {isRun && bonusFactor}
                 </dd></div>
                 <div><dt>Multiplier</dt><dd>
                     <strong className={hand.mult < 0 ? styles.negativeChange : styles.multChange}
                         aria-label={formatRaiseMult(hand.mult, true)}>{formatRaiseMult(hand.mult)}</strong>
-                    {isRun && ' × (cards − 1)'}
+                    {isRun && bonusFactor}
                 </dd></div>
             </dl>
         </div>
         <p className={styles.scoringNote}>{details.nuance}</p>
-        {['win', 'viginti', 'pair', 'straight', 'flush'].includes(hand.handTypeId) &&
-            <p className={styles.scoringNote}>Cash and Mult card bonuses add to this score{isRun ? ' × (cards − 1)' : ''}.
+        {['win', 'viginti', 'pair', 'straight', 'flush', 'royalty'].includes(hand.handTypeId) &&
+            <p className={styles.scoringNote}>Cash and Mult card bonuses add to this score{isRun ? bonusFactor : ''}.
                 {hand.chipCards && ' Only participating cards apply.'}</p>}
         {hand.chipCards && <>
-            <p className={styles.scoringNote}>Card sum: 2–10 as shown · J/Q/K = 10 · A = 11.</p>
+            <p className={styles.scoringNote}>{hand.handTypeId === 'royalty' ? 'Card sum: 10 per qualifying card. 10 + Q → ×1; 10 + Q + K → ×2.' : 'Card sum: 2–10 as shown · J/Q/K = 10 · A = 11.'}</p>
             <p className={styles.scoringNote}>Patterns stack on any outcome.</p>
         </>}
     </>;
@@ -176,7 +186,8 @@ export function HandScores({ upgrades = {}, onClose, docked = false }: { upgrade
             mult: hand.variant.mult,
         }] : []),
     ]);
-    const patterns = hands.filter(hand => hand.chipCards);
+    const patterns = hands.filter(hand => hand.chipCards).sort((a, b) =>
+        PATTERN_DISPLAY_ORDER.indexOf(a.handTypeId) - PATTERN_DISPLAY_ORDER.indexOf(b.handTypeId));
     return <div className={`${styles.overlay} ${docked ? `${panelStyles.docked} ${panelStyles.left}` : ''}`} onClick={docked ? event => event.stopPropagation() : onClose}>
         <section id="hand-scores-panel" className={`${styles.modal} ${panelStyles.compact}`} role={docked ? 'complementary' : 'dialog'} aria-modal={docked ? undefined : true} aria-labelledby="hand-scores-title" onClick={event => event.stopPropagation()}>
             <div className={styles.content}>

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { getBoss, getBustLimit } from './bosses';
+import { getBoss, getBustLimit, getHandRules } from './bosses';
 import { formatChipMultiplier, formatMultPercent } from '../logic/formatters';
 import { getPackDefinition, describePackChoices, getTargetedPackReward } from '../logic/packs';
 import { canPlayHand } from './economy';
@@ -295,7 +295,7 @@ Respond ONLY in JSON format: {"reasoning": "...", "actionIndex": 0}`;
                 value: h.blackjackValue,
                 isBust: h.isBust,
                 isHeld: h.isHeld,
-                canPlace: canPlayHand(h),
+                canPlace: canPlayHand(h, getHandRules(state)),
                 openingTicketCost: h.isInactive ? 1 : 0
             })),
             dealer: {

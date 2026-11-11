@@ -27,7 +27,7 @@ export function raiseId(category: HandTypeId, stat: 'cash' | 'mult'): string {
 // Accept saved single-target reports from before the calibration. Their recorded
 // results remain untouched; rerunning compares the current unit for that category.
 export function currentRaiseTarget(target: string): string {
-    const match = /^raise_v[34]_0_simple_(win|loss|pair|straight|flush)_(cash|mult)$/.exec(target);
+    const match = /^raise_v[34]_0_simple_(win|loss|pair|straight|flush|royalty)_(cash|mult)$/.exec(target);
     return match ? getSmallRaiseId(match[1] as HandTypeId, match[2] as 'cash' | 'mult') : target;
 }
 

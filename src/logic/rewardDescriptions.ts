@@ -9,12 +9,14 @@ const RAISE_CONDITIONS: Record<RaiseHandTypeId, string> = {
     pair: 'Two cards of the same rank.',
     straight: 'Two or more consecutive ranks.',
     flush: 'Two or more cards of the same suit.',
+    royalty: 'Two or more 10s, Jacks, Queens, or Kings. Aces do not qualify.',
 };
 
 export function describeRaiseReward(effect: RaiseModifier): string {
     const amount = effect.chips || effect.mult;
     const value = effect.chips ? formatRaiseCash(Math.abs(amount)) : formatRaiseMult(Math.abs(amount));
     const unit = effect.handTypeId === 'pair' ? ' per pair'
+        : effect.handTypeId === 'royalty' ? ' per qualifying card after the first'
         : effect.handTypeId === 'straight' || effect.handTypeId === 'flush' ? ' per card after the first' : '';
     return `${RAISE_CONDITIONS[effect.handTypeId]} ${amount < 0 ? 'Subtracts' : 'Adds'} ${value}${effect.chips ? '' : ' multiplier'}${unit} this run.`;
 }

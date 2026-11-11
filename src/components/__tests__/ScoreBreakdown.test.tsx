@@ -19,9 +19,9 @@ describe('score breakdown tooltips', () => {
             .toEqual(['Base ×3', 'Raises ×3', 'Card Sum']);
     });
 
-    it.each(['win', 'viginti', 'pair', 'straight', 'flush'])(
+    it.each(['win', 'viginti', 'pair', 'straight', 'flush', 'royalty'])(
         'shows special-card bonuses inside the %s tooltip', id => {
-            const ranks = id === 'pair' ? ['3', '3', '3'] : id === 'viginti' ? ['6', '7', '8'] : ['2', '3', '4'];
+            const ranks = id === 'pair' ? ['3', '3', '3'] : id === 'viginti' ? ['6', '7', '8'] : id === 'royalty' ? ['10', 'Q', 'K'] : ['2', '3', '4'];
             const cards = ranks.map((rank, i): Card => ({ id: String(i), rank: rank as Card['rank'], suit: 'hearts',
                 specialEffect: i === 0 ? { type: 'chip', value: 7 } : i === 1 ? { type: 'mult', value: 0.04 } : undefined,
             }));
@@ -30,7 +30,7 @@ describe('score breakdown tooltips', () => {
             const markup = renderToStaticMarkup(<ScoreBreakdownDetails row={row} />);
             expect(markup).toContain(`${ranks[0]}♥ card bonus`);
             expect(markup).toContain(`${ranks[1]}♥ card bonus`);
-            const repeats = id === 'straight' || id === 'flush';
+            const repeats = id === 'straight' || id === 'flush' || id === 'royalty';
             expect(markup).toContain(repeats ? 'Base ×2' : id === 'pair' ? 'Base ×3' : '>Base<');
             expect(markup).toContain(repeats ? '$14' : '$7');
             expect(markup).toContain(repeats ? '8%' : '4%');

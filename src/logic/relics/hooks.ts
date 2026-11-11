@@ -26,10 +26,11 @@ const isFaceCard = (c: Card) => ['J', 'Q', 'K'].includes(c.rank);
 // Recalculate the shared card-value rules together so Joker and Royal Couple
 // compose independently of acquisition order, with aces optimized afterwards.
 const adjustFaceCardValues = (_score: number, context: GameContext & {
-    handCards: Card[]; ignoreSpecialEffects?: boolean; bustLimit?: number;
+    handCards: Card[]; ignoreSpecialEffects?: boolean; bustLimit?: number; hardAces?: boolean;
 }) => getBaseBlackjackScore(context.handCards, context.ignoreSpecialEffects, context.bustLimit, {
     flexibleJacks: context.inventory.some(relic => relic.id === 'joker'),
     pairedFaces: context.inventory.some(relic => relic.id === 'royal_couple'),
+    hardAces: context.hardAces,
 });
 
 // Wait Helper

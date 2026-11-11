@@ -25,3 +25,28 @@ describe('dealer hand results', () => {
             expect(html).not.toContain('>STAND<');
         });
 });
+
+describe('boss hand results', () => {
+    const player = (): PlayerHand => ({ id: 0, cards: [
+        { id: 'ace', rank: 'A', suit: 'hearts', isFaceUp: true },
+        { id: 'king', rank: 'K', suit: 'clubs', isFaceUp: true },
+    ], blackjackValue: 21, isHeld: false, isBust: false });
+
+    it('does not show a terminal Viginti for a two-card 21 in Three’s Company', () => {
+        const html = renderToStaticMarkup(<Hand hand={player()} handRules={{ minWinCards: 3 }} stagger={false} />);
+        expect(html).not.toContain('>VIGINTI<');
+        expect(html).not.toMatch(/class="[^"]*tinted/);
+    });
+
+    it('shows a loss instead of Viginti when 21 loses under a boss rule', () => {
+        const html = renderToStaticMarkup(<Hand hand={{ ...player(), resultRevealed: true, outcome: 'loss' }} stagger={false} />);
+        expect(html).toContain('>LOSS<');
+        expect(html).not.toContain('>VIGINTI<');
+    });
+
+    it('dims a three-card full hand in Tight Fit', () => {
+        const hand = { ...player(), blackjackValue: 13, cards: [...player().cards, { id: 'two', rank: '2' as const, suit: 'clubs' as const }] };
+        const html = renderToStaticMarkup(<Hand hand={hand} handRules={{ maxCards: 3 }} stagger={false} />);
+        expect(html).toMatch(/class="[^"]*tinted/);
+    });
+});

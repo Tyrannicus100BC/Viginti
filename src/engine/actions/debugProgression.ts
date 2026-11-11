@@ -1,5 +1,5 @@
 import { advanceChallenges, completeChallenges, createChallenges, CHALLENGE_ROUNDS } from '../challenges';
-import { chooseBoss, getBustLimit, getDealerBustLimit } from '../bosses';
+import { chooseBoss, getBustLimit, getDealerBustLimit, getHandRules } from '../bosses';
 import { getNextAnte } from '../economy';
 import { SeededRNG } from '../rng';
 import { hasPendingPack } from '../../logic/packs';
@@ -48,7 +48,7 @@ export function processDebugAdvanceAnte(state: GameState): ActionResult {
     const inventory = state.inventory as RelicInstance[];
     // The debug control can change boss rules while cards are already on the table.
     const playerHands = state.playerHands.map(hand => {
-        const blackjackValue = getBlackjackScore(hand.cards, inventory, false, bustLimit);
+        const blackjackValue = getBlackjackScore(hand.cards, inventory, false, bustLimit, getHandRules({ bossId }));
         return { ...hand, blackjackValue, isBust: blackjackValue > bustLimit };
     });
     const dealer = { ...state.dealer, blackjackValue: getBlackjackScore(

@@ -1,14 +1,16 @@
-import { getBustLimit, getDealerBustLimit } from '../engine/bosses';
+import { getBustLimit, getDealerBustLimit, getHandRules } from '../engine/bosses';
 import type { GameState } from '../engine/GameState';
 import type { PlayerAction } from '../engine/PlayerAction';
 import { canPlayHand } from '../engine/economy';
 import { evaluateHandScore, getBlackjackScore } from '../logic/scoring';
+import { handBeatsDealer, type HandRules } from '../logic/rules';
 import type { Bot } from './model';
 
 // An explicit information boundary: policies never receive the RNG or face-down cards.
 export type BotObservation = Pick<GameState, 'playerHands' | 'drawnCards' | 'inventory' | 'handUpgrades' | 'selectedDrawIndex'> & {
     bustLimit?: number;
     dealerBustLimit?: number;
+    handRules?: HandRules;
     dealerCards: GameState['dealer']['cards'];
 };
 
@@ -18,6 +20,7 @@ export function observe(state: GameState): BotObservation {
         handUpgrades: state.handUpgrades, selectedDrawIndex: state.selectedDrawIndex,
         bustLimit: getBustLimit(state),
         dealerBustLimit: getDealerBustLimit(state),
+        handRules: getHandRules(state),
         dealerCards: state.dealer.cards.filter(card => card.isFaceUp),
     };
 }
@@ -30,7 +33,7 @@ function placementValue(observation: BotObservation, drawIndex: number, handInde
     const card = observation.drawnCards[drawIndex]!;
     const hands = observation.playerHands.map((hand, index) => {
         const cards = index === handIndex ? [...hand.cards, card] : hand.cards;
-        return { ...hand, cards, blackjackValue: getBlackjackScore(cards, inventory, false, observation.bustLimit ?? 21) };
+        return { ...hand, cards, blackjackValue: getBlackjackScore(cards, inventory, false, observation.bustLimit ?? 21, observation.handRules) };
     });
     const dealerLimit = observation.dealerBustLimit ?? observation.bustLimit ?? 21;
     const visible = getBlackjackScore(observation.dealerCards, inventory, true, dealerLimit);
@@ -46,9 +49,9 @@ function placementValue(observation: BotObservation, drawIndex: number, handInde
         for (const hand of hands) {
             if (!hand.cards.length) continue;
             const bust = hand.blackjackValue > (observation.bustLimit ?? 21);
-            const win = !bust && (dealer.value > dealerLimit || hand.blackjackValue >= dealer.value);
+            const win = !bust && handBeatsDealer(hand.blackjackValue, hand.cards.length, dealer.value, dealerLimit, observation.handRules);
             const score = evaluateHandScore(hand.cards, win, false, inventory, 1, undefined,
-                bust ? 'bust' : win ? 'win' : 'loss', observation.handUpgrades, observation.bustLimit ?? 21);
+                bust ? 'bust' : win ? 'win' : 'loss', observation.handUpgrades, observation.bustLimit ?? 21, observation.handRules);
             chips += score.totalChips;
             mult += score.totalMultiplier;
         }
@@ -63,7 +66,7 @@ function placementValue(observation: BotObservation, drawIndex: number, handInde
 }
 
 export function chooseAction(observation: BotObservation, bot: Bot): PlayerAction {
-    const playable = observation.playerHands.filter(canPlayHand);
+    const playable = observation.playerHands.filter(hand => canPlayHand(hand, observation.handRules));
     const available = observation.drawnCards.flatMap((card, index) => card ? [index] : []);
     if (available.length) {
         let drawIndex = available.includes(observation.selectedDrawIndex ?? -1) ? observation.selectedDrawIndex! : available[0];
@@ -84,8 +87,9 @@ export function chooseAction(observation: BotObservation, bot: Bot): PlayerActio
     }
     const dealerLimit = observation.dealerBustLimit ?? observation.bustLimit ?? 21;
     const dealerValue = getBlackjackScore(observation.dealerCards, structuredClone([...observation.inventory]), true, dealerLimit);
+    if (observation.handRules?.winBelowDealer) return { type: 'stand' };
     if (bot === 'score' && observation.dealerCards.length >= 2 && dealerValue > dealerLimit) return { type: 'stand' };
     const threshold = bot === 'score' && observation.dealerCards.length >= 2 && dealerValue >= 17
         ? Math.min(observation.bustLimit ?? 21, dealerValue) : 17;
-    return playable.some(hand => hand.blackjackValue < threshold) ? { type: 'draw' } : { type: 'stand' };
+    return playable.some(hand => hand.blackjackValue < threshold || hand.cards.length < (observation.handRules?.minWinCards ?? 1)) ? { type: 'draw' } : { type: 'stand' };
 }

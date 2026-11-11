@@ -1315,5 +1315,44 @@
 .headingDebugButton:disabled { opacity: .35; cursor: default; }
 .headingDebugButton:focus-visible { outline: 1px solid #a7b9c6; outline-offset: 3px; }
 
-.bossRule { position: absolute; top: 102px; left: 50%; transform: translateX(-50%); text-align: center; color: #ffd8c4; background: #421e2ee8; border: 1px solid #e38280; border-radius: 10px; padding: 8px 20px; font-size: 17px; z-index: 100; pointer-events: none; }
-.bossRule span { display: block; font-size: 12px; color: #e6b6b6; margin-top: 3px; }
+.bossRule {
+    position: relative;
+    flex-shrink: 0;
+    height: 22px;
+    padding: 2px 9px;
+    border: 1px solid #e38280;
+    border-radius: 5px;
+    background: #421e2ee8;
+    color: #ffd8c4;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 16px;
+    white-space: nowrap;
+    cursor: help;
+}
+.bossRule:focus-visible { outline: 2px solid #ffd8c4; outline-offset: 3px; }
+.bossTooltip {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 100;
+    width: 300px;
+    box-sizing: border-box;
+    padding: 10px 12px;
+    border: 1px solid #e3828080;
+    border-radius: 7px;
+    background: #2c1927fa;
+    box-shadow: 0 4px 16px #0007;
+    color: #f5e5e5;
+    font-size: 13px;
+    font-weight: 400;
+    line-height: 1.5;
+    text-align: left;
+    white-space: normal;
+    visibility: hidden;
+    opacity: 0;
+}
+.bossDuration { display: block; margin-top: 6px; color: #e6b6b6; font-size: 11px; }
+.bossRule:hover .bossTooltip, .bossRule:focus-visible .bossTooltip { visibility: visible; opacity: 1; }

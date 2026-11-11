@@ -52,7 +52,7 @@ describe('Raise-focused play', () => {
     });
 
     it('matches production shared-pot settlement with stacked raises, multiple pairs and a bust', () => {
-        for (const focus of ['pair', 'straight', 'flush', 'pair-straight'] as const) {
+        for (const focus of ['pair', 'straight', 'flush', 'royalty', 'pair-straight'] as const) {
             const cards = [hand(0, [card('4'), card('4', 'clubs'), card('4', 'spades')]),
                 hand(1, [card('9'), card('10'), card('K')]), hand(2, [card('2'), card('3', 'clubs')])];
             const state = { ...dealt(), handUpgrades: syntheticStack(focus, 16), playerHands: cards,
@@ -146,7 +146,7 @@ describe('Raise selection and progression', () => {
     });
 
     it('uses equal total raise budgets for synthetic single and combined builds', () => {
-        for (const focus of ['pair', 'straight', 'flush', 'pair-straight'] as const) for (const rarity of ['Common', 'Uncommon'] as const) {
+        for (const focus of ['pair', 'straight', 'flush', 'royalty', 'pair-straight'] as const) for (const rarity of ['Common', 'Uncommon'] as const) {
             const stack = syntheticStack(focus, 16, rarity);
             expect(Object.values(stack).reduce((a, b) => a + b, 0)).toBe(16);
             expect(Object.keys(stack).every(id => getRaise(id)?.rarity === rarity && getRaise(id)?.modifiers.length === 1)).toBe(true);
