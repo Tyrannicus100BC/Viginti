@@ -61,20 +61,20 @@ describe('pack variety and mixed choices', () => {
         expect(act(chosen, { type: 'choose_pack_card', cardId: id })).toEqual(chosen);
     });
 
-    it('keeps other mixed cards available when relic slots are full, including between picks and saves', () => {
-        const inventory = RelicManager.getAllRelics().filter(relic => !relic.tableAction).slice(0, 5).map(relic => ({ id: relic.id, state: {} }));
+    it('keeps legacy mixed cards selectable at capacity, including between picks and saves', () => {
+        const inventory = RelicManager.getAllRelics().filter(relic => !relic.tableAction).slice(0, 4).map(relic => ({ id: relic.id, state: {} }));
         let state = open('mixed_mega_excellent', { inventory });
         const relic = state.pendingPackChoices.find(id => family(id) === 'relic')!;
         state = act(state, { type: 'choose_pack_card', cardId: relic });
-        expect(state.inventory).toHaveLength(6);
+        expect(state.inventory).toHaveLength(4);
         expect(useGameBridge.getState().loadGameState(JSON.stringify(state))).toBe(true);
         state = useGameBridge.getState().gameState;
         const valid = getValidActions(state).filter(action => action.type === 'choose_pack_card');
         expect(valid.length).toBeGreaterThan(0);
-        expect(valid.every(action => family(action.cardId) !== 'relic')).toBe(true);
+        expect(valid).toHaveLength(state.pendingPackChoices.length);
         state = act(state, valid[0]);
         expect(state.pendingPack).toBeNull();
-        expect(state.inventory).toHaveLength(6);
+        expect(state.inventory).toHaveLength(4);
     });
 
     it('fills mixed offers even after the relic pool is exhausted', () => {

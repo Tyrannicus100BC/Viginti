@@ -168,7 +168,7 @@ describe('four-round progression', () => {
             { id: goals[1].id, title: goals[1].title, tier: 'minor' },
         ] }, { type: 'deal' });
         expect(state.challengeRewards.map(reward => reward.id)).toEqual([goals[1].id, 'extra', goals[0].id, 'boss-0']);
-        for (const packId of ['mixed_minor', 'mixed_minor', 'mixed_major', 'relic_boss']) {
+        for (const packId of ['mixed_minor', 'mixed_minor', 'mixed_major', 'mixed_major']) {
             expect(state.pendingPack?.packId).toBe(packId);
             expect(state.ante).toBe(50);
             expect(state.challenges).toEqual(goals);

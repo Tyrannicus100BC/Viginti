@@ -1,11 +1,82 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { HAND_TYPES, getHandPayout, getHandRaiseChanges, formatRaiseCash, formatRaiseMult, type RaiseHandTypeId, type HandUpgrades } from '../logic/handScoring';
+import { HAND_TYPES, getHandPayout, getHandRaiseChanges, getRaise, formatRaiseCash, formatRaiseMult, type RaiseHandTypeId, type HandUpgrades } from '../logic/handScoring';
 import styles from './HandScores.module.css';
 import panelStyles from './ReferencePanel.module.css';
 import { HandIcon } from './HandIcon';
 
 type ScoreRow = Omit<ReturnType<typeof getHandPayout>, 'id'> & { id: string; handTypeId: RaiseHandTypeId };
+
+const HAND_DETAILS: Record<RaiseHandTypeId, { description: string; nuance: string; unit: string }> = {
+    win: {
+        description: 'Beat the dealer without busting.',
+        nuance: 'Winning 21 → Viginti. Push → no outcome score.',
+        unit: 'Per hand',
+    },
+    viginti: {
+        description: 'Win with exactly 21. Any number of cards.',
+        nuance: 'Replaces Win. A push does not qualify.',
+        unit: 'Per hand',
+    },
+    loss: {
+        description: 'Lose without busting.',
+        nuance: 'Push → no outcome score. Patterns still score.',
+        unit: 'Per hand',
+    },
+    bust: {
+        description: 'Exceed your bust limit (normally 21).',
+        nuance: 'Replaces Lose. Patterns still score.',
+        unit: 'Per hand',
+    },
+    pair: {
+        description: '2 cards of the same rank.',
+        nuance: '3 or 4 of a kind = 3× base and Raises. Card values and card bonuses count once. Max 3 pairs per hand.',
+        unit: 'Per pair',
+    },
+    straight: {
+        description: '2+ consecutive ranks. Any suits.',
+        nuance: 'A low or high; no wrap. Repeated ranks count once.',
+        unit: 'Per run',
+    },
+    flush: {
+        description: '2+ cards of the same suit.',
+        nuance: 'Each suit scores separately.',
+        unit: 'Per suit group',
+    },
+};
+
+function HandScoreDetails({ hand }: { hand: ScoreRow }) {
+    const details = HAND_DETAILS[hand.handTypeId];
+    const isRun = hand.handTypeId === 'straight' || hand.handTypeId === 'flush';
+    return <>
+        <strong className={styles.tooltipTitle}>{hand.name}</strong>
+        <p className={styles.handDescription}>{details.description}</p>
+        <div className={styles.scoringParameters}>
+            <span className={styles.scoringUnit}>{details.unit}</span>
+            <dl>
+                <div><dt>Cash</dt><dd>
+                    {hand.chipCards && <span>Card sum + </span>}
+                    <strong className={hand.chips < 0 ? styles.negativeChange : styles.cashChange}
+                        aria-label={formatRaiseCash(hand.chips, true)}>{formatRaiseCash(hand.chips)}</strong>
+                    {isRun && ' × (cards − 1)'}
+                </dd></div>
+                <div><dt>Multiplier</dt><dd>
+                    <strong className={hand.mult < 0 ? styles.negativeChange : styles.multChange}
+                        aria-label={formatRaiseMult(hand.mult, true)}>{formatRaiseMult(hand.mult)}</strong>
+                    {isRun && ' × (cards − 1)'}
+                </dd></div>
+            </dl>
+        </div>
+        <p className={styles.scoringNote}>{details.nuance}</p>
+        {['win', 'viginti', 'pair', 'straight', 'flush'].includes(hand.handTypeId) &&
+            <p className={styles.scoringNote}>Cash and Mult card bonuses add to this score{isRun ? ' × (cards − 1)' : ''}.
+                {hand.chipCards && ' Only participating cards apply.'}</p>}
+        {hand.chipCards && <>
+            <p className={styles.scoringNote}>Card sum: 2–10 as shown · J/Q/K = 10 · A = 11.</p>
+            <p className={styles.scoringNote}>Patterns stack on any outcome.</p>
+        </>}
+    </>;
+}
 
 function HandScoreRow({ hand, upgrades }: { hand: ScoreRow; upgrades: HandUpgrades }) {
     const [showTooltip, setShowTooltip] = useState(false);
@@ -14,7 +85,7 @@ function HandScoreRow({ hand, upgrades }: { hand: ScoreRow; upgrades: HandUpgrad
     const tooltip = useRef<HTMLDivElement>(null);
     const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const changes = getHandRaiseChanges(hand.handTypeId, upgrades);
-    const tooltipId = `hand-raises-${hand.id}`;
+    const tooltipId = `hand-score-${hand.id}`;
     const cancelClose = () => {
         if (closeTimer.current !== null) clearTimeout(closeTimer.current);
     };
@@ -67,14 +138,20 @@ function HandScoreRow({ hand, upgrades }: { hand: ScoreRow; upgrades: HandUpgrad
         <strong className={`${styles.cash} ${hand.chips < 0 ? styles.isNegative : ''}`} aria-label={`${formatRaiseCash(hand.chips, true)} cash`}>{formatRaiseCash(hand.chips)}</strong>
         <strong className={styles.mult + (hand.mult < 0 ? ' ' + styles.isNegative : '')} aria-label={formatRaiseMult(hand.mult, true)}>{formatRaiseMult(hand.mult)}</strong>
         {showTooltip && createPortal(<div ref={tooltip} id={tooltipId} role="tooltip"
-            className={styles.raiseTooltip} style={position} onMouseEnter={cancelClose} onMouseLeave={close}>
-            <strong className={styles.tooltipTitle}>{hand.name} Raises</strong>
-            {changes.length ? <ul className={styles.raiseChanges}>
-                {changes.map((change, index) => <li key={`${change.raiseId}-${change.occurrence}-${index}`}
-                    className={change.value < 0 ? styles.negativeChange : change.stat === 'chips' ? styles.cashChange : styles.multChange}>
-                    {change.stat === 'chips' ? `${formatRaiseCash(change.value)} chips` : `${formatRaiseMult(change.value)} multiplier`}
-                </li>)}
-            </ul> : <p className={styles.noRaises}>No raises yet.</p>}
+            className={styles.scoreTooltip} style={position} onMouseEnter={cancelClose} onMouseLeave={close}>
+            <HandScoreDetails hand={hand} />
+            <div className={styles.raisesSection}>
+                <strong className={styles.raisesTitle}>Raises</strong>
+                {changes.length ? <ul className={styles.raiseChanges}>
+                    {changes.map((change, index) => <li key={`${change.raiseId}-${change.occurrence}-${index}`}
+                        className={change.value < 0 ? styles.negativeChange : change.stat === 'chips' ? styles.cashChange : styles.multChange}>
+                        <span className={styles.raiseName}>{getRaise(change.raiseId)?.name ?? 'Raise'}</span>
+                        <span aria-label={change.stat === 'chips' ? `${formatRaiseCash(change.value, true)} cash` : `${formatRaiseMult(change.value, true)} multiplier`}>
+                            {change.stat === 'chips' ? `${formatRaiseCash(change.value)} cash` : `${formatRaiseMult(change.value)} multiplier`}
+                        </span>
+                    </li>)}
+                </ul> : <p className={styles.noRaises}>None yet.</p>}
+            </div>
         </div>, document.body)}
     </article>;
 }

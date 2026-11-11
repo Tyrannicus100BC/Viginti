@@ -59,6 +59,8 @@
 .modifiers { display: flex; flex-direction: column; gap: 8px; width: 100%; min-height: 0; }
 .modifier { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 36px; padding: 7px 0; border-bottom: 1px solid #ffffff12; font-size: clamp(13px, 8.5cqw, 17px); font-weight: 700; line-height: 1.25; }
 .handName, .modifierName { display: inline-flex; align-items: center; gap: 4px; min-width: 0; color: #9cd7ff; text-align: left; }
+.deckModifier { font-size: clamp(12px, 7.5cqw, 16px); }
+.modifierName { white-space: nowrap; }
 .modifier strong { flex-shrink: 0; font-size: inherit; font-weight: inherit; white-space: nowrap; text-align: right; }
 .suitIcon { display: inline-flex; align-items: center; justify-content: center; width: 1.5em; height: 1.5em; flex-shrink: 0; }
 .denseCard .modifiers { gap: 6px; }
@@ -84,10 +86,17 @@
 .flightCard { position: absolute; z-index: 20; box-sizing: border-box; margin: 0; pointer-events: none; }
 .blockedCard { opacity: .6 !important; }
 
-.cardType { display: flex; flex-shrink: 0; align-self: center; margin-bottom: 4px; align-items: center; justify-content: center; gap: 6px; height: 24px; font-size: 14px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: color-mix(in srgb, var(--card-type-color) 65%, #b4c5d2); }
-.cardType .packArt { width: 24px; height: 24px; }
+.cardType { position: absolute; bottom: 11px; left: 20px; right: 20px; display: flex; align-items: center; justify-content: center; gap: 4.5px; height: 18px; font-size: 10.5px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: color-mix(in srgb, var(--card-type-color) 65%, #b4c5d2); opacity: .75; }
+.cardType .packArt { width: 18px; height: 18px; }
 .blockedLabel { position: absolute; inset: 45% 10px auto; padding: 8px; background: #172533ee; border-radius: 6px; font-size: 13px; }
 .slotStatus { color: #c6d9e8; margin: -16px 0 16px; font-size: 14px; }
+.rewardRows { gap: 0; }
+.rewardRows > .modifiers { gap: 0; }
+.effectRow { justify-content: flex-start; cursor: help; }
+.effectName { display: inline-flex; align-items: center; gap: 8px; text-align: left; color: #e0c5ff; }
+.effectName img { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+.replacementNote { margin-top: auto; padding-top: 6px; font-size: 11px; color: #f0ba91; text-align: left; }
+.denseCard .rewardRows .modifier { min-height: 24px; padding-block: 4px; }
 
 .twoChoices { width: calc(2 * var(--reward-card-width) + var(--reward-card-gap)); }
 .twoChoices .options { grid-template-columns: repeat(2, var(--reward-card-width)); }

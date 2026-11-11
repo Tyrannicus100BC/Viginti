@@ -50,8 +50,8 @@ export function playRaiseRound(initial: GameState, play: RaiseRunConfig['play'])
             if (!score || !baseScore || !Number.isFinite(score.finalScore)) throw new Error('Missing or invalid scoring result.');
             const rows = blankCounts(); let bustedPatterns = 0;
             for (const hand of result.nextState.playerHands) for (const row of hand.finalScore?.criteria ?? []) {
-                if (row.id in rows) rows[row.id as RaiseHandTypeId]++;
-                if (hand.outcome === 'bust' && PATTERNS.includes(row.id as Pattern)) bustedPatterns++;
+                if (row.id in rows) rows[row.id as RaiseHandTypeId] += row.count;
+                if (hand.outcome === 'bust' && PATTERNS.includes(row.id as Pattern)) bustedPatterns += row.count;
             }
             return { state: result.nextState, round: {
                 round: state.dealsTaken, anteNumber: state.challengeStage + 1, ante: state.ante, cash: result.nextState.cash,

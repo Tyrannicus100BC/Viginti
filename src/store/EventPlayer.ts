@@ -10,6 +10,7 @@
  */
 
 import type { GameEvent } from '../engine/GameEvent';
+import { animationDuration } from '../utils/animationTiming';
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -45,7 +46,7 @@ type EventHandler = (event: GameEvent, config: EventPlayerConfig) => Promise<voi
 async function wait(ms: number, config: EventPlayerConfig): Promise<void> {
     if (config.headless || ms <= 0) return;
     const speed = config.getSpeed();
-    const adjusted = Math.max(10, ms / speed);
+    const adjusted = Math.max(10, animationDuration(ms, speed));
     return new Promise(resolve => setTimeout(resolve, adjusted));
 }
 
@@ -76,7 +77,7 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
     async deal_started(event, config) {
         if (event.type !== 'deal_started') return;
         config.updateUI({
-            dealerMessage: null,
+            dealerHasStood: false,
             handsRemaining: event.handsRemaining,
             cash: event.cash,
             ante: event.ante,
@@ -295,8 +296,6 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
     async dealer_hit(event, config) {
         if (event.type !== 'dealer_hit') return;
         config.updateUI({
-            dealerMessage: 'Hit!',
-            dealerMessageExiting: false,
             dealer: (prev: any) => ({
                 ...prev,
                 cards: [...prev.cards, event.card],
@@ -304,32 +303,23 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
             })
         });
         config.sfx?.play('cardDeal');
-        await wait(400, config);
-        config.updateUI({ dealerMessageExiting: true });
-        await wait(200, config);
+        await wait(600, config);
     },
 
     async dealer_stand(event, config) {
         if (event.type !== 'dealer_stand') return;
-        config.updateUI({
-            dealerMessage: 'Stand',
-            dealerMessageExiting: false,
-        });
-        await wait(600, config);
-        config.updateUI({ dealerMessageExiting: true });
-        await wait(200, config);
+        config.updateUI({ dealerHasStood: true });
+        await wait(800, config);
     },
 
     async dealer_bust(event, config) {
         if (event.type !== 'dealer_bust') return;
         config.sfx?.play('bust');
         config.updateUI({
-            dealerMessage: 'Bust!',
-            dealerMessageExiting: false,
             isShaking: true,
         });
         await wait(600, config);
-        config.updateUI({ isShaking: false, dealerMessageExiting: true });
+        config.updateUI({ isShaking: false });
         await wait(200, config);
     },
 
@@ -560,7 +550,7 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
             scoringHandIndex: -1, visibleScoringRowIndices: {}, scoringRowValues: {}, scoringCriteria: {},
             activeHighlightIds: null, activeRelicId: null, allWinnersEnlarged: false,
             isCollectingChips: false, isDealerPlaying: false, dealerVisible: false,
-            dealerMessage: null, dealerMessageExiting: false,
+            dealerHasStood: false,
         });
     },
 
@@ -575,6 +565,7 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
         if (event.to === 'entering_casino') {
             config.updateUI({
                 dealerVisible: true,
+                dealerHasStood: false,
                 playerHands: Array.from({ length: 3 }, (_, i) => ({
                     id: i,
                     cards: [],
@@ -589,7 +580,6 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
         if (event.to === 'playing' || event.to === 'scoring') {
             config.updateUI({
                 isDealerPlaying: false,
-                dealerMessage: null,
                 scoringHandIndex: -1,
                 isCollectingChips: false,
                 visibleScoringRowIndices: {},

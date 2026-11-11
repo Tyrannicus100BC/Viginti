@@ -9,7 +9,7 @@ function ChallengeTooltip({ challenge, id, offset }: { challenge: Challenge; id:
     const tier = challenge.rewardTier ?? (challenge.main ? 'major' : 'minor');
     const description = challenge.main
         ? 'Survive four rounds for a major pack.\nThe ante increases after rewards.'
-        : `Complete for a ${tier} pack.\n${challenge.source === 'pack' ? 'This extra goal carries across ante changes.' : 'Your next challenge appears after collecting the reward and returning to the table.'}`;
+        : `Complete for a ${tier} pack.\n${challenge.source === 'pack' ? 'This goal carries across antes.' : 'Next challenge after rewards.'}`;
     return <div id={id} role="tooltip"
         className={`${tooltipStyles.container} ${tooltipStyles.containerHorizontal} ${styles.tooltip} ${challenge.main ? styles.main : ''}`}
         style={{ top: Math.max(-11, offset - 11) }}>
@@ -23,7 +23,7 @@ function ChallengeTooltip({ challenge, id, offset }: { challenge: Challenge; id:
             </div>
         </div>
         <div className={tooltipStyles.divider} />
-        <div className={`${tooltipStyles.content} ${tooltipStyles.contentHorizontal}`}>
+        <div className={`${tooltipStyles.content} ${tooltipStyles.contentHorizontal} ${styles.tooltipContent}`}>
             <div className={`${tooltipStyles.description} ${styles.tooltipDescription}`}>{description}</div>
         </div>
     </div>;

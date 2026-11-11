@@ -50,7 +50,7 @@
 .compactView .unifiedGrid { gap: 14px; }
 .compactView .probSection { padding: 14px 12px; margin-bottom: 0; }
 .compactView .probRow { gap: 10px; }
-.compactView .probLabel { width: 112px; flex-shrink: 0; }
+.compactView .probLabel { width: 120px; flex-shrink: 0; }
 .compactView .probBarContainer { min-width: 0; }
 .compactView .probPercent { flex-shrink: 0; }
 .compactView .cardList { justify-content: flex-start; }
@@ -325,7 +325,14 @@
     display: flex;
     align-items: center;
     gap: 15px;
+    border-radius: 4px;
+    cursor: help;
 }
+
+.probRow:hover, .probRow:focus-visible { background: rgba(255,255,255,.06); }
+.probRow:focus-visible { outline: 2px solid #f1c40f; outline-offset: 3px; }
+.chanceValue { color: #ffd700; }
+.changeNote { display: block; margin-top: 2px; color: #b8c2c9; font-size: 11px; }
 
 .probLabel {
     width: 120px;
@@ -336,10 +343,16 @@
 }
 
 .probIcon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
     font-size: 1.2rem;
     width: 20px;
     text-align: center;
 }
+
+.probIcon > span { width: 20px; height: 24px; }
 
 .probText {
     font-size: 0.9rem;

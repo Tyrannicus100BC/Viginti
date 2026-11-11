@@ -196,7 +196,7 @@ export function* runExperiment(config: LabConfig): Generator<LabProgress, LabRep
                 payout = result.scoring.finalScore;
                 treatmentRounds.push(roundView(result.state, original.view.dealer, original.view.seed, 0, original.view.decisions));
                 for (const hand of original.state.playerHands) item.triggers += hand.finalScore?.criteria.filter(row =>
-                    row.id === treatment.category || (treatment.category === 'win' && row.id === 'viginti') || (treatment.category === 'loss' && row.id === 'bust')).length ?? 0;
+                    row.id === treatment.category || (treatment.category === 'win' && row.id === 'viginti') || (treatment.category === 'loss' && row.id === 'bust')).reduce((sum, row) => sum + row.count, 0) ?? 0;
             } else {
                 for (let round = 0; round < horizon; round++) {
                     const result = playRound(treatmentState, config, trial, round);

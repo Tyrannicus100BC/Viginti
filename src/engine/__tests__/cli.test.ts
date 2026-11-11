@@ -141,9 +141,9 @@ describe('CLI Simulator', () => {
             expect(output).toContain('Dealer');
         });
 
-        it('renders free pack rewards', () => {
+        it('renders free rewards', () => {
             const state = { ...startGame(), phase: 'pack_choice' as const, offeredPacks: ['raise_basic' as const] };
-            expect(renderState(state)).toContain('Free pack reward');
+            expect(renderState(state)).toContain('Free reward');
         });
     });
 

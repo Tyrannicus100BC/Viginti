@@ -39,7 +39,7 @@ export default function RaiseGallery() {
                         return <tr key={hand.id}><th>{hand.name}</th><td>{formatRange(ranges.regular.cash, '$')}</td><td>{formatRange(ranges.strong.cash, '$')}</td><td>{formatRange(ranges.regular.multPercent, '%')}</td><td>{formatRange(ranges.strong.multPercent, '%')}</td></tr>;
                     })}</tbody></table></div>
                 <p>Four-value ranges roll with 16% / 34% / 34% / 16% odds, from lowest to highest. Five-value ranges use 16% / 20% / 28% / 20% / 16%. The central values are more common. Regular Flush multipliers roll 1% / 2% / 3% with 42% / 42% / 16% odds; zero is excluded.</p>
-                <p>Tradeoff penalties target Lose 25% of the time, Bust 25%, and other hand types 50%. Lose and Bust each use: −{formatRange(RAISE_LOSS_PENALTY_RANGES.cash, '$')} or −{formatRange(RAISE_LOSS_PENALTY_RANGES.multPercent, '%')}. Other penalties use the targeted category’s regular range, except Pair drawbacks retain $3–6 or 2–5 percentage points. Viginti rolls independently from Win, using the same bonus ranges. Lose/Bust never roll as benefits. Multiplier values are percentage points.</p>
+                <p>Tradeoff penalties target Lose 25% of the time, Bust 25%, and other hand types 50%. Lose and Bust each use: -{formatRange(RAISE_LOSS_PENALTY_RANGES.cash, '$')} or -{formatRange(RAISE_LOSS_PENALTY_RANGES.multPercent, '%')}. Other penalties use the targeted category’s regular range, except Pair drawbacks retain $3–6 or 2–5 percentage points. Viginti rolls independently from Win, using the same bonus ranges. Lose/Bust never roll as benefits. Multiplier values are percentage points.</p>
             </details>
         </div>
     </main>;

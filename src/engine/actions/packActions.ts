@@ -14,7 +14,8 @@ import type { GameState } from '../GameState';
 import type { ActionResult } from '../engine';
 import { RelicManager } from '../../logic/relics/manager';
 import { SeededRNG } from '../rng';
-import { canAcquireRelic } from '../../logic/relics/inventory';
+import { acquireRelicEffect, canAcquireRelic, INITIAL_RELIC_SLOTS } from '../../logic/relics/inventory';
+import { generateRewardCardChoices, getRewardCard } from '../../logic/rewardCards';
 import { INITIAL_HAND_COUNT } from '../GameState';
 
 export function generatePackOffers(_rng: SeededRNG, tier: RewardTier = 'major'): PackId[] {
@@ -23,8 +24,7 @@ export function generatePackOffers(_rng: SeededRNG, tier: RewardTier = 'major'):
 
 /** Open the reward immediately; there is no pack-family selection screen. */
 export function openReward(state: GameState): ActionResult {
-    const packId = state.challengeRewards[0]?.kind === 'table_action' ? 'relic_boss'
-        : state.challengeRewards[0]?.tier === 'minor' ? 'mixed_minor' : 'mixed_major';
+    const packId = state.challengeRewards[0]?.tier === 'minor' ? 'mixed_minor' : 'mixed_major';
     return processOpenPack({ ...state, phase: 'pack_choice', offeredPacks: [packId] }, packId);
 }
 
@@ -62,12 +62,12 @@ export function processOpenPack(state: GameState, packId: PackId): ActionResult 
     if (pack.family === 'relic') choices = generateRelicPackChoices(rng, pack.offerCount, state.inventory, [], pack.quality, packId === 'relic_boss');
     if (pack.family === 'deck') choices = generatePackCardChoices(rng, pack.offerCount, state.deckProbabilities, pack.quality).map(card => card.id);
     if (pack.family === 'challenge') choices = generateChallengeCardChoices(rng, pack.offerCount, state.challengeStage, pack.quality).map(card => card.id);
-    if (pack.family === 'mixed') {
-        const families = packId === 'mixed_major'
-            ? ['raise', 'raise', 'raise', 'relic', 'relic'] as const
-            : packId === 'mixed_minor'
-                ? Array.from({ length: 3 }, () => rng.pick(['raise', 'deck', 'relic'] as const))
-                : Array.from({ length: pack.offerCount }, (_, index) => index < 3 ? (['raise', 'deck', 'relic'] as const)[index] : rng.pick(['raise', 'deck', 'relic'] as const));
+    if (pack.family === 'mixed' && (packId === 'mixed_major' || packId === 'mixed_minor')) {
+        choices = generateRewardCardChoices(rng, pack.offerCount, state.deckProbabilities, state.inventory, pack.quality).map(card => card.id);
+    } else if (pack.family === 'mixed') {
+        // Earlier mixed pack IDs remain available for imported runs.
+        const families = Array.from({ length: pack.offerCount }, (_, index) => index < 3
+            ? (['raise', 'deck', 'relic'] as const)[index] : rng.pick(['raise', 'deck', 'relic'] as const));
         for (const family of families) {
             let id: string | undefined;
             if (family === 'relic') id = generateRelicPackChoices(rng, 1, state.inventory, choices, pack.quality)[0];
@@ -79,9 +79,7 @@ export function processOpenPack(state: GameState, packId: PackId): ActionResult 
             }
             choices.push(id);
         }
-        if (packId === 'mixed_major') choices.push(rng.pick(['reward_deck_pack', 'reward_challenge_pack'] as const));
-        // Keep major choices grouped: raises, relics, and targeted packs.
-        if (packId !== 'mixed_major') choices = rng.shuffle(choices);
+        choices = rng.shuffle(choices);
     }
     return {
         nextState: {
@@ -218,10 +216,22 @@ export function processChoosePackCard(state: GameState, cardId: string): ActionR
     }
     const family = getPackDefinition(state.pendingPack.packId).family;
     let updated = state;
-    if ((family === 'relic' || family === 'mixed') && RelicManager.getRelicConfig(cardId)) {
+    const reward = getRewardCard(cardId);
+    if (reward && family === 'mixed') {
+        // Validate before changing anything; a reward's rows are one atomic choice.
+        if (reward.rows.some(row => row.kind === 'relic' && !canAcquireRelic(row.relicId, state.inventory))) return { nextState: state, events: [] };
+        for (const row of reward.rows) {
+            if (row.kind === 'raise') updated = { ...updated, handUpgrades: {
+                ...updated.handUpgrades, [row.raiseId]: (updated.handUpgrades[row.raiseId] ?? 0) + 1 } };
+            else if (row.kind === 'deck') updated = { ...updated, deckProbabilities: applyPackCard(updated.deckProbabilities, getPackCard(row.cardId)!) };
+            else updated = { ...updated, inventory: acquireRelicEffect(updated.inventory, row.relicId) };
+        }
+        updated = { ...updated, relicSlots: INITIAL_RELIC_SLOTS,
+            tableActionCharges: buildTableActionCharges(updated.inventory, updated.tableActionCharges),
+            tableActionHeldCards: buildTableActionHeldCards(updated.inventory, updated.tableActionHeldCards) };
+    } else if ((family === 'relic' || family === 'mixed') && RelicManager.getRelicConfig(cardId)) {
         if (!canAcquireRelic(cardId, state.inventory, state.relicSlots)) return { nextState: state, events: [] };
-        const relic = RelicManager.getRelicConfig(cardId)!;
-        const inventory = [...state.inventory, { id: cardId, state: { ...relic.properties } }];
+        const inventory = acquireRelicEffect(state.inventory, cardId);
         updated = { ...state, inventory,
             tableActionCharges: buildTableActionCharges(inventory, state.tableActionCharges),
             tableActionHeldCards: buildTableActionHeldCards(inventory, state.tableActionHeldCards) };

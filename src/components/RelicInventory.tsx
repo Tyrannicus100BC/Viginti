@@ -20,10 +20,8 @@ export const RelicInventory: React.FC<RelicInventoryProps> = ({
     const slotCount = Math.max(entries.length, getSideSlotCount(inventoryKind, relicSlots));
     const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
     const right = inventoryKind === 'right';
-    const hovered = hoveredIndex === null ? null : entries[hoveredIndex];
-    const hoveredConfig = hovered ? RelicManager.getRelicConfig(hovered.id) : null;
 
-    return <div aria-label={right ? 'Right relic slots' : 'Left relic slots'} style={{
+    return <div aria-label={right ? 'Right relic slots' : 'Active reward effects'} style={{
         display: 'flex', flexDirection: 'column', gap: 10, width: '100%',
         alignItems: right ? 'flex-end' : 'flex-start', position: 'relative',
         pointerEvents: 'none', isolation: 'isolate', zIndex: 2000
@@ -66,12 +64,12 @@ export const RelicInventory: React.FC<RelicInventoryProps> = ({
                     color: active ? '#f1c40f' : instance.state?.used_this_round ? '#4a5568' : '#ecf0f1',
                     fontWeight: 'bold', fontSize: '0.9rem', whiteSpace: 'nowrap', textShadow: '0 1px 2px rgba(0,0,0,0.8)'
                 }}>{config.name}</div>
+                {hoveredIndex === index && <RelicTooltip relic={config} displayValues={instance.state}
+                    isRightAligned={right} layout="horizontal" direction={right ? 'rtl' : 'ltr'}
+                    style={{ position: 'absolute', top: '50%', transform: 'translateY(-50%)',
+                        ...(right ? { right: -21 } : { left: -21 }), pointerEvents: 'none', zIndex: 50,
+                        opacity: 1 }} />}
             </div>;
         })}
-        {hovered && hoveredConfig && <RelicTooltip relic={hoveredConfig} displayValues={hovered.state}
-            isRightAligned={right} layout="horizontal" direction={right ? 'rtl' : 'ltr'}
-            style={{ position: 'absolute', top: hoveredIndex! * 50 - 11,
-                ...(right ? { right: -21 } : { left: -21 }), pointerEvents: 'none', zIndex: 50,
-                opacity: 1 }} />}
     </div>;
 };

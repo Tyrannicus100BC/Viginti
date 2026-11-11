@@ -1,14 +1,17 @@
+import { animationDuration } from '../utils/animationTiming';
 import { formatCash, formatChipMultiplier } from '../logic/formatters';
 import { MAX_HAND_CARDS } from '../logic/rules';
 
 
 import React, { useEffect, useState, useRef, useLayoutEffect } from 'react';
-import type { PlayerHand } from '../types';
+import type { PlayerHand, ScoringDetail } from '../types';
 import { PlayingCard } from './PlayingCard';
+import { ScoreBreakdown } from './ScoreBreakdown';
 import styles from './Hand.module.css';
 
 interface HandProps {
   hand: PlayerHand;
+  isStanding?: boolean;
   onSelect?: () => void;
   canSelect?: boolean;
   baseDelay?: number;
@@ -30,11 +33,11 @@ interface HandProps {
 
 import { useGameStore } from '../store/gameStore';
 
-export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay = 0, stagger = true, isScoringFocus = false, isEnlarged = false, isSelected = false, id, onDealAnimationComplete, onCardDealSound, onCardFlipSound, onCardDiscardSound, selectableCardIds, onCardSelect, tableActionColor, hiddenCardIds, entryAnimationOverrides }) => {
+export const Hand: React.FC<HandProps> = ({ hand, isStanding = false, onSelect, canSelect, baseDelay = 0, stagger = true, isScoringFocus = false, isEnlarged = false, isSelected = false, id, onDealAnimationComplete, onCardDealSound, onCardFlipSound, onCardDiscardSound, selectableCardIds, onCardSelect, tableActionColor, hiddenCardIds, entryAnimationOverrides }) => {
   const triggerScoringRow = useGameStore(state => state.triggerScoringRow);
   const triggerVigintiSound = useGameStore(state => state.triggerVigintiSound);
   const playScoreRowSfx = useGameStore(state => state.playScoreRowSfx);
-  // Determine if we should show overlay (bust or result revealed)
+  // Determine the terminal hand result to show over the cards.
   const isViginti = hand.blackjackValue === 21;
   const isDealerHand = hand.id === -1;
   const isFull = !isDealerHand && hand.cards.length >= MAX_HAND_CARDS;
@@ -48,6 +51,13 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
   const scoringCriteria = useGameStore(state => state.scoringCriteria[hand.id] || []);
   const activeHighlightIds = useGameStore(state => state.activeHighlightIds);
   const scoringHandIndex = useGameStore(state => state.scoringHandIndex);
+  const isProcessingEvents = useGameStore(state => state.isProcessingEvents);
+  const [inspection, setInspection] = useState<{ index: number; anchor: HTMLDivElement } | null>(null);
+  const canInspectScores = !isDealerHand && !!hand.finalScore && !isProcessingEvents && scoringHandIndex === -1;
+  const inspectedRow: ScoringDetail | undefined = canInspectScores && inspection ? hand.finalScore?.criteria[inspection.index] : undefined;
+  const closeInspection = () => {
+    setInspection(null);
+  };
   
   // Derived local animation flags
   const [displayScore, setDisplayScore] = useState(hand.blackjackValue);
@@ -170,7 +180,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
 
           const timer = setTimeout(() => {
               setVisualCards(prev => prev.filter(vc => !vc.isDiscarding));
-          }, 550 + maxDelay); // Animation duration (0.42s) + buffer + stagger
+          }, animationDuration(550 + maxDelay)); // Animation duration (0.42s) + buffer + stagger
           return () => clearTimeout(timer);
       }
   }, [visualCards]);
@@ -194,7 +204,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
           });
 
           // Convert to ms and add animation duration buffer (600ms)
-          const timeoutDuration = (maxDelayInSeconds * 1000) + 600;
+          const timeoutDuration = animationDuration((maxDelayInSeconds * 1000) + 600);
 
           const timer = setTimeout(() => {
               setVisualCards(prev => prev.map(vc => {
@@ -265,7 +275,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
     if (hand.id === -1) {
       if (stagger) {
         // Delay matches baseDelay + wait for second card to flip (roughly 0.8s)
-        const delay = (baseDelay + 0.8) * 1000;
+        const delay = animationDuration((baseDelay + 0.8) * 1000);
         const timer = setTimeout(() => setIsScoreVisible(true), delay);
         return () => clearTimeout(timer);
       } else {
@@ -282,7 +292,6 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
     }
   }, [hand.blackjackValue, visualCards]);
 
-  const animationSpeed = useGameStore(state => state.animationSpeed);
 
 // Local scoring animation removed - logic moved to EventPlayer.ts
 
@@ -331,8 +340,9 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
   );
   const showBustOverlay = hand.isBust && !hasPendingDealerDealAnimation;
   const showVigintiOverlay = isViginti && !hand.isBust && !hasPendingDealerDealAnimation;
+  const showStandOverlay = isStanding && !hand.isBust && !isViginti && !hasPendingDealerDealAnimation;
   const showOverlay =
-    (showBustOverlay || showVigintiOverlay || hand.isDoubled || hand.resultRevealed) &&
+    (showBustOverlay || showVigintiOverlay || showStandOverlay || hand.isDoubled || hand.resultRevealed) &&
     hand.cards.length > 0;
   const overlayFanDepthPx = Math.max(0, visualCards.length - 1);
   const useOverlayScrim = isDealerHand && showOverlay;
@@ -358,10 +368,29 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
           id={isScoringFocus ? 'score-rows-zone' : undefined}
           className={styles.scoringList}
         >
-          {scoringCriteria.map((item: any, idx: number) => (
+          {scoringCriteria.map((item: ScoringDetail, idx: number) => (
             <div
               key={`${item.id}-${idx}`}
-              className={`${styles.scoringItem} ${visibleScoringRowIndices.includes(idx) ? styles.visible : ''}`}
+              className={`${styles.scoringItem} ${visibleScoringRowIndices.includes(idx) ? styles.visible : ''} ${canInspectScores && visibleScoringRowIndices.includes(idx) ? styles.inspectable : ''} ${inspectedRow && inspection?.index === idx ? styles.inspected : ''}`}
+              tabIndex={canInspectScores && visibleScoringRowIndices.includes(idx) ? 0 : undefined}
+              aria-describedby={inspectedRow && inspection?.index === idx ? `score-breakdown-${hand.id}` : undefined}
+              onClick={event => { if (canInspectScores) event.stopPropagation(); }}
+              onMouseEnter={event => {
+                if (!canInspectScores) return;
+                setInspection({ index: idx, anchor: event.currentTarget });
+              }}
+              onMouseLeave={closeInspection}
+              onFocus={event => {
+                if (!canInspectScores) return;
+                setInspection({ index: idx, anchor: event.currentTarget });
+              }}
+              onBlur={closeInspection}
+              onKeyDown={event => {
+                if (event.key === 'Escape') {
+                  event.stopPropagation();
+                  setInspection(null);
+                }
+              }}
             >
               <div className={`${styles.itemName} ${item.id === 'viginti' ? styles.isViginti : ''}`}>
                 {item.name}
@@ -381,6 +410,8 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
           ))}
         </div>
       )}
+      {inspectedRow && inspection && <ScoreBreakdown row={inspectedRow} anchor={inspection.anchor}
+        id={`score-breakdown-${hand.id}`} />}
 
       <div
         className={`${styles.hand} ${canSelect ? styles.activeTarget : ''} ${isSelected ? styles.selected : ''}`}
@@ -422,7 +453,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
 
               // Determine highlighting first to use in placement
               const isHighlighted = !!(activeHighlightIds && activeHighlightIds.includes(card.id));
-              const shouldHighlight = isHighlighted && isScoringFocus;
+              const shouldHighlight = inspectedRow ? !!inspectedRow.cardIds?.includes(card.id) : isHighlighted && isScoringFocus;
               const isTableActionSelectable = !!(selectableCardIds && selectableCardIds.includes(card.id));
               const isHidden = !!(hiddenCardIds && hiddenCardIds.includes(card.id));
               const handleCardClick = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -487,7 +518,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
                     ...(isTableActionSelectable && tableActionColor ? { '--table-action-color': tableActionColor } : {})
                   } as any}
                 >
-                  <div className={isDiscarding ? styles.discardingCard : ''} style={{ width: '100%', height: '100%', animationDelay: `${discardDelay}s` }}>
+                  <div className={isDiscarding ? styles.discardingCard : ''} style={{ width: '100%', height: '100%', animationDelay: `${animationDuration(discardDelay)}s` }}>
                   {isDoubleCard ? (
                     <div style={{
                       transform: shouldHighlight ? 'rotate(0deg)' : 'translateY(28px) rotate(90deg)',
@@ -496,7 +527,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      transition: 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)'
+                      transition: 'transform calc(0.3s * var(--animation-time-scale, 1)) cubic-bezier(0.34, 1.56, 0.64, 1)'
                     }}>
                       <PlayingCard
                         card={card}
@@ -548,7 +579,7 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
 
           {/* Overlay text on cards */}
           {showOverlay && (
-            <div className={`${styles.overlayText} ${isScoringFocus ? styles.faded : ''}`}>
+            <div className={`${styles.overlayText} ${isScoringFocus || inspectedRow ? styles.faded : ''}`}>
 
               {showBustOverlay && (
                 <div className={styles.overlayItem}>
@@ -559,6 +590,11 @@ export const Hand: React.FC<HandProps> = ({ hand, onSelect, canSelect, baseDelay
               {showVigintiOverlay && (
                 <div className={styles.overlayItem}>
                   <div className={`${styles.vigintiOverlay} ${styles.slamEnter}`}>VIGINTI</div>
+                </div>
+              )}
+              {showStandOverlay && (
+                <div className={styles.overlayItem}>
+                  <div className={`${styles.standOverlay} ${styles.slamEnter}`}>STAND</div>
                 </div>
               )}
               {isWin && !isViginti && !hand.isBust && (

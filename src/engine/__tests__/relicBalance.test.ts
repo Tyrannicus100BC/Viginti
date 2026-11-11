@@ -190,8 +190,8 @@ describe('relic balance', () => {
         expect(useGameBridge.getState().loadGameState(JSON.stringify(legacy))).toBe(true);
         const loaded = useGameBridge.getState().gameState;
         const states = Object.fromEntries(loaded.inventory.map(relic => [relic.id, relic.state]));
-        expect(states.faded_tag).toEqual({ amount: 0.25, decay_amount: 0.05 });
-        expect(states.faded_bill).toEqual({ amount: 20, decay_amount: 10 });
+        expect(states.faded_tag).toBeUndefined(); // Oldest effects expire when importing more than four.
+        expect(states.faded_bill).toBeUndefined();
         expect(states.lucky_acorn.bonus_mult).toBe(0.1);
         expect(states.safety_net).toEqual({ bonus_mult: 0.05, armed: true });
         expect(states.second_chance).toEqual({ extra_draw: 1, pending_bonus: true });

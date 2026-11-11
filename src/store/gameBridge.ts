@@ -3,7 +3,7 @@ import { createChallenges, CHALLENGE_ROUNDS } from '../engine/challenges';
 import type { Challenge, ChallengeReward } from '../engine/challenges';
 import { generatePackOffers } from '../engine/actions/packActions';
 import { SeededRNG } from '../engine/rng';
-import { INITIAL_RELIC_SLOTS } from '../logic/relics/inventory';
+import { capRelicEffects, INITIAL_RELIC_SLOTS } from '../logic/relics/inventory';
 import { normalizeRelicInstance } from '../logic/relics/state';
 import { normalizeDeckProbabilities } from '../logic/specialCards';
 import { getPackDefinition, type PackId, type PendingPack } from '../logic/packs';
@@ -97,9 +97,8 @@ interface UIState {
     dealerVisible: boolean;
     anteIncrease: { previousAnte: number; ante: number } | null;
 
-    // Dealer messages
-    dealerMessage: string | null;
-    dealerMessageExiting: boolean;
+    // Terminal dealer hand presentation
+    dealerHasStood: boolean;
 
     // Scoring animation
     scoringHandIndex: number;
@@ -230,8 +229,7 @@ const INITIAL_UI: UIState = {
     dealerVisible: false,
     anteIncrease: null,
     departedChallengeIds: [],
-    dealerMessage: null,
-    dealerMessageExiting: false,
+    dealerHasStood: false,
     scoringHandIndex: -1,
     visibleScoringRowIndices: {},
     scoringRowValues: {},
@@ -594,9 +592,9 @@ export const useGameBridge = create<GameBridgeState>((set, get) => {
                 // or assume it's the pure GameState.
                 
                 const rawState = parsed.gameState || parsed;
-                const inventory: RelicInstance[] = rawState.inventory
+                const inventory: RelicInstance[] = capRelicEffects(rawState.inventory
                     .filter((instance: RelicInstance) => RelicManager.getRelicConfig(instance.id))
-                    .map(normalizeRelicInstance);
+                    .map(normalizeRelicInstance));
                 const actionRelics = inventory.filter(instance => RelicManager.getRelicConfig(instance.id)?.tableAction);
                 // Drop the retired economy while retaining earned cards and relics.
                 const migratedState = { ...rawState };
@@ -662,8 +660,7 @@ export const useGameBridge = create<GameBridgeState>((set, get) => {
                     isReshuffling: false,
                     allWinnersEnlarged: false,
                     dealerVisible: showDealer,
-                    dealerMessage: null,
-                    dealerMessageExiting: false,
+                    dealerHasStood: nextGameState.dealer.isRevealed && !isDealerTurn && nextGameState.dealer.cards.length > 0,
                     scoringHandIndex: -1,
                     visibleScoringRowIndices: {},
                     scoringRowValues: {},

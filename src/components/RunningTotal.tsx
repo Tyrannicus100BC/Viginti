@@ -12,7 +12,7 @@ export const RunningTotal: React.FC = () => {
         <div className={styles.container}>
             <div className={styles.item}>
                 <span className={styles.label}>Chips</span>
-                <span className={`${styles.value} ${styles.chips}`} style={runningSummary.chips < 0 ? { color: '#ff4444' } : undefined}>{Math.abs(runningSummary.chips)}</span>
+                <span className={`${styles.value} ${styles.chips}`} style={runningSummary.chips < 0 ? { color: '#ff4444' } : undefined}>{runningSummary.chips}</span>
             </div>
             <div className={styles.x}>X</div>
             <div className={styles.item}>

@@ -1,0 +1,32 @@
+.tooltip {
+    position: fixed;
+    z-index: 6100;
+    pointer-events: none;
+    max-width: calc(100vw - 16px);
+    max-height: calc(100vh - 16px);
+    overflow-y: auto;
+    box-sizing: border-box;
+    padding: 10px;
+    border: 1px solid #4b5658;
+    border-radius: 10px;
+    background: #182126;
+    color: #ecf0f1;
+    box-shadow: 0 8px 28px #0009;
+    font-size: 12px;
+    line-height: 1.45;
+    animation: appear 120ms ease-out;
+}
+.breakdown { width: 100%; table-layout: fixed; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.nameColumn { width: var(--score-name-width, 60%); }
+.cashColumn { width: var(--score-cash-width, 20%); }
+.breakdown th, .breakdown td { padding-left: 0; padding-right: 0; }
+.breakdown th { text-align: left; font-weight: 500; }
+.breakdown thead th { padding-bottom: 6px; color: #a8b6bd; font-size: 10px; text-transform: uppercase; letter-spacing: .06em; }
+.breakdown td, .breakdown thead th:not(:first-child) { text-align: right; white-space: nowrap; }
+.breakdown tr > :nth-child(2) { padding-right: var(--score-cash-gap, 0px); }
+.breakdown tbody th, .breakdown tbody td { padding-top: 7px; padding-bottom: 7px; vertical-align: top; border-top: 1px solid #ffffff0d; }
+.cash { color: #4ade80; }
+.mult { color: #fbcd5e; }
+.negative { color: #ff6b6b; }
+@keyframes appear { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .tooltip { animation: none; } }

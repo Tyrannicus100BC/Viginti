@@ -19,7 +19,7 @@ export function processDebugAdvanceRound(state: GameState): ActionResult {
     const completion = completeChallenges(advanceChallenges(state.challenges, { rounds: 1 }));
     const rewards = [...completion.rewards];
     if (completion.advance && state.bossId) {
-        rewards.push({ id: `boss-${state.challengeStage}`, title: 'Boss Defeated', tier: 'major', kind: 'table_action' });
+        rewards.push({ id: `boss-${state.challengeStage}`, title: 'Boss Defeated', tier: 'major' });
     }
     const dealsTaken = state.dealsTaken + 1;
     return {

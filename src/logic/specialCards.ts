@@ -4,10 +4,10 @@ import type { SeededRNG } from '../engine/rng';
 export type SpecialType = SpecialWeight['type'];
 export const SPECIAL_TYPES: readonly SpecialType[] = ['chip', 'mult', 'score'];
 export const SPECIAL_LABELS: Record<SpecialType, string> = {
-    chip: 'Cash Bonus', mult: 'Mult Bonus', score: 'Value Reduction',
+    chip: 'Cash Cards', mult: 'Mult Cards', score: 'Value Cards',
 };
 export const SPECIAL_COLORS: Record<SpecialType, string> = {
-    chip: '#4ade80', mult: '#facc15', score: '#c084fc',
+    chip: '#4ade80', mult: '#fb923c', score: '#c084fc',
 };
 
 /** Older saves stored one rate per strength; pool them without losing the total rate. */

@@ -53,8 +53,8 @@ export const PACKS: readonly PackDefinition[] = [...PACK_FAMILIES.flatMap(family
         family, name: `${family[0].toUpperCase() + family.slice(1)} Pack`, quality,
         rarity: (['Common', 'Uncommon', 'Rare'] as const)[tier], cost: counts.cost + tier * 20,
     })))),
-    { id: 'mixed_major', family: 'mixed', name: 'Major Pack', quality: 'average', rarity: 'Common', cost: 0, offerCount: 6, pickCount: 1, stockWeight: 0 },
-    { id: 'mixed_minor', family: 'mixed', name: 'Minor Pack', quality: 'average', rarity: 'Common', cost: 0, offerCount: 3, pickCount: 1, stockWeight: 0 },
+    { id: 'mixed_major', family: 'mixed', name: 'Major Reward', quality: 'average', rarity: 'Common', cost: 0, offerCount: 6, pickCount: 1, stockWeight: 0 },
+    { id: 'mixed_minor', family: 'mixed', name: 'Minor Reward', quality: 'average', rarity: 'Common', cost: 0, offerCount: 3, pickCount: 1, stockWeight: 0 },
     { id: 'relic_boss', family: 'relic', name: 'Boss Reward', quality: 'average', rarity: 'Common', cost: 0, offerCount: 2, pickCount: 1, stockWeight: 0 },
 ];
 

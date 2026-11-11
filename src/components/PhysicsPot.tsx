@@ -1,3 +1,4 @@
+import { animationDuration } from '../utils/animationTiming';
 import { formatCash, formatChipMultiplier } from '../logic/formatters';
 import React, { useEffect, useState, useRef } from 'react';
 import styles from './PhysicsPot.module.css';
@@ -32,7 +33,7 @@ const [isPulsing, setIsPulsing] = useState(false);
     if (totalValue !== prevValueRef.current) {
       if (totalValue > prevValueRef.current) {
         setIsPulsing(true);
-        const timer = setTimeout(() => setIsPulsing(false), 200);
+        const timer = setTimeout(() => setIsPulsing(false), animationDuration(200));
         prevValueRef.current = totalValue;
         return () => clearTimeout(timer);
       }
@@ -63,7 +64,7 @@ const [isPulsing, setIsPulsing] = useState(false);
     <div 
       className={`${styles.container} ${isEmpty ? styles.empty : ''}`}
       style={{
-        transition: isCollecting ? 'opacity 0.8s ease' : 'transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.8s ease'
+        transition: isCollecting ? 'opacity calc(0.8s * var(--animation-time-scale, 1)) ease' : 'transform calc(0.2s * var(--animation-time-scale, 1)) cubic-bezier(0.34, 1.56, 0.64, 1), opacity calc(0.8s * var(--animation-time-scale, 1)) ease'
       }}
     >
       <div 

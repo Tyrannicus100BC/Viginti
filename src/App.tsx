@@ -1,3 +1,4 @@
+import { animationDuration } from './utils/animationTiming';
 import type { RelicInstance } from './logic/relics/types';
 import { getBoss, getBustLimit, getDealerBustLimit } from './engine/bosses';
 import { canPlayHand } from './engine/economy';
@@ -125,8 +126,7 @@ export default function App() {
 
         isShaking,
 
-        dealerMessage,
-        dealerMessageExiting,
+        dealerHasStood,
         drawnCards,
         selectedDrawIndex,
         redrawDiscard,
@@ -744,14 +744,14 @@ export default function App() {
                 discards.forEach((_, discardIndex) => {
                     const timeoutId = window.setTimeout(() => {
                         playCardPlace();
-                    }, discardIndex * 40);
+                    }, animationDuration(discardIndex * 40));
                     discardTimeouts.push(timeoutId);
                 });
 
                 // Clear after animation
                 discardClearTimeout = window.setTimeout(() => {
                     setDiscardingCards([]);
-                }, 350);
+                }, animationDuration(350));
             }
         }
 
@@ -778,7 +778,7 @@ export default function App() {
         ]);
         const timeoutId = window.setTimeout(() => {
             setRedrawDiscardingCards(prev => prev.filter(entry => entry.card.id !== redrawDiscard.card.id));
-        }, 350);
+        }, animationDuration(350));
         redrawDiscardTimeouts.current.push(timeoutId);
     }, [redrawDiscard, drawnCards.length, playCardPlace]);
 
@@ -921,7 +921,7 @@ export default function App() {
                 holdPickupTimeoutRef.current = null;
                 return null;
             });
-        }, HOLD_PICKUP_DURATION_MS + 240);
+        }, animationDuration(HOLD_PICKUP_DURATION_MS + 240));
     };
 
     const handleHandClick = (index: number) => {
@@ -945,7 +945,7 @@ export default function App() {
                             delete next[heldCard.id];
                             return next;
                         });
-                    }, 900);
+                    }, animationDuration(900));
                     holdPlaceOverrideTimeoutsRef.current.push(timeoutId);
                 }
             }
@@ -964,7 +964,7 @@ export default function App() {
         const playerRect = playerEl.getBoundingClientRect();
         const dealerRect = dealerEl.getBoundingClientRect();
         const wrapperRect = wrapper.getBoundingClientRect();
-        const durationMs = 650;
+        const durationMs = animationDuration(650);
 
         if (swapTimeoutRef.current) {
             window.clearTimeout(swapTimeoutRef.current);
@@ -1457,7 +1457,8 @@ export default function App() {
             className={`${styles.container} ${isShaking ? 'shake-screen red-tint' : ''}`}
             onClick={handleGlobalClick}
             style={{
-                '--header-transition-duration': `${0.8 / animationSpeed}s`
+                '--animation-time-scale': animationDuration(1),
+                '--header-transition-duration': `${animationDuration(0.8, animationSpeed)}s`
             } as React.CSSProperties}
         >
             <div className={styles.topNavContainer}>
@@ -1611,10 +1612,10 @@ export default function App() {
                         <div className={styles.sidebarHeading}>
                             {debugEnabled ? <button type="button"
                                 className={`${styles.zoneLabel} ${styles.manageDebugBtn} ${styles.headingDebugButton}`}
-                                aria-label={`Manage relics, ${passiveRelicCount} of ${relicSlots}`}
+                                aria-label={`Debug effects, ${passiveRelicCount} of ${relicSlots}`}
                                 onClick={event => { event.stopPropagation(); setShowRelicStore(true); }}
-                            >Relics {passiveRelicCount} of {relicSlots}</button> :
-                                <span className={styles.zoneLabel}>Relics {passiveRelicCount} of {relicSlots}</span>}
+                            >Effects {passiveRelicCount} of {relicSlots}</button> :
+                                <span className={styles.zoneLabel}>Effects {passiveRelicCount} of {relicSlots}</span>}
                         </div>
                         <RelicInventory inventoryKind="left" />
                     </div>
@@ -1671,6 +1672,7 @@ export default function App() {
                                 <Hand
                                     key={`dealer-${dealerHandProps.id}-${deal}-${dealsTaken}`}
                                     hand={dealerHandProps}
+                                    isStanding={dealerHasStood}
                                     baseDelay={dealer.isRevealed ? 0 : 0.4}
                                     stagger={!dealer.isRevealed}
                                     onDealAnimationComplete={isInitialDeal ? onInitialDealAnimationsComplete : undefined}
@@ -1706,14 +1708,6 @@ export default function App() {
                             )}
                         </div>
 
-                        {dealerMessage && (
-                            <div
-                                className={`${styles.dealerMessage} ${dealerMessageExiting ? styles.dealerMessageExiting : ''}`}
-                                style={{ top: POT_TOP_Y }}
-                            >
-                                {dealerMessage}
-                            </div>
-                        )}
                         <div
                             id="dealer-action-anchor"
                             className={styles.dealerActionAnchor}
@@ -1983,7 +1977,7 @@ export default function App() {
                             </div>
                         </div>
 
-                    <div className={styles.playerZone} style={{ opacity: areHandsVisible ? 1 : 0, transition: 'opacity 0.5s', pointerEvents: areHandsVisible ? 'auto' : 'none' }}>
+                    <div className={styles.playerZone} style={{ opacity: areHandsVisible ? 1 : 0, transition: 'opacity calc(0.5s * var(--animation-time-scale, 1))', pointerEvents: areHandsVisible ? 'auto' : 'none' }}>
                             <div id="player-hands-zone" className={styles.playerHandsContainer}>
                                 {playerHands.map((hand, idx) => {
                                     const isHandActionMode = interactionMode === 'select_hand' && activeTableActionId !== null;
@@ -2187,7 +2181,7 @@ export default function App() {
                             '--hold-from-scale': `${holdPickupAnimation.fromScale}`,
                             // @ts-ignore
                             '--hold-to-scale': `${holdPickupAnimation.toScale}`,
-                            animationDuration: `${HOLD_PICKUP_DURATION_MS}ms`
+                            animationDuration: `${animationDuration(HOLD_PICKUP_DURATION_MS)}ms`
                         } as React.CSSProperties}
                     >
                         <PlayingCard

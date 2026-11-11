@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { PACKS, PACK_FAMILIES, PACK_QUALITY_LABELS, describePackChoices, type PackId } from '../logic/packs';
+import { PACKS, describePackChoices, type PackId } from '../logic/packs';
 import { useGameBridge } from '../store/gameBridge';
-import { PACK_FAMILY_COLORS, PACK_FAMILY_LABELS, RaisePackArt } from './RaisePackArt';
+import { PACK_FAMILY_COLORS, RaisePackArt } from './RaisePackArt';
 import styles from './DebugPacks.module.css';
 
 export function DebugPacks({ onClose }: { onClose: () => void }) {
@@ -45,27 +45,27 @@ export function DebugPacks({ onClose }: { onClose: () => void }) {
             }}>
             <header className={styles.header}>
                 <div>
-                    <h2 id="debug-packs-title">Packs <span>(Debug)</span></h2>
-                    <p id="debug-packs-description">Open any pack, then return to your current round.</p>
+                    <h2 id="debug-packs-title">Rewards <span>(Debug)</span></h2>
+                    <p id="debug-packs-description">Choose a reward, then return to your current round.</p>
                 </div>
                 <button className={styles.close} aria-label="Close debug packs" onClick={onClose}>×</button>
             </header>
             <p><a href="/raises" target="_blank" rel="noreferrer">Raise Gallery — preview nine cards by rarity ↗</a></p>
             <div className={styles.families}>
-                {PACK_FAMILIES.map(family => <section key={family}>
-                    <h3>{PACK_FAMILY_LABELS[family]} Packs</h3>
+                <section>
+                    <h3>Reward Cards</h3>
                     <div className={styles.packs}>
-                        {PACKS.filter(pack => pack.family === family).map(pack => <button
+                        {PACKS.filter(pack => pack.id === 'mixed_major' || pack.id === 'mixed_minor').map(pack => <button
                             key={pack.id} type="button" disabled={processing}
                             className={styles.pack} aria-label={`Open ${pack.name}, ${describePackChoices(pack)} (debug)`}
-                            style={{ '--pack-color': PACK_FAMILY_COLORS[family] } as CSSProperties}
+                            style={{ '--pack-color': PACK_FAMILY_COLORS.mixed } as CSSProperties}
                             onClick={() => void open(pack.id)}>
-                            <RaisePackArt family={family} />
-                            <strong>{PACK_QUALITY_LABELS[pack.quality]} choices</strong>
+                            <RaisePackArt family="mixed" />
+                            <strong>{pack.id === 'mixed_major' ? 'Major Reward' : 'Minor Reward'}</strong>
                             <span>Choose {pack.pickCount} of {pack.offerCount}</span>
                         </button>)}
                     </div>
-                </section>)}
+                </section>
             </div>
             {error && <p className={styles.error} role="alert">{error}</p>}
         </div>

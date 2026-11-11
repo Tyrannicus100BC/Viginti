@@ -10,8 +10,7 @@ import { generateRelicPackChoices } from '../../logic/relicPacks';
 import { generateShopItems } from '../../logic/rewards/generator';
 import { SeededRNG } from '../rng';
 import { evaluateHandScore, getBlackjackScore } from '../../logic/scoring';
-import { getRaise } from '../../logic/handScoring';
-import { getPackCard } from '../../logic/packCards';
+import { getRewardCard } from '../../logic/rewardCards';
 import { getPackDefinition, getTargetedPackReward, PACKS, rollPackDefinition } from '../../logic/packs';
 import { useGameBridge } from '../../store/gameBridge';
 
@@ -23,29 +22,25 @@ const boss = (): GameState => ({ ...finishOpeningPack(start()), challengeStage: 
 afterEach(() => useGameBridge.getState().reset());
 
 describe('direct mixed rewards', () => {
-    it('opens six major choices: three raises, two passive relics, and one random targeted pack', () => {
-        const seenTargetedPacks = new Set<string>();
+    it('opens six unified major rewards with mixed rows and no nested packs', () => {
         for (let seed = 1; seed <= 100; seed++) {
             const state = start(seed);
             expect(state.offeredPacks).toEqual([]);
             expect(state.pendingPack).toEqual({ packId: 'mixed_major', picksRemaining: 1 });
             expect(state.pendingPackChoices).toHaveLength(6);
             expect(new Set(state.pendingPackChoices).size).toBe(6);
-            expect(state.pendingPackChoices.filter(id => getRaise(id))).toHaveLength(3);
-            const relics = state.pendingPackChoices.flatMap(id => RelicManager.getRelicConfig(id) ?? []);
-            expect(relics).toHaveLength(2);
-            expect(relics.every(relic => !relic.tableAction)).toBe(true);
-            const targeted = state.pendingPackChoices.filter(id => getTargetedPackReward(id));
-            expect(targeted).toHaveLength(1);
-            seenTargetedPacks.add(targeted[0]);
+            for (const id of state.pendingPackChoices) {
+                const reward = getRewardCard(id)!;
+                expect(reward).toBeDefined();
+                expect(new Set(reward.rows.map(row => row.kind)).size).toBeGreaterThanOrEqual(2);
+                expect(getTargetedPackReward(id)).toBeUndefined();
+            }
             expect(start(seed)).toEqual(state);
         }
-        expect(seenTargetedPacks).toEqual(new Set(['reward_deck_pack', 'reward_challenge_pack']));
     });
 
-    it.each(['reward_deck_pack', 'reward_challenge_pack'])('opens %s as the one selected major reward, surviving import', id => {
-        const seed = Array.from({ length: 100 }, (_, index) => index + 1).find(seed => start(seed).pendingPackChoices.includes(id))!;
-        let state = act(start(seed), { type: 'choose_pack_card', cardId: id });
+    it.each(['reward_deck_pack', 'reward_challenge_pack'])('resumes a legacy %s offer through import', id => {
+        let state = act({ ...start(), pendingPackChoices: [id] }, { type: 'choose_pack_card', cardId: id });
         expect(state.pendingPack?.packId).toBe(id === 'reward_deck_pack' ? 'deck_basic' : 'challenge_basic');
         expect(state.pendingPackChoices).toHaveLength(3);
         expect(state.pendingPack?.picksRemaining).toBe(id === 'reward_deck_pack' ? 1 : 2);
@@ -92,7 +87,7 @@ describe('direct mixed rewards', () => {
         expect(rollPackDefinition(.7, 'challenge')).toMatchObject({ id: 'challenge_mega', pickCount: 2, offerCount: 5 });
     });
 
-    it('draws three independent random minor rewards with no challenges or table actions', () => {
+    it('draws three unified minor rewards with no challenges or table actions', () => {
         const families = new Set<string>();
         let repeatedFamily = false;
         for (let seed = 1; seed <= 100; seed++) {
@@ -100,7 +95,7 @@ describe('direct mixed rewards', () => {
             const state = act({ ...base, phase: 'deal_over', challengeRewards: [{ id: 'side', tier: 'minor', title: 'Side' }] }, { type: 'deal' });
             expect(state.pendingPackChoices).toHaveLength(3);
             expect(state.pendingPack?.picksRemaining).toBe(1);
-            const types = state.pendingPackChoices.map(id => getRaise(id) ? 'raise' : getPackCard(id) ? 'deck' : 'relic');
+            const types = state.pendingPackChoices.flatMap(id => getRewardCard(id)!.rows.map(row => row.kind));
             types.forEach(type => families.add(type));
             repeatedFamily ||= new Set(types).size < 3;
             expect(state.pendingPackChoices.some(id => getTargetedPackReward(id) || id.startsWith('challenge_') || RelicManager.getRelicConfig(id)?.tableAction)).toBe(false);
@@ -125,14 +120,14 @@ describe('boss cadence and rewards', () => {
             const currentAnte = state.ante;
             state = finishOpeningPack(state);
             if (isBossStage(stage)) {
-                expect(state.pendingPack).toEqual({ packId: 'relic_boss', picksRemaining: 1 });
-                expect(state.pendingPackChoices).toHaveLength(2);
-                expect(state.pendingPackChoices.every(id => !!RelicManager.getRelicConfig(id)?.tableAction)).toBe(true);
+                expect(state.pendingPack).toEqual({ packId: 'mixed_major', picksRemaining: 1 });
+                expect(state.pendingPackChoices).toHaveLength(6);
+                expect(state.pendingPackChoices.every(id => !!getRewardCard(id))).toBe(true);
                 expect(state.ante).toBe(currentAnte);
                 expect(getBustLimit(state)).toBe(25);
                 const id = state.pendingPackChoices[0];
                 state = act(state, { type: 'choose_pack_card', cardId: id });
-                expect(state.tableActionCharges[id]).toBe(RelicManager.getRelicConfig(id)!.tableAction!.maxCharges);
+                expect(state.pendingPack).toBeNull();
                 state = act(state, { type: 'finish_pack' });
             }
             expect(state.challengeStage).toBe(stage + 1);
@@ -140,16 +135,16 @@ describe('boss cadence and rewards', () => {
         }
     });
 
-    it('excludes table actions from all normal pools and allows boss choices with six passive relics', () => {
+    it('excludes table actions from all normal pools and allows boss rewards with four active effects', () => {
         const passives = RelicManager.getAllRelics().filter(relic => !relic.tableAction);
         expect(generateRelicPackChoices(new SeededRNG(1), 100, []).every(id => !RelicManager.getRelicConfig(id)?.tableAction)).toBe(true);
         expect(generateShopItems([{ type: 'Relic', count: 100 }, { type: 'TableAction', count: 100 }], []).every(item => !RelicManager.getRelicConfig(item.id)?.tableAction)).toBe(true);
-        const base = { ...boss(), phase: 'deal_over' as const, inventory: passives.slice(0, 6).map(relic => ({ id: relic.id, state: {} })),
+        const base = { ...boss(), phase: 'deal_over' as const, inventory: passives.slice(0, 4).map(relic => ({ id: relic.id, state: {} })),
             challengeRewards: [{ id: 'boss', title: 'Boss', tier: 'major' as const, kind: 'table_action' as const }] };
         const state = act(base, { type: 'deal' });
-        expect(getValidActions(state).filter(action => action.type === 'choose_pack_card')).toHaveLength(2);
+        expect(getValidActions(state).filter(action => action.type === 'choose_pack_card')).toHaveLength(6);
         const chosen = act(state, { type: 'choose_pack_card', cardId: state.pendingPackChoices[0] });
-        expect(chosen.inventory).toHaveLength(7);
+        expect(chosen.inventory).toHaveLength(4);
         expect(chosen.pendingPack).toBeNull();
     });
 

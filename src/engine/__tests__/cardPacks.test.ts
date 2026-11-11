@@ -1,4 +1,5 @@
 import { getRaise } from '../../logic/handScoring';
+import { getRewardCard } from '../../logic/rewardCards';
 import { getChallengeCard } from '../../logic/challengeCards';
 import { describe, expect, it } from 'vitest';
 import { createInitialState, getValidActions, processAction } from '../engine';
@@ -52,7 +53,13 @@ describe('Card packs', () => {
             state = act(loaded, { type: 'choose_pack_card', cardId });
             expect(state.rngState).toBe(previous.rngState);
             expect(state.cash).toBe(1000);
-            if (getPackCard(cardId)) {
+            if (getRewardCard(cardId)) {
+                const reward = getRewardCard(cardId)!;
+                for (const row of reward.rows) {
+                    if (row.kind === 'raise') expect(state.handUpgrades[row.raiseId]).toBe((previous.handUpgrades[row.raiseId] ?? 0) + 1);
+                    if (row.kind === 'relic') expect(state.inventory.at(-1)?.id).toBe(row.relicId);
+                }
+            } else if (getPackCard(cardId)) {
                 expect(state.deckProbabilities).toEqual(applyPackCard(previous.deckProbabilities, getPackCard(cardId)!));
                 expect(state.inventory).toEqual(previous.inventory);
             } else if (getRaise(cardId)) {
@@ -95,17 +102,16 @@ describe('Card packs', () => {
         expect(skipped.pendingPack).toBeNull();
     });
 
-    it('blocks relic choices at capacity and permits skipping, including after filling the last slot', () => {
-        const inventory = RelicManager.getAllRelics().filter(relic => !relic.tableAction).slice(0, 6).map(relic => ({ id: relic.id, state: { ...relic.properties } }));
+    it('accepts legacy relic offers at capacity and replaces the oldest effect', () => {
+        const inventory = RelicManager.getAllRelics().filter(relic => !relic.tableAction).slice(0, 4).map(relic => ({ id: relic.id, state: { ...relic.properties } }));
         const full = open('relic_mega', { inventory }).state;
         expect(full.pendingPackChoices.every(id => !inventory.some(owned => owned.id === id))).toBe(true);
-        expect(getValidActions(full)).toEqual([{ type: 'skip_pack' }]);
-        expect(act(full, { type: 'choose_pack_card', cardId: full.pendingPackChoices[0] })).toEqual(full);
-        expect(act(act(full, { type: 'skip_pack' }), { type: 'finish_pack' }).phase).toBe('entering_casino');
-        const oneSlot = open('relic_mega', { inventory: inventory.slice(0, 5) }).state;
-        const picked = act(oneSlot, { type: 'choose_pack_card', cardId: oneSlot.pendingPackChoices[0] });
-        expect(picked.inventory).toHaveLength(6);
-        expect(getValidActions(picked)).toEqual([{ type: 'skip_pack' }]);
+        expect(getValidActions(full).filter(action => action.type === 'choose_pack_card')).toHaveLength(5);
+        const id = full.pendingPackChoices[0];
+        const picked = act(full, { type: 'choose_pack_card', cardId: id });
+        expect(picked.inventory).toHaveLength(4);
+        expect(picked.inventory.slice(0, 3)).toEqual(inventory.slice(1));
+        expect(picked.inventory.at(-1)?.id).toBe(id);
         expect(act(picked, { type: 'skip_pack' }).inventory).toEqual(picked.inventory);
     });
 

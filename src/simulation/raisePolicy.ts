@@ -104,8 +104,8 @@ export class RaisePlayPolicy {
         for (const row of patterns) {
             if (!PATTERNS.includes(row.id as Pattern)) continue;
             const id = row.id as Pattern;
-            chips += row.chips + this.payouts[id].chips - this.base[id].chips;
-            mult += row.multiplier + this.payouts[id].mult - this.base[id].mult;
+            chips += row.chips + row.count * (this.payouts[id].chips - this.base[id].chips);
+            mult += row.multiplier + row.count * (this.payouts[id].mult - this.base[id].mult);
         }
         const result = { value: getBlackjackScore(cards, [], false, this.limit), chips, mult };
         this.cache.set(key, result); return result;

@@ -19,11 +19,11 @@ const shop = (): GameState => act(createInitialState(), {
 });
 
 describe('relic slots and raise packs', () => {
-    it('starts with six permanent slots, three per side', () => {
-        expect(shop().relicSlots).toBe(6);
-        expect(Array.from({ length: 6 }, (_, i) => getRelicSide(i))).toEqual(['left', 'left', 'left', 'left', 'left', 'left']);
-        expect(getSideSlotCount('left', 6)).toBe(6);
-        expect(getSideSlotCount('right', 6)).toBe(0);
+    it('starts with four effect slots in the upper left', () => {
+        expect(shop().relicSlots).toBe(4);
+        expect(Array.from({ length: 4 }, (_, i) => getRelicSide(i))).toEqual(['left', 'left', 'left', 'left']);
+        expect(getSideSlotCount('left', 4)).toBe(4);
+        expect(getSideSlotCount('right', 4)).toBe(0);
     });
 
     it.each(PACKS.filter(pack => pack.family === 'raise'))('opens $name for free and applies exactly its allowed picks', pack => {

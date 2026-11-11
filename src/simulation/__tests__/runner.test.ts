@@ -126,6 +126,32 @@ describe('Balance Lab', () => {
         expect(row.delta.histogram.reduce((sum, bin) => sum + bin.count, 0)).toBe(20);
     });
 
+    it('counts upgrade applications rather than grouped display rows', () => {
+        const options = config({ trials: 30 });
+        const initial = createLabState(options);
+        const counts = { pair: 0, straight: 0, flush: 0 };
+        for (let trial = 0; trial < options.trials; trial++) {
+            const result = playRound(initial, options, trial, 0);
+            for (const hand of result.scoringState.playerHands) {
+                const standard = hand.cards.filter(card => !card.type || card.type === 'standard');
+                counts.pair += Math.min(3, standard.reduce((sum, card, i) =>
+                    sum + standard.slice(i + 1).filter(other => other.rank === card.rank).length, 0));
+                for (const suit of ['hearts', 'diamonds', 'clubs', 'spades']) {
+                    counts.flush += Math.max(0, standard.filter(card => card.suit === suit).length - 1);
+                }
+            }
+            counts.straight += result.state.playerHands.reduce((sum, hand) => sum +
+                (hand.finalScore?.criteria.filter(row => row.id === 'straight')
+                    .reduce((total, row) => total + (row.cardIds?.length ?? 1) - 1, 0) ?? 0), 0);
+        }
+        const report = run(options);
+        for (const category of ['pair', 'straight', 'flush'] as const) {
+            const row = report.comparisons.find(item => item.category === category && item.stat === 'cash')!;
+            expect(row.triggerRate).toBeCloseTo(counts[category] / options.trials);
+            expect(row.perTrigger).toBeCloseTo(row.delta.mean / row.triggerRate!);
+        }
+    });
+
     it('reports uncertainty across trials, including constant and negative distributions', () => {
         const constant = summarize([5, 5, 5]);
         expect(constant).toMatchObject({ mean: 5, median: 5, ci95: 0 });

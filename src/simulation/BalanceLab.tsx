@@ -6,7 +6,7 @@ import { SMALL_UPGRADE_UNITS } from '../logic/upgradeTuning';
 import { parseReport } from './reports';
 import styles from './BalanceLab.module.css';
 
-const money = (value: number, signed = false) => `${value < 0 ? '−' : signed && value > 0 ? '+' : ''}$${Math.abs(value).toLocaleString(undefined, { maximumFractionDigits: 2, minimumFractionDigits: 2 })}`;
+const money = (value: number, signed = false) => `${value < 0 ? '-' : signed && value > 0 ? '+' : ''}$${Math.abs(value).toLocaleString(undefined, { maximumFractionDigits: 2, minimumFractionDigits: 2 })}`;
 const percent = (value: number) => `${(value * 100).toFixed(1)}%`;
 const number = (value: number) => value.toLocaleString(undefined, { maximumFractionDigits: 2 });
 
@@ -42,7 +42,7 @@ function RoundDetail({ round, title }: { round: RoundView; title: string }) {
         {round.hands.map((hand, index) => <div className={styles.hand} key={index}>
             <div className={styles.handHeading}><span>{['Left', 'Center', 'Right'][index]} · {hand.value}</span><b className={hand.outcome === 'win' ? styles.positive : hand.outcome === 'bust' || hand.outcome === 'loss' ? styles.negative : ''}>{hand.outcome}</b></div>
             <MiniCards cards={hand.cards} />
-            {hand.criteria.map((criterion, row) => <div key={row} className={styles.criterion}><span>{criterion.name}</span><span className={criterion.chips < 0 || criterion.mult < 0 ? styles.negative : ''}>{money(criterion.chips, true)} <i> / </i> {criterion.mult >= 0 ? '+' : '−'}{percent(Math.abs(criterion.mult))}</span></div>)}
+            {hand.criteria.map((criterion, row) => <div key={row} className={styles.criterion}><span>{criterion.name}</span><span className={criterion.chips < 0 || criterion.mult < 0 ? styles.negative : ''}>{money(criterion.chips, true)} <i> / </i> {criterion.mult >= 0 ? '+' : '-'}{percent(Math.abs(criterion.mult))}</span></div>)}
         </div>)}
         <details className={styles.decisions}><summary>Bot decisions ({round.decisions.length})</summary><ol>{round.decisions.map((decision, index) => <li key={index}>{decision}</li>)}</ol></details>
     </div>;

@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-11",
+  "revision": "92e12fdf238e224c41b952fc52f530c05c2783d4",
+  "dirty": true,
+  "scriptSha256": "254711513da74cd47fa7bf0d50d23dabbda08dcdea9abca220b591205bb47a01",
+  "files": {
+    "ranges-score.json": "cf57c1822f97b774cd363cd074cb93ca2e987a04319626a09ed26d3287ade1e6",
+    "ranges-patterns.json": "43afb83ded296aa9681a104ad8e9ce96509f6adeb5203deb36fc1a8d0c026bf7",
+    "stacks-weighted.json": "cb7ef72f028f5a3c35089eb074db3647435145a7e42df9ed95518f84cd5e9f6e",
+    "current-ranges-contexts.json": "ad5bd4e1d27af37e2ed1fd4b8f52cb721685db924c328c9714c55ff91ef9e2e1",
+    "reference-contexts.json": "5e2dea7b104ea36896a4aef5da8c84064978670d83bb6df54fce22b275abab49",
+    "report.html": "eebf4c829b893a04c2941acaf4e5990f0e3b21e2c5768504fbb0b43a7a770220"
+  },
+  "verification": {
+    "focusedTestsPassed": 81,
+    "lint": "passed",
+    "syntax": "passed",
+    "typecheck": {
+      "errors": 162,
+      "changedSimulationFileErrors": 0
+    }
+  }
+}

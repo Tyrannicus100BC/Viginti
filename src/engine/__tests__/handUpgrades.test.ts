@@ -87,8 +87,8 @@ describe('permanent hand scoring and Raises', () => {
     it('upgrades every pair, including all three pairs in a triple', () => {
         const triple = [...cards, { id: 'c', rank: '7' as const, suit: 'spades' as const }];
         const pairs = evaluateHandScore(triple, true, false, [], 0, undefined, 'win', { raise_pair_combo: 1 }).criteria.filter(row => row.id === 'pair');
-        expect(pairs).toHaveLength(3);
-        expect(pairs.every(row => row.chips === 39 && row.multiplier === 0.3)).toBe(true);
+        expect(pairs).toHaveLength(1);
+        expect(pairs[0]).toMatchObject({ count: 3, chips: 96, multiplier: expect.closeTo(0.9), cardIds: triple.map(card => card.id) });
     });
 
     it('stacks pack upgrades without using slots or mutating previous state', () => {
@@ -136,8 +136,8 @@ describe('permanent hand scoring and Raises', () => {
         expect(stock.map(item => item.id)).toEqual(['raise_pair_mult']);
     });
 
-    it('uses one relic category and a shared six-slot limit', () => {
-        expect(stocked().relicSlots).toBe(6);
+    it('uses one relic category and a shared four-effect queue', () => {
+        expect(stocked().relicSlots).toBe(4);
         for (const relic of RelicManager.getAllRelics()) {
             expect(relic.categories).toContain('Relic');
             expect(relic.categories).not.toContain('Control');

@@ -1,15 +1,15 @@
 
-/** Visual values use color for negatives; signed text is for parsing and plain text. */
-export function formatCash(value: number, includeNegativeSign = false): string {
-    return `${includeNegativeSign && value < 0 ? '−' : ''}$${Math.abs(value).toLocaleString()}`;
+/** Use the compact keyboard minus for cash and multiplier reductions. Value Card symbols are separate. */
+export function formatCash(value: number, includeNegativeSign = true): string {
+    return `${includeNegativeSign && value < 0 ? '-' : ''}$${Math.abs(value).toLocaleString()}`;
 }
 
 /** Display a scoring multiplier as a percentage without floating-point noise. */
-export function formatMultPercent(value: number, includeNegativeSign = false): string {
-    return `${includeNegativeSign && value < 0 ? '−' : ''}${Number((Math.abs(value) * 100).toFixed(6))}%`;
+export function formatMultPercent(value: number, includeNegativeSign = true): string {
+    return `${includeNegativeSign && value < 0 ? '-' : ''}${Number((Math.abs(value) * 100).toFixed(6))}%`;
 }
 
-export function formatChipMultiplier(value: number, includeNegativeSign = false): string {
+export function formatChipMultiplier(value: number, includeNegativeSign = true): string {
     return formatMultPercent(value, includeNegativeSign);
 }
 

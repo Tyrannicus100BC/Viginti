@@ -91,10 +91,10 @@ describe('Raise-focused play', () => {
         };
         const original = pay({}), stacked = pay(syntheticStack('pair', 32));
         expect(stacked.nextState.playerHands[0].outcome).toBe('bust');
-        expect(stacked.nextState.playerHands[0].finalScore?.criteria.filter(row => row.id === 'pair')).toHaveLength(3);
+        expect(stacked.nextState.playerHands[0].finalScore?.criteria.filter(row => row.id === 'pair')).toMatchObject([{ count: 3 }]);
         const payout = (result: typeof stacked) => result.events.find(event => event.type === 'deal_scoring_complete')!.finalScore;
-        expect(payout(original)).toBe(51);
-        expect(payout(stacked)).toBe(387); // (3 × ($23 base Pair + $48 raises) − $20 Bust) × 201%
+        expect(payout(original)).toBe(23); // ($27 card sum + 3 × $5 base − $20 Bust) × 105%
+        expect(payout(stacked)).toBe(333); // ($27 card sum + 3 × ($5 base + $48 raises) − $20 Bust) × 201%
     });
 
     it('does not consult the hidden dealer card or engine RNG', () => {

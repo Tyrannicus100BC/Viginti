@@ -259,7 +259,8 @@ export const RELIC_DEFINITIONS: RelicDefinition[] = [
         icon: '🧦'
     },
     {
-        name: 'Robe and Slippers Set',
+        id: 'robe_and_slippers_set',
+        name: 'Robe and Slippers',
         rarity: 'Uncommon',
         categories: ['Relic', 'Global'],
         description: 'Earn an extra x${bonus_mult}',

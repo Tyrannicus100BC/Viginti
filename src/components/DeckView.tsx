@@ -4,6 +4,9 @@ import React from 'react';
 import type { Card as CardType, Suit } from '../types';
 import type { DeckProbabilities } from '../engine/GameState';
 import { getSpecialWeights, SPECIAL_COLORS, SPECIAL_LABELS, SPECIAL_STRENGTHS } from '../logic/specialCards';
+import { RankIcon } from './RankIcon';
+import { SpecialCardIcon } from './SpecialCardIcon';
+import { DeckProbabilityRow } from './DeckProbabilityRow';
 import styles from './DeckView.module.css';
 import panelStyles from './ReferencePanel.module.css';
 
@@ -84,25 +87,6 @@ export const DeckView: React.FC<DeckViewProps> = ({
     const rankTotal = (probabilities?.ranks.ace ?? 0) + (probabilities?.ranks.face ?? 0) + (probabilities?.ranks.upper ?? 0) + (probabilities?.ranks.lower ?? 0) || 1;
     const specialWeights = getSpecialWeights(probabilities);
 
-    const renderProbabilityBar = (label: string, weight: number, total: number, color?: string, icon?: string) => {
-        const percent = Math.round((weight / total) * 100);
-        return (
-            <div className={styles.probRow} key={label}>
-                <div className={styles.probLabel}>
-                    {icon && <span className={styles.probIcon} style={{ color }}>{icon}</span>}
-                    <span className={styles.probText}>{label}</span>
-                </div>
-                <div className={styles.probBarContainer}>
-                    <div 
-                        className={styles.probBar} 
-                        style={{ width: `${percent}%`, backgroundColor: color || '#3498db' }}
-                    />
-                </div>
-                <div className={styles.probPercent}>{percent}%</div>
-            </div>
-        );
-    };
-
     const renderCard = (card: CardType, index: number) => {
         let style: React.CSSProperties = { color: '#2c3e50' };
         let content = `${card.rank}${SUITS_MAP[card.suit] || ''}`;
@@ -154,7 +138,7 @@ export const DeckView: React.FC<DeckViewProps> = ({
                            undefined
                          }
                     >
-                        {card.specialEffect.type === 'mult' ? formatChipMultiplier(card.specialEffect.value) : card.specialEffect.type === 'chip' ? Math.abs(card.specialEffect.value) : card.specialEffect.value}
+                        {card.specialEffect.type === 'mult' ? formatChipMultiplier(card.specialEffect.value) : card.specialEffect.type === 'chip' ? card.specialEffect.value : card.specialEffect.value}
                     </div>
                 )}
             </div>
@@ -186,13 +170,12 @@ export const DeckView: React.FC<DeckViewProps> = ({
                         <div className={styles.probSection}>
                             <h3 className={styles.sectionHeader}>Suits</h3>
                             <div className={styles.probList}>
-                                {SUIT_ORDER.map(suit => renderProbabilityBar(
-                                    suit.charAt(0).toUpperCase() + suit.slice(1),
-                                    probabilities?.suits[suit] ?? 0,
-                                    suitTotal,
-                                    (suit === 'hearts' || suit === 'diamonds') ? '#e74c3c' : '#fff',
-                                    SUITS_MAP[suit]
-                                ))}
+                                {SUIT_ORDER.map(suit => <DeckProbabilityRow key={suit}
+                                    label={suit.charAt(0).toUpperCase() + suit.slice(1)}
+                                    chance={(probabilities?.suits[suit] ?? 0) / suitTotal}
+                                    color={(suit === 'hearts' || suit === 'diamonds') ? '#e74c3c' : '#fff'}
+                                    icon={SUITS_MAP[suit]} target={{ kind: 'suit', target: suit }} probabilities={probabilities}
+                                />)}
                             </div>
                         </div>
 
@@ -200,21 +183,28 @@ export const DeckView: React.FC<DeckViewProps> = ({
                         <div className={styles.probSection}>
                             <h3 className={styles.sectionHeader}>Ranks</h3>
                             <div className={styles.probList}>
-                                {renderProbabilityBar('Aces', probabilities?.ranks.ace ?? 0, rankTotal, '#f1c40f')}
-                                {renderProbabilityBar('Face (10-K)', probabilities?.ranks.face ?? 0, rankTotal, '#e67e22')}
-                                {renderProbabilityBar('Upper (6-9)', probabilities?.ranks.upper ?? 0, rankTotal, '#3498db')}
-                                {renderProbabilityBar('Lower (2-5)', probabilities?.ranks.lower ?? 0, rankTotal, '#95a5a6')}
+                                {([
+                                    { target: 'ace', label: 'Aces', color: '#f1c40f' },
+                                    { target: 'face', label: 'Face (10-K)', color: '#e67e22' },
+                                    { target: 'upper', label: 'Upper (6-9)', color: '#3498db' },
+                                    { target: 'lower', label: 'Lower (2-5)', color: '#95a5a6' },
+                                ] as const).map(rank => <DeckProbabilityRow key={rank.target} label={rank.label}
+                                    chance={(probabilities?.ranks[rank.target] ?? 0) / rankTotal} color={rank.color}
+                                    icon={<RankIcon rank={rank.target} />} target={{ kind: 'rank', target: rank.target }} probabilities={probabilities}
+                                />)}
                             </div>
                         </div>
 
-                        {/* Special Cards */}
+                        {/* Special */}
                         {specialWeights.length > 0 && (
                             <div className={styles.probSection}>
-                                <h3 className={styles.sectionHeader}>Special Cards</h3>
+                                <h3 className={styles.sectionHeader}>Special</h3>
                                 <div className={styles.probList}>
-                                    {specialWeights.map(weight => renderProbabilityBar(
-                                        SPECIAL_LABELS[weight.type], weight.chance * 100, 100, SPECIAL_COLORS[weight.type]
-                                    ))}
+                                    {specialWeights.map(weight => <DeckProbabilityRow key={weight.type}
+                                        label={SPECIAL_LABELS[weight.type]} chance={weight.chance} color={SPECIAL_COLORS[weight.type]}
+                                        icon={<SpecialCardIcon type={weight.type} />}
+                                        target={{ kind: 'special', target: weight.type }} probabilities={probabilities}
+                                    />)}
                                 </div>
                             </div>
                         )}

@@ -1,5 +1,5 @@
 import { rollPackRarity, type PackQuality } from './packs';
-import type { DeckProbabilities, RankWeights, SpecialWeight, SuitWeights } from '../engine/GameState';
+import type { DeckProbabilities, DeckProbabilityTarget, DeckProbabilityUpgrade, RankWeights, SpecialWeight, SuitWeights } from '../engine/GameState';
 import type { SeededRNG } from '../engine/rng';
 import type { RelicRarity } from './relics/types';
 import { getSpecialWeights, normalizeDeckProbabilities, setSpecialChance, SPECIAL_LABELS, SPECIAL_TYPES } from './specialCards';
@@ -127,5 +127,27 @@ export function applyPackCard(probabilities: DeckProbabilities, card: PackCard):
             result = { ...result, ranks: { ace: weights.ace * 100, face: weights.face * 100, upper: weights.upper * 100, lower: weights.lower * 100 } };
         }
     }
-    return result;
+    const changes: DeckProbabilityUpgrade['changes'][number][] = [];
+    for (const benefit of TARGETS) {
+        const probe = { ...benefit, change: 'more' as const };
+        const before = getBenefitProbability(probabilities, probe);
+        const after = getBenefitProbability(result, probe);
+        const target: DeckProbabilityTarget = benefit.kind === 'special'
+            ? { kind: 'special', target: benefit.type }
+            : benefit.kind === 'suit' ? { kind: 'suit', target: benefit.target } : { kind: 'rank', target: benefit.target };
+        if (Math.abs(after - before) > Number.EPSILON) changes.push({ ...target, before, after });
+    }
+    return { ...result, upgradeHistory: [...(probabilities.upgradeHistory ?? []), { cardId: card.id, changes }] };
+}
+
+/** Include indirect shifts when another outcome in the same distribution changes. */
+export function getDeckProbabilityRaiseChanges(probabilities: DeckProbabilities, target: DeckProbabilityTarget) {
+    return (probabilities.upgradeHistory ?? []).flatMap((upgrade, occurrence) => {
+        const change = upgrade.changes.find(change => change.kind === target.kind && change.target === target.target);
+        if (!change) return [];
+        const benefits = getPackCard(upgrade.cardId)?.benefits.filter(benefit => benefit.kind === target.kind) ?? [];
+        const direct = benefits.some(benefit => (benefit.kind === 'special' ? benefit.type : benefit.target) === target.target);
+        return [{ ...change, cardId: upgrade.cardId, occurrence, indirect: !direct,
+            description: benefits.map(benefit => `${benefit.change[0].toUpperCase()}${benefit.change.slice(1)} ${benefit.label}`).join(', ') || 'Deck Upgrade' }];
+    });
 }

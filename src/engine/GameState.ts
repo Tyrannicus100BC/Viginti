@@ -45,11 +45,22 @@ export interface SpecialWeight {
     readonly chance: number; // 0-1 probability of this type, before rolling its strength
 }
 
+export type DeckProbabilityTarget = { readonly kind: 'suit'; readonly target: keyof SuitWeights }
+    | { readonly kind: 'rank'; readonly target: keyof RankWeights }
+    | { readonly kind: 'special'; readonly target: SpecialWeight['type'] };
+
+export interface DeckProbabilityUpgrade {
+    readonly cardId: string;
+    readonly changes: readonly (DeckProbabilityTarget & { readonly before: number; readonly after: number })[];
+}
+
 export interface DeckProbabilities {
     readonly suits: SuitWeights;
     readonly ranks: RankWeights;
     readonly specialChance: number; // legacy/base total chance
     readonly specialWeights: readonly SpecialWeight[];
+    // Optional for older saves, which retain their odds without an upgrade history.
+    readonly upgradeHistory?: readonly DeckProbabilityUpgrade[];
 }
 
 // ─── Modifiers ──────────────────────────────────────────

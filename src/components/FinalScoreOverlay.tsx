@@ -38,7 +38,7 @@ export const FinalScoreOverlay: React.FC<FinalScoreOverlayProps> = ({ chips, mul
             <div className={styles.scoreBox} onClick={onContinue}>
                 <div className={styles.statGroup}>
                     <span className={styles.label}>Chips</span>
-                    <span className={`${styles.value} ${styles.chips}`} style={chips < 0 ? { color: '#ff4444' } : undefined}>{Math.abs(chips)}</span>
+                    <span className={`${styles.value} ${styles.chips}`} style={chips < 0 ? { color: '#ff4444' } : undefined}>{chips}</span>
                 </div>
 
                 <div className={styles.operator}>X</div>
@@ -52,7 +52,7 @@ export const FinalScoreOverlay: React.FC<FinalScoreOverlayProps> = ({ chips, mul
 
                 <div className={styles.statGroup}>
                     <span className={styles.label}>Total</span>
-                    <span className={`${styles.value} ${styles.total}`} style={totalScore < 0 ? { color: '#ff4444' } : undefined}>{Math.abs(totalScore)}</span>
+                    <span className={`${styles.value} ${styles.total}`} style={totalScore < 0 ? { color: '#ff4444' } : undefined}>{totalScore}</span>
                 </div>
             </div>
         </div>

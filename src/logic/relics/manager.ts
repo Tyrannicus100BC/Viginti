@@ -47,7 +47,8 @@ export class RelicManager {
     static executeValueHook<T, C extends GameContext>(
         hookName: keyof RelicHooks,
         initialValue: T,
-        context: C
+        context: C,
+        mapResult?: (previous: T, next: T, source: RelicConfig) => T
     ): T {
         const { inventory } = context;
         let currentValue = initialValue;
@@ -91,7 +92,8 @@ export class RelicManager {
         for (const hook of activeHooks) {
              try {
                 // Pass relic state as the last argument
-                currentValue = hook.handler(currentValue, context, hook.instance.state, hook.config);
+                const nextValue = hook.handler(currentValue, context, hook.instance.state, hook.config);
+                currentValue = mapResult ? mapResult(currentValue, nextValue, hook.config) : nextValue;
              } catch (e) {
                  console.error(`Error in relic hook ${hookName} for relic ${hook.instance.id}:`, e);
              }

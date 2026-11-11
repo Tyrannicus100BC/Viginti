@@ -4,8 +4,9 @@ import { RelicManager } from '../logic/relics/manager';
 import { canAcquireRelic } from '../logic/relics/inventory';
 import { RelicTooltip } from './RelicTooltip';
 import { PackCardDetails } from './PackCardDetails';
-import { getPackCard, type PackCard } from '../logic/packCards';
-import { SPECIAL_COLORS } from '../logic/specialCards';
+import { getPackCard } from '../logic/packCards';
+import { getRewardCard, getRewardLineCount } from '../logic/rewardCards';
+import { DeckRewardRows, RewardCardRows } from './RewardCardRows';
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useGameBridge } from '../store/gameBridge';
 import { getRaise } from '../logic/handScoring';
@@ -20,28 +21,6 @@ import styles from './RaisePackChoice.module.css';
 
 export interface PackSourceRect { left: number; top: number; width: number; height: number; packId?: PackId }
 type RevealStage = 'growing' | 'charging' | 'bursting' | 'revealing' | 'ready' | 'flying' | 'received';
-
-function UpgradeCard({ card }: { card: PackCard }) {
-    const suitIcons = { hearts: '♥', diamonds: '♦', clubs: '♣', spades: '♠' };
-    return <>
-        <span className={styles.modifiers}>
-            {card.benefits.map((benefit, index) => <span key={index} className={styles.modifier}>
-                <span className={styles.modifierName}>
-                    {benefit.kind === 'suit' ? <>
-                        <span aria-hidden="true" className={`${styles.suitIcon} ${benefit.target === 'hearts' || benefit.target === 'diamonds' ? styles.redSuit : styles.blackSuit}`}>
-                            {suitIcons[benefit.target]}
-                        </span>{benefit.label}
-                    </> : benefit.kind === 'rank' ? <>Rank {benefit.label}</> : (
-                        <span style={{ color: SPECIAL_COLORS[benefit.type] }}>{benefit.label}</span>
-                    )}
-                </span>
-                <strong className={benefit.change.endsWith('fewer') ? styles.negative : styles.cash}>
-                    {benefit.change.replace(/\b\w/g, letter => letter.toUpperCase())}
-                </strong>
-            </span>)}
-        </span>
-    </>;
-}
 
 function ChallengeOption({ card }: { card: ChallengeCard }) {
     return <PackCardDetails icon={<ChallengeProgress challenge={card.challenge} />} name={card.name}>
@@ -60,7 +39,8 @@ function PackReveal({ choices, pendingPack, sourceRect, arrivedFromChallenge, on
     const relicSlots = useGameBridge(state => state.relicSlots);
     const definition = useRef(getPackDefinition(pendingPack?.packId ?? sourceRect?.packId)).current;
     const progressionPack = useGameBridge(state => !state.gameState.debugPackReturn);
-    const familyLabel = definition.id === 'relic_boss' ? 'Table Action' : PACK_FAMILY_LABELS[definition.family];
+    const unified = definition.id === 'mixed_major' || definition.id === 'mixed_minor';
+    const familyLabel = unified ? 'Reward' : definition.id === 'relic_boss' ? 'Table Action' : PACK_FAMILY_LABELS[definition.family];
     const rewardTitle = definition.id === 'mixed_major' ? 'Major Reward'
         : definition.id === 'mixed_minor' ? 'Minor Reward'
         : definition.id === 'relic_boss' ? 'Boss Reward' : definition.name;
@@ -198,8 +178,14 @@ function PackReveal({ choices, pendingPack, sourceRect, arrivedFromChallenge, on
             return;
         }
         sfxEngine.play('cardPlace');
-        const button = isRelic
-            ? document.querySelector<HTMLElement>(`[aria-label="Empty relic slot ${inventory.filter(instance => !RelicManager.getRelicConfig(instance.id)?.tableAction).length + 1}"]`)
+        const reward = getRewardCard(id);
+        const hasEffect = reward?.rows.some(row => row.kind === 'relic');
+        const effectCount = inventory.filter(instance => !RelicManager.getRelicConfig(instance.id)?.tableAction).length;
+        const effectTarget = effectCount >= relicSlots
+            ? document.querySelector<HTMLElement>('[data-inventory-kind="left"][data-inventory-index="0"]')
+            : document.querySelector<HTMLElement>(`[aria-label="Empty relic slot ${effectCount + 1}"]`);
+        const button = hasEffect || isRelic ? effectTarget : reward
+            ? document.getElementById(reward.rows.some(row => row.kind === 'raise') ? 'hand-scores-button' : 'deck-view-button')
             : document.getElementById(isRaise ? 'hand-scores-button' : getChallengeCard(id) ? 'challenges-label' : 'deck-view-button');
         let flightCard = card;
         try {
@@ -338,11 +324,11 @@ function PackReveal({ choices, pendingPack, sourceRect, arrivedFromChallenge, on
         <section className={`${styles.choices} ${definition.offerCount > 3 ? styles.multiRowChoices : ''} ${definition.offerCount === 2 ? styles.twoChoices : ''} ${finishing ? styles.dismissedChoices : ''} ${definition.offerCount === 5 ? styles.fiveCompact : ''}`} role="region" tabIndex={-1} aria-labelledby="raise-pack-title" aria-busy={stage !== 'ready'}>
             <h2 id="raise-pack-title" className={showChoices ? styles.title : styles.hiddenTitle}>
                 {progressionPack ? rewardTitle : <>Choose Your {definition.family === 'mixed' ? 'Upgrades' : definition.family === 'deck' ? 'Deck Upgrade' : familyLabel}{definition.family !== 'mixed' && definition.pickCount > 1 ? 's' : ''}</>}
-                {(!progressionPack || definition.pickCount > 1) && <span className={styles.pickCount}>{picksRemaining} {picksRemaining === 1 ? 'choice' : 'choices'} remaining</span>}
+                {!unified && (!progressionPack || definition.pickCount > 1) && <span className={styles.pickCount}>{`${picksRemaining} ${picksRemaining === 1 ? 'choice' : 'choices'} remaining`}</span>}
             </h2>
             <p className={styles.srOnly} aria-live="polite">{stage === 'ready' ? `${choices.length} cards available. ${picksRemaining} ${picksRemaining === 1 ? 'choice' : 'choices'} remaining.` : stage === 'received' ? `${familyLabel} added.` : stage === 'flying' ? `Adding your ${familyLabel.toLowerCase()}.` : `Opening your ${definition.family} pack.`}</p>
             {(definition.family === 'relic' || definition.family === 'mixed') && inventory.filter(instance => !RelicManager.getRelicConfig(instance.id)?.tableAction).length >= relicSlots && definition.id !== 'relic_boss' && <p className={styles.slotStatus}>
-                Relic slots full. {definition.family === 'mixed' ? 'Choose another card or skip.' : 'Skip to continue.'}
+                Four effects active · A new effect replaces your oldest.
             </p>}
             <div className={styles.options}>
                 {(offers ?? choices).map(id => {
@@ -351,9 +337,10 @@ function PackReveal({ choices, pendingPack, sourceRect, arrivedFromChallenge, on
                     const relic = RelicManager.getRelicConfig(id);
                     const challenge = getChallengeCard(id);
                     const targeted = getTargetedPackReward(id);
-                    const card = raise ?? upgrade ?? relic ?? challenge ?? targeted;
+                    const reward = getRewardCard(id);
+                    const card = reward ?? raise ?? upgrade ?? relic ?? challenge ?? targeted;
                     if (!card) return null;
-                    const cardFamily = targeted?.family ?? (raise ? 'raise' : relic ? 'relic' : challenge ? 'challenge' : 'deck');
+                    const cardFamily = reward ? 'mixed' : targeted?.family ?? (raise ? 'raise' : relic ? 'relic' : challenge ? 'challenge' : 'deck');
                     const consumed = !choices.includes(id);
                     const blocked = !!relic && !canAcquireRelic(id, inventory, relicSlots);
                     return <div key={id} ref={element => { if (element) options.current.set(id, element); else options.current.delete(id); }}
@@ -365,15 +352,15 @@ function PackReveal({ choices, pendingPack, sourceRect, arrivedFromChallenge, on
                             disabled={stage !== 'ready' || consumed || blocked}
                             aria-label={`Select ${card.name} card, ${card.rarity}`}
                             onClick={() => void choose(id)}
-                            className={`${styles.card} ${targeted ? styles.packCard : ''} ${blocked ? styles.blockedCard : ''} ${(raise?.modifiers.length ?? 0) > 3 ? styles.denseCard : ''}`}>
+                            className={`${styles.card} ${targeted ? styles.packCard : ''} ${blocked ? styles.blockedCard : ''} ${(reward ? getRewardLineCount(reward) : raise?.modifiers.length ?? 0) > 3 ? styles.denseCard : ''}`}>
                             {targeted ? <PackVisual packId={targeted.id} /> : <>
-                                <span className={styles.cardType}>
-                                    <RaisePackArt family={cardFamily} />
-                                    {relic?.tableAction ? 'Table Action' : PACK_FAMILY_LABELS[cardFamily]}
-                                </span>
                                 <span className={styles.rarity} style={{ color: getRelicRarityTextColor(card.rarity) }}>{relic?.tableAction ? 'TABLE ACTION' : card.rarity}</span>
                                 <span className={styles.cardBody}>
-                                    {raise ? <RaiseCard raise={raise} /> : relic ? <RelicTooltip relic={relic} layout="card" displayValues={relic.properties ?? {}} /> : challenge ? <ChallengeOption card={challenge} /> : <UpgradeCard card={upgrade!} />}
+                                    {reward ? <RewardCardRows card={reward} inventory={inventory} /> : raise ? <RaiseCard raise={raise} /> : relic ? <RelicTooltip relic={relic} layout="card" displayValues={relic.properties ?? {}} /> : challenge ? <ChallengeOption card={challenge} /> : <DeckRewardRows card={upgrade!} />}
+                                </span>
+                                <span className={styles.cardType}>
+                                    <RaisePackArt family={cardFamily} />
+                                    {reward ? 'Reward' : relic?.tableAction ? 'Table Action' : PACK_FAMILY_LABELS[cardFamily]}
                                 </span>
                                 {blocked && <span className={styles.blockedLabel}>Relic slots full</span>}
                             </>}

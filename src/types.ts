@@ -38,6 +38,14 @@ export type ScoringCriterionId =
   | 'safety_net'
   | 'special_cards';
 
+export interface ScoreContribution {
+  label: string;
+  detail?: string;
+  chips: number;
+  multiplier: number;
+  sourceRelicId?: string;
+}
+
 export interface ScoringDetail {
   id: string; // e.g. 'win', 'pair', 'sequence'
   name: string; // Display name
@@ -47,6 +55,7 @@ export interface ScoringDetail {
   cardIds?: string[]; // IDs of cards that contributed to this criterion
   sourceRelicId?: string; // ID of the relic that triggered this, used for UI highlights
   matches?: ScoringMatch[];
+  breakdown?: ScoreContribution[];
 }
 
 export interface HandScore {

@@ -71,9 +71,9 @@ export const RelicTooltip: React.FC<RelicTooltipProps> = ({
         const parts = text.split(/(<[^>]+>|\{[^}]+\}|\[.*?\]|[−-]?\d+(?:\.\d+)?%|[−-]?\$[−-]?\d[\d,]*(?:\s*chips?)?|[₵\$\+]{1,2}\d+(?:\s*chips?)?|[−-]?\d+\s*chips?)/gi);
         const renderValue = (value: string, positiveClass: string, key: number) => {
             const isNegative = /^(?:[−-]|\$[−-])/.test(value.trim());
-            const visibleValue = isNegative ? value.replace(/^\s*[−-]|^(\s*\$)[−-]/, '$1') : value;
+            const displayValue = isNegative ? value.replace(/−/g, '-') : value;
             return <span key={key} className={isNegative ? styles.negativeValue : positiveClass}
-                aria-label={isNegative ? value : undefined}>{visibleValue}</span>;
+                aria-label={isNegative ? displayValue : undefined}>{displayValue}</span>;
         };
         
         return parts.map((part, i) => {

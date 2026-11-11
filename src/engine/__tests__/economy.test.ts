@@ -21,7 +21,7 @@ const settle = (state: GameState) => processAction({ ...state, phase: 'scoring',
 describe('free pack cadence and cash antes', () => {
     it('offers an optional opening pack before the first deal without charging cash or ante', () => {
         const state = start();
-        expect(state).toMatchObject({ phase: 'pack_choice', cash: 100, ante: BASE_ANTE, dealsTaken: 0, relicSlots: 6 });
+        expect(state).toMatchObject({ phase: 'pack_choice', cash: 100, ante: BASE_ANTE, dealsTaken: 0, relicSlots: 4 });
         expect(state.pendingPack?.packId).toBe('mixed_major');
         expect(getValidActions(state)).toEqual([...state.pendingPackChoices.map(cardId => ({ type: 'choose_pack_card', cardId })), { type: 'skip_pack' }]);
         expect(act(state, { type: 'deal' })).toEqual(state);
@@ -107,7 +107,7 @@ describe('free pack cadence and cash antes', () => {
                 expect(state.pendingPack?.packId).toBe('mixed_major');
                 expect(act(state, { type: 'deal' })).toEqual(state);
                 while (state.phase === 'pack_choice') state = finishOpeningPack(state);
-                expect(state).toMatchObject({ phase: 'deal_over', cash, relicSlots: 6 });
+                expect(state).toMatchObject({ phase: 'deal_over', cash, relicSlots: 4 });
                 expect(state.ante).toBe(antes[Math.floor(round / CHALLENGE_ROUNDS)]);
                 expect(state.challenges.find(challenge => challenge.metric === 'rounds')?.progress).toBe(0);
                 expect(state.challenges.some(challenge => challenge.metric === 'earnings')).toBe(false);

@@ -86,6 +86,10 @@ the trial's mean round payout. 95% intervals use `1.96 × sample SD / sqrt(n)`
 on those independent observations. They do not measure uncertainty in bot
 quality or tell you whether an upgrade is good game design.
 
+Raise trigger counts measure upgrade applications: a three-card Flush or Straight
+counts twice, and a grouped three-of-a-kind counts as three Pairs. These can
+exceed the number of displayed scoring rows.
+
 Separate deterministic streams align trial, round, draw number, and dealer
 resolution. Extra draws and altered probabilities can produce different cards
 within a round; later rounds do not shift because of an earlier extra draw.
@@ -114,6 +118,34 @@ npm run --silent simulate -- --experiment deck --preset balanced --trials 1000 >
 Use `--help` for all options. Remove `--summary` to obtain the full JSON report.
 No server is started. There is no separate scoring implementation in the CLI.
 
+For a weighted audit of actual current ranges and a proposed calibration, run:
+
+```sh
+node scripts/calibrate-rewards.mjs --trials 20000 > ranges-score.json
+node scripts/calibrate-rewards.mjs --trials 10000 --bot patterns --presets fresh,balanced > ranges-patterns.json
+node scripts/calibrate-rewards.mjs --trials 1500 --bot patterns --stacks 0,4,16,32 > stacks-weighted.json
+```
+
+This finite audit leaves production tuning untouched. It plays independent rounds
+with shared public-policy inputs, then computes direct marginal payout for every
+possible rolled amount, including the production weighting and integer rounding.
+It checks the formula against production settlement for every current endpoint
+in the first 100 rounds per context. It reports regular and strong benefits
+separately; strong values exclude any Tradeoff drawback. The proposal is an
+explicit experimental fixture in the script. Intervals describe uncertainty
+across rounds after averaging all possible rolls, not the variance of a randomly
+rolled reward. This audit holds final hands fixed; use stacking sweeps to study
+how accumulated upgrades change play. It does not value the deck/relic rows of
+composite Reward cards or model their acquisition in a full run.
+
+The `--stacks` mode instead samples every Common Simple roll with production
+weights, splits each equal card budget between cash and multiplier, and adapts
+play to the actual rolled build. Current and proposed arms share initial game
+and roll streams. Its paired changes compare payouts in corresponding trials.
+The proposed ranges exist only in that finite process; production files and
+saved cards are unchanged. This isolates accumulation, with unlimited cash and
+no other reward components, and does not measure survival.
+
 Run `npm test -- src/simulation/__tests__/runner.test.ts` to check reproducibility,
 hidden-information isolation, real settlement, paired statistics, and relic decay.
 
@@ -133,6 +165,12 @@ amounts and drawbacks. All relics, deck upgrades, challenge packs and boss actio
 are skipped to isolate Raise progression. Trials do not insert cash or upgrades.
 Horizon completion is censored survival, not a victory. Invalid actions and
 action limits fail the job instead of being counted as bankruptcies.
+
+Current limitation: the natural-run selector recognizes standalone Raise IDs;
+it skips composite `reward_v1` cards rather than evaluating their Raise, deck,
+and relic rows together. Its survival results therefore do not calibrate current
+composite Reward acquisition. The isolated range audit and synthetic stacking
+experiments remain applicable to individual Raise effects.
 
 The six reward strategies are random among Raises, Pair, Straight, Flush,
 Pair+Straight, and adaptive reinforcement of the leading pattern bonuses. The

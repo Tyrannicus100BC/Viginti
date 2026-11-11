@@ -3,6 +3,9 @@ import { getBoss, getBustLimit } from './bosses';
 import { formatChipMultiplier, formatMultPercent } from '../logic/formatters';
 import { getPackDefinition, describePackChoices, getTargetedPackReward } from '../logic/packs';
 import { canPlayHand } from './economy';
+import { getRewardCard } from '../logic/rewardCards';
+import { getRaise } from '../logic/handScoring';
+import { getPackCard } from '../logic/packCards';
 /**
  * Viginti CLI Simulator
  *
@@ -114,9 +117,9 @@ export function renderState(state: GameState): string {
         lines.push('');
     }
 
-    // Shop items
+    // Reward choices
     if (state.phase === 'pack_choice') {
-        lines.push(`  Free pack reward: ${state.offeredPacks.join(', ') || state.pendingPack?.packId || 'complete'}`);
+        lines.push(`  Free reward: ${state.offeredPacks.join(', ') || state.pendingPack?.packId || 'complete'}`);
     }
 
     // Inventory
@@ -126,7 +129,7 @@ export function renderState(state: GameState): string {
             const charges = state.tableActionCharges[r.id];
             return charges !== undefined ? `${name}(${charges})` : name;
         });
-        lines.push(`  Relics: ${relicNames.join(', ')}`);
+        lines.push(`  Effects (oldest first): ${relicNames.join(', ')}`);
         lines.push('');
     }
 
@@ -156,6 +159,11 @@ export function describeAction(action: PlayerAction, _state?: GameState): string
         case 'finish_pack':
             return 'Return to the table';
         case 'choose_pack_card': {
+            const reward = getRewardCard(action.cardId);
+            if (reward) return `Choose ${reward.rarity} Reward: ${reward.rows.map(row => row.kind === 'raise'
+                ? getRaise(row.raiseId)!.description : row.kind === 'deck'
+                    ? getPackCard(row.cardId)!.benefits.map(benefit => `${benefit.label}: ${benefit.change}`).join(' · ')
+                    : RELIC_REGISTRY[row.relicId].name).join(' · ')}`;
             const pack = getTargetedPackReward(action.cardId);
             return pack ? `Choose ${pack.name}: ${pack.description}` : `Choose reward ${action.cardId}`;
         }
@@ -254,7 +262,7 @@ export const greedyStrategy: Strategy = (state, actions) => {
 export function createLLMStrategy(model: string, profile: string): Strategy {
     return async (state, actions) => {
         const systemPrompt = `You are an expert card game player playing "Viginti", a blackjack-inspired rogue-like.
-Your goal is to survive as long as possible and grow your winnings. Dealing costs the cash ante and starts the center hand; both side hands are always free. You lose when you try to deal without enough cash for the ante. Survive four rounds to earn a major reward and raise the ante to current ante * 1.5 + 25, rounded to the nearest $5. Side challenges earn minor rewards without raising the ante and renew after all queued rewards are collected. Major rewards offer six options: three raises, two passive relics, and one randomly selected Deck Pack or Challenge Pack; choose one. Minor rewards offer three random upgrades; choose one. Every third ante is a boss. Boss rules last four rounds, and defeating one also grants a choice of two table actions. Table actions are exclusive to boss rewards and do not consume the six passive relic slots.
+Your goal is to survive as long as possible and grow your winnings. Dealing costs the cash ante and starts the center hand; both side hands are always free. You lose when you try to deal without enough cash for the ante. Survive four rounds to earn a major reward and raise the ante to current ante * 1.5 + 25, rounded to the nearest $5. Side challenges earn minor rewards without raising the ante and renew after all queued rewards are collected. Major rewards offer six unified reward cards; minor rewards offer three. Choose one card and gain all its rows: permanent raises, permanent deck probability changes, and temporary relic effects. Common, Uncommon, and Rare cards have two, three, and four row slots respectively; a raise tradeoff may display an extra drawback line. Up to four relic effects stay active in acquisition order. A fifth replaces the oldest; raises and deck changes remain. Every third ante is a boss. Boss rules last four rounds, and defeating one grants an additional major reward.
 Current Play Profile: ${profile}
 
 You MUST follow the play profile strictly.

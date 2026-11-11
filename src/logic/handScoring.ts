@@ -1,6 +1,6 @@
 import { formatCash, formatChipMultiplier } from './formatters';
 import { rollPackRarity, type PackQuality } from './packs';
-import type { Card, ScoringDetail } from '../types';
+import type { Card, ScoreContribution, ScoringDetail } from '../types';
 import { MAX_HAND_PAIRS, POKER_ORDER, RANK_VALUES } from './rules';
 import type { Relic, RelicRarity } from './relics/types';
 import type { SeededRNG } from '../engine/rng';
@@ -27,9 +27,9 @@ interface HandTypeDefinition {
 export const HAND_TYPES: readonly HandTypeDefinition[] = [
     { id: 'win', name: 'Win', icon: '/hands/win.svg', chips: 10, mult: 0, description: 'Beat the dealer. Exactly 21 has a higher base payout.', chipCards: false, variant: { id: 'viginti', name: '21', icon: '/hands/viginti.svg', chips: 20, mult: 0.1 } },
     { id: 'loss', name: 'Lose', icon: '/hands/lose.svg', chips: -10, mult: 0, description: 'Lose to the dealer. Busts have a larger base penalty. A push has no outcome payout.', chipCards: false, variant: { id: 'bust', name: 'Bust', icon: '/hands/bust.svg', chips: -20, mult: -0.1 } },
-    { id: 'pair', name: 'Pair', icon: '/hands/pair.svg', chips: 5, mult: 0.05, description: 'Every two cards of the same rank, up to three pairs per hand. Three and four of a kind both score three pairs.', chipCards: true },
-    { id: 'straight', name: 'Straight', icon: '/hands/straight.svg', chips: 10, mult: 0, description: 'Every separate run of two or more ranks. Aces can be high or low.', chipCards: true },
-    { id: 'flush', name: 'Flush', icon: '/hands/flush.svg', chips: 0, mult: 0, description: 'Every suit group of two or more cards.', chipCards: true },
+    { id: 'pair', name: 'Pair', icon: '/hands/pair.svg', chips: 5, mult: 0.05, description: 'Every two cards of the same rank, up to three pairs per hand. Three and four of a kind both score three base bonuses; participating card values and special bonuses count once.', chipCards: true },
+    { id: 'straight', name: 'Straight', icon: '/hands/straight.svg', chips: 10, mult: 0, description: 'Each run scores one bonus per card after the first, plus card values once. Aces can be high or low.', chipCards: true },
+    { id: 'flush', name: 'Flush', icon: '/hands/flush.svg', chips: 0, mult: 0, description: 'Each suit group scores one bonus per card after the first, plus card values once.', chipCards: true },
 ] as const;
 
 /** Rollable labels include outcome variants as independent Raise targets. */
@@ -340,15 +340,40 @@ export function getHandPayout(id: HandTypeId, upgrades: HandUpgrades = {}) {
 export function evaluateBaseHands(cards: Card[], isWin: boolean, blackjackValue: number, outcome?: 'win' | 'loss' | 'bust' | 'push' | null, upgrades: HandUpgrades = {}, bustLimit = 21): ScoringDetail[] {
     if (!cards.length) return [];
     const criteria: ScoringDetail[] = [];
+    const paidPairCards = new Set<string>();
     const add = (id: HandTypeId, group: Card[], variant?: 'viginti' | 'bust') => {
         const hand = getHandPayout(id, upgrades);
+        const count = id === 'straight' || id === 'flush' ? group.length - 1 : 1;
+        const baseHand = HAND_TYPES.find(hand => hand.id === id)!;
+        const base = variant ? baseHand.variant! : baseHand;
+        const name = variant === 'viginti' ? 'Viginti' : variant === 'bust' ? 'Bust' : hand.name;
+        // Keep individual pair matches for per-pair Raises and relics, but pay
+        // each participating card's value only once across overlapping pairs.
+        const valueCards = hand.chipCards ? group.filter(card => id !== 'pair' || !paidPairCards.has(card.id)) : [];
+        const cardSum = valueCards.reduce((sum, card) => sum + RANK_VALUES[card.rank], 0);
+        if (id === 'pair') group.forEach(card => paidPairCards.add(card.id));
+        const raises = new Map<string, ScoreContribution>();
+        for (const change of getHandRaiseChanges(variant ?? id, upgrades)) {
+            const key = `${change.raiseId}:${change.occurrence}`;
+            const entry = raises.get(key) ?? { label: getRaise(change.raiseId)?.name ?? 'Raise',
+                detail: count > 1 ? `Applied ${count} times` : undefined, chips: 0, multiplier: 0 };
+            if (change.stat === 'chips') entry.chips += change.value * count;
+            else entry.multiplier = Number((entry.multiplier + change.value * count).toFixed(8));
+            raises.set(key, entry);
+        }
         criteria.push({
             id: variant ?? id,
-            name: variant === 'viginti' ? 'Viginti' : variant === 'bust' ? 'Bust' : hand.name,
-            count: 1,
-            chips: (variant ? hand.variant!.chips : hand.chips) + (hand.chipCards ? group.reduce((sum, card) => sum + RANK_VALUES[card.rank], 0) : 0),
-            multiplier: variant ? hand.variant!.mult : hand.mult,
+            name,
+            count,
+            chips: (variant ? hand.variant!.chips : hand.chips) * count + cardSum,
+            multiplier: Number(((variant ? hand.variant!.mult : hand.mult) * count).toFixed(8)),
             cardIds: group.map(card => card.id),
+            breakdown: [
+                ...(valueCards.length ? [{ label: 'Card sum', detail: valueCards.map(card => String(RANK_VALUES[card.rank])).join(' + '), chips: cardSum, multiplier: 0 }] : []),
+                { label: `Base ${name}`, detail: count > 1 ? `${count} bonuses · ${formatCash(base.chips, true)} / ${formatChipMultiplier(base.mult, true)} each` : undefined,
+                    chips: base.chips * count, multiplier: Number((base.mult * count).toFixed(8)) },
+                ...raises.values(),
+            ],
         });
     };
     if (blackjackValue > bustLimit || outcome === 'bust') add('loss', cards, 'bust');

@@ -292,7 +292,7 @@ describe('GameBridge', () => {
         const migrated = getBridge().gameState;
         expect(migrated.phase).toBe('pack_choice');
         expect(migrated.offeredPacks).toEqual(['mixed_major']);
-        expect(migrated.relicSlots).toBe(6);
+        expect(migrated.relicSlots).toBe(4);
         expect(migrated.playerHands.every(hand => !hand.isInactive)).toBe(true);
         expect(migrated).not.toHaveProperty('comps');
         expect(migrated).not.toHaveProperty('shopItems');

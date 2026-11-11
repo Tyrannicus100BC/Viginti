@@ -1,5 +1,5 @@
 .shake-screen {
-  animation: shakeHard 0.5s cubic-bezier(.36, .07, .19, .97) both;
+  animation: shakeHard calc(0.5s * var(--animation-time-scale, 1)) cubic-bezier(.36, .07, .19, .97) both;
 }
 
 .red-tint {
@@ -16,7 +16,7 @@
   background: radial-gradient(circle, transparent 50%, rgba(255, 0, 0, 0.3) 100%);
   pointer-events: none;
   z-index: 9999;
-  animation: flashRed 0.5s ease-out;
+  animation: flashRed calc(0.5s * var(--animation-time-scale, 1)) ease-out;
 }
 
 @keyframes shakeHard {

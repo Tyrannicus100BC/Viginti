@@ -28,7 +28,7 @@ describe('HUD debug progression', () => {
         let state: GameState = { ...start(), bossId: 'high_limit', challengeStage: 2, challenges: createChallenges(2) };
         for (let i = 0; i < 5; i++) state = act(state, { type: 'debug_advance_round' });
         expect(state.challengeRewards).toHaveLength(2);
-        expect(state.challengeRewards[1]).toMatchObject({ kind: 'table_action' });
+        expect(state.challengeRewards[1]).toMatchObject({ title: 'Boss Defeated', tier: 'major' });
         expect(state.challenges.find(goal => goal.main)).toMatchObject({ progress: 4, completed: true });
     });
 

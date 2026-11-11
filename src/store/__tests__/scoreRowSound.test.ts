@@ -48,6 +48,29 @@ afterEach(() => {
 });
 
 describe('score row presentation', () => {
+    it('reveals one triple-pair row with all three cards highlighted and the full payout', async () => {
+        vi.useFakeTimers();
+        prepareScoring();
+        const base = useGameBridge.getState().gameState;
+        const cards = [card('3h', '3', 'hearts'), card('3s', '3', 'spades'), card('3c', '3', 'clubs')];
+        const state = { ...base, handUpgrades: { raise_pair_combo: 1 },
+            playerHands: [{ id: 0, cards, blackjackValue: 9, isHeld: true, isBust: false, outcome: 'push' as const }] };
+        useGameBridge.setState({ gameState: state, phase: state.phase });
+        const pairHighlights: (string[] | null)[] = [];
+        useGameBridge.getState().setSfx({ play(id) {
+            const ui = useGameBridge.getState();
+            if (id === 'score' && ui.scoringCriteria[0]?.at(-1)?.id === 'pair') pairHighlights.push(ui.activeHighlightIds);
+        } });
+        const scoring = useGameBridge.getState().dispatch({ type: 'score_round' });
+        await vi.runAllTimersAsync();
+        await scoring;
+        const ui = useGameBridge.getState();
+        expect(pairHighlights).toEqual([cards.map(card => card.id)]);
+        expect(ui.scoringCriteria[0]).toMatchObject([{ id: 'pair', count: 3 }]);
+        expect(ui.scoringRowValues[0][0]).toMatchObject({ count: 3, chips: 84, mult: expect.closeTo(0.9) });
+        expect(ui.gameState.cash).toBe(base.cash + 159);
+    });
+
     it('hides the dealer before the first scoring row in an all-loss round and keeps it hidden after settlement', async () => {
         vi.useFakeTimers();
         prepareScoring();

@@ -7,7 +7,7 @@
     z-index: 1;
     /* Create stacking context for children like scoringList */
     /* Scaling transition for scoring focus */
-    transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+    transition: transform calc(0.28s * var(--animation-time-scale, 1)) cubic-bezier(0.34, 1.56, 0.64, 1);
 
     /* Responsive Sizing */
     width: 292px;
@@ -33,7 +33,7 @@
     /* Fixed height instead of min-height */
     border: 2px solid rgba(255, 255, 255, 0.1);
     position: relative;
-    transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+    transition: background calc(0.3s * var(--animation-time-scale, 1)) ease, border-color calc(0.3s * var(--animation-time-scale, 1)) ease, box-shadow calc(0.3s * var(--animation-time-scale, 1)) ease;
 }
 
 .hand::before {
@@ -48,8 +48,8 @@
     box-shadow: 0 0 15px rgba(255, 215, 0, 0.2);
     opacity: 0;
     pointer-events: none;
-    transition: opacity 0.5s ease;
-    animation: pulse 1.5s infinite;
+    transition: opacity calc(0.5s * var(--animation-time-scale, 1)) ease;
+    animation: pulse calc(1.5s * var(--animation-time-scale, 1)) infinite;
     z-index: 10;
 }
 
@@ -71,7 +71,7 @@
     border-color: #ff4444;
     box-shadow: 0 0 25px rgba(255, 68, 68, 0.6);
     opacity: 1;
-    animation: pulseRed 1.5s infinite;
+    animation: pulseRed calc(1.5s * var(--animation-time-scale, 1)) infinite;
 }
 
 @keyframes pulseRed {
@@ -127,7 +127,7 @@
 /* Tint effect for non-dealer overlays so per-card highlights still work */
 .cardsContainer.tinted .cardWrapper {
     filter: brightness(0.3);
-    transition: filter 0.3s ease, transform 0.3s ease;
+    transition: filter calc(0.3s * var(--animation-time-scale, 1)) ease, transform calc(0.3s * var(--animation-time-scale, 1)) ease;
 }
 
 /* Individual card lifting and restoring */
@@ -141,7 +141,7 @@
     justify-content: center;
     width: 100%;
     padding-top: 10px;
-    transition: filter 0.2s ease;
+    transition: filter calc(0.2s * var(--animation-time-scale, 1)) ease;
 }
 
 .overlayScrim {
@@ -154,13 +154,13 @@
     border-radius: 10px;
     pointer-events: none;
     z-index: 110;
-    transition: opacity 0.2s ease;
+    transition: opacity calc(0.2s * var(--animation-time-scale, 1)) ease;
 }
 
 .cardWrapper {
     margin-right: -60px;
     /* Overlap increased to tighten spacing */
-    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.3s ease;
+    transition: transform calc(0.3s * var(--animation-time-scale, 1)) cubic-bezier(0.34, 1.56, 0.64, 1), filter calc(0.3s * var(--animation-time-scale, 1)) ease;
     transform-style: preserve-3d;
     position: relative;
 }
@@ -206,7 +206,7 @@
     justify-content: center;
     pointer-events: none;
     z-index: 120;
-    transition: opacity 0.3s ease;
+    transition: opacity calc(0.3s * var(--animation-time-scale, 1)) ease;
 }
 
 .overlayText.faded {
@@ -226,6 +226,7 @@
 }
 
 .bustOverlay,
+.standOverlay,
 .winOverlay,
 .lossOverlay {
     font-size: 1.875rem;
@@ -240,6 +241,11 @@
 .bustOverlay {
     color: #ff4444;
     text-shadow: 0 0 10px #ff0000;
+}
+
+.standOverlay {
+    color: #e5d7bb;
+    text-shadow: 0 0 10px rgba(229, 215, 187, 0.5);
 }
 
 .winOverlay {
@@ -305,12 +311,24 @@
     color: #fff;
     opacity: 0;
     transform: translateY(10px);
-    transition: opacity 0.3s, transform 0.3s;
+    transition: opacity calc(0.3s * var(--animation-time-scale, 1)), transform calc(0.3s * var(--animation-time-scale, 1));
 }
 
 .scoringItem.visible {
     opacity: 1;
     transform: translateY(0);
+}
+
+.scoringItem.inspectable {
+    pointer-events: auto;
+    cursor: help;
+}
+
+.scoringItem.inspected,
+.scoringItem.inspectable:focus-visible {
+    background: #1d3035;
+    border-color: #92b5bf;
+    outline: none;
 }
 
 .itemName {
@@ -357,7 +375,7 @@
 
 .itemChips span.visible {
     opacity: 1;
-    animation: smallSlam 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    animation: smallSlam calc(0.3s * var(--animation-time-scale, 1)) cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
 }
 
 .itemMult {
@@ -376,7 +394,7 @@
 
 .itemMult span.visible {
     opacity: 1;
-    animation: smallSlam 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    animation: smallSlam calc(0.3s * var(--animation-time-scale, 1)) cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
 }
 
 @keyframes smallSlam {
@@ -429,7 +447,7 @@
     min-width: 30px;
     text-align: center;
     /* Remove transition to allow animation override */
-    transition: color 0.3s ease, text-shadow 0.3s ease;
+    transition: color calc(0.3s * var(--animation-time-scale, 1)) ease, text-shadow calc(0.3s * var(--animation-time-scale, 1)) ease;
     z-index: 10;
     position: relative;
 }
@@ -460,7 +478,7 @@
 }
 
 .scoreValue.pulse {
-    animation: bounceColor 0.4s ease-out;
+    animation: bounceColor calc(0.4s * var(--animation-time-scale, 1)) ease-out;
 }
 
 /* Multiplier positioned absolutely to the RIGHT of the score - DEPRECATED/REMOVED */
@@ -503,7 +521,7 @@
 
 .slamEnter {
     opacity: 0;
-    animation: slam 0.28s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    animation: slam calc(0.28s * var(--animation-time-scale, 1)) cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
 }
 
 @keyframes scoreAppear {
@@ -520,7 +538,7 @@
 
 .scoreFadeIn {
     opacity: 0;
-    animation: scoreAppear 0.2s ease-out forwards;
+    animation: scoreAppear calc(0.2s * var(--animation-time-scale, 1)) ease-out forwards;
 }
 
 @keyframes discardExitWrapper {
@@ -541,7 +559,7 @@
 }
 
 .discardingCard {
-    animation: discardExitWrapper 0.42s ease-out forwards;
+    animation: discardExitWrapper calc(0.42s * var(--animation-time-scale, 1)) ease-out forwards;
     pointer-events: none;
     z-index: 5;
     perspective: 1000px;

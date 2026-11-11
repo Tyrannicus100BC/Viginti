@@ -1,3 +1,4 @@
+import { animationDuration } from '../utils/animationTiming';
 import { formatCash, formatChipMultiplier } from '../logic/formatters';
 import React from 'react';
 import type { Card as CardType, CardOrigin } from '../types';
@@ -73,7 +74,7 @@ export const PlayingCard: React.FC<CardProps> = ({
     const delayMs = Math.max(0, delay) * 1000;
     dealSoundTimeoutRef.current = window.setTimeout(() => {
       onDealSound(card.id);
-    }, delayMs);
+    }, animationDuration(delayMs));
 
     return () => {
       if (dealSoundTimeoutRef.current !== null) {
@@ -100,7 +101,7 @@ export const PlayingCard: React.FC<CardProps> = ({
 
     flipSoundTimeoutRef.current = window.setTimeout(() => {
       onFlipSound(card.id);
-    }, timeoutMs);
+    }, animationDuration(timeoutMs));
 
     return () => {
       if (flipSoundTimeoutRef.current !== null) {
@@ -157,7 +158,7 @@ export const PlayingCard: React.FC<CardProps> = ({
       className={`${styles.scene} ${className} ${isDrawn ? styles.drawn : ''}`}
       onClick={onClick}
       data-card-id={card.id}
-      style={{ ...style, animationDelay: `${delay}s` }} // Apply delay to container if needed, or pass directly to card
+      style={{ ...style, animationDelay: `${animationDuration(delay)}s` }} // Apply delay to container if needed, or pass directly to card
     >
       <div
         className={`
@@ -169,7 +170,7 @@ export const PlayingCard: React.FC<CardProps> = ({
         data-origin={origin}
         data-face-up={card.isFaceUp ? '1' : '0'}
         data-anim={animClass || 'none'}
-        style={{ animationDelay: `${delay}s` }}
+        style={{ animationDelay: `${animationDuration(delay)}s` }}
         onAnimationEnd={(e) => {
           if (e.currentTarget !== e.target) return;
           if (!onEnterAnimationEnd) return;
@@ -218,15 +219,15 @@ export const PlayingCard: React.FC<CardProps> = ({
             <>
               {/* Bottom Left */}
               <div className={styles.specialEffect}>
-                {card.specialEffect.type !== 'mult' && <div className={styles.specialSymbol}
+                <div className={styles.specialSymbol}
                   style={{
-                    color: isNegativeEffect ? '#7f1d1d' : card.specialEffect.type === 'chip' ? '#166534' : '#6b21a8',
-                    WebkitTextStroke: isNegativeEffect ? '1px #ff7c7c' : card.specialEffect.type === 'chip' ? '1px #6ee7b7' : '1px #d8b4fe',
-                    fontSize: card.specialEffect.type === 'chip' ? '1.0rem' : undefined
+                    color: isNegativeEffect ? '#7f1d1d' : card.specialEffect.type === 'chip' ? '#166534' : card.specialEffect.type === 'mult' ? '#854d0e' : '#6b21a8',
+                    WebkitTextStroke: isNegativeEffect ? '1px #ff7c7c' : card.specialEffect.type === 'chip' ? '1px #6ee7b7' : card.specialEffect.type === 'mult' ? '1px #fde047' : '1px #d8b4fe',
+                    fontSize: card.specialEffect.type !== 'score' ? '1.0rem' : undefined
                   }}
                 >
-                  {card.specialEffect.type === 'chip' ? '$' : '–'}
-                </div>}
+                  {card.specialEffect.type === 'chip' ? '$' : card.specialEffect.type === 'mult' ? '%' : '–'}
+                </div>
                 <div className={styles.specialValue}
                   style={{
                     color: isNegativeEffect ? '#7f1d1d' : card.specialEffect.type === 'chip' ? '#166534' : card.specialEffect.type === 'mult' ? '#854d0e' : '#6b21a8',
@@ -234,21 +235,21 @@ export const PlayingCard: React.FC<CardProps> = ({
                     paintOrder: 'stroke fill'
                   }}
                 >
-                  {card.specialEffect.type === 'mult' ? formatChipMultiplier(card.specialEffect.value) : card.specialEffect.type === 'chip' ? Math.abs(card.specialEffect.value) : card.specialEffect.value}
+                  {card.specialEffect.type === 'mult' ? formatChipMultiplier(card.specialEffect.value).replace('%', '') : card.specialEffect.type === 'chip' ? card.specialEffect.value : card.specialEffect.value}
                 </div>
               </div>
 
               {/* Top Right (Upside Down) */}
               <div className={styles.specialEffectTopRight}>
-                {card.specialEffect.type !== 'mult' && <div className={styles.specialSymbol}
+                <div className={styles.specialSymbol}
                   style={{
-                    color: isNegativeEffect ? '#7f1d1d' : card.specialEffect.type === 'chip' ? '#166534' : '#6b21a8',
-                    WebkitTextStroke: isNegativeEffect ? '1px #ff7c7c' : card.specialEffect.type === 'chip' ? '1px #6ee7b7' : '1px #d8b4fe',
-                    fontSize: card.specialEffect.type === 'chip' ? '1.0rem' : undefined
+                    color: isNegativeEffect ? '#7f1d1d' : card.specialEffect.type === 'chip' ? '#166534' : card.specialEffect.type === 'mult' ? '#854d0e' : '#6b21a8',
+                    WebkitTextStroke: isNegativeEffect ? '1px #ff7c7c' : card.specialEffect.type === 'chip' ? '1px #6ee7b7' : card.specialEffect.type === 'mult' ? '1px #fde047' : '1px #d8b4fe',
+                    fontSize: card.specialEffect.type !== 'score' ? '1.0rem' : undefined
                   }}
                 >
-                  {card.specialEffect.type === 'chip' ? '$' : '–'}
-                </div>}
+                  {card.specialEffect.type === 'chip' ? '$' : card.specialEffect.type === 'mult' ? '%' : '–'}
+                </div>
                 <div className={styles.specialValue}
                   style={{
                     color: isNegativeEffect ? '#7f1d1d' : card.specialEffect.type === 'chip' ? '#166534' : card.specialEffect.type === 'mult' ? '#854d0e' : '#6b21a8',
@@ -256,7 +257,7 @@ export const PlayingCard: React.FC<CardProps> = ({
                     paintOrder: 'stroke fill'
                   }}
                 >
-                  {card.specialEffect.type === 'mult' ? formatChipMultiplier(card.specialEffect.value) : card.specialEffect.type === 'chip' ? Math.abs(card.specialEffect.value) : card.specialEffect.value}
+                  {card.specialEffect.type === 'mult' ? formatChipMultiplier(card.specialEffect.value).replace('%', '') : card.specialEffect.type === 'chip' ? card.specialEffect.value : card.specialEffect.value}
                 </div>
               </div>
             </>

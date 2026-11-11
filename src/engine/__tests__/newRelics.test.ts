@@ -162,7 +162,8 @@ describe('growth relics', () => {
         [hand(['K', 'K', '2'], 'bust')], // One pair does not qualify.
     ])('counts all scored pairs across hands, growing once per qualifying round', (...hands) => {
         const state = { ...start(), inventory: [instance('two_peas')] };
-        const pairCount = hands.reduce((sum, item) => sum + evaluateHandScore(item.cards, false).criteria.filter(row => row.id === 'pair').length, 0);
+        const pairCount = hands.reduce((sum, item) => sum + evaluateHandScore(item.cards, false).criteria
+            .filter(row => row.id === 'pair').reduce((count, row) => count + row.count, 0), 0);
         const bonus = pairCount >= 2 ? 0.01 : 0;
         const result = scoreRound(state, hands);
         expect(result.nextState.inventory[0].state.bonus_mult).toBe(bonus);

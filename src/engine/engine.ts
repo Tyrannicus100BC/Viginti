@@ -1,7 +1,7 @@
 import { getBustLimit, getDealerBustLimit } from './bosses';
 import { processDebugAdvanceRound, processDebugAdvanceAnte } from './actions/debugProgression';
 import { advanceChallenges, completeChallenges, getHandChallengeProgress, type ChallengeReward } from './challenges';
-import { canAcquireRelic, INITIAL_RELIC_SLOTS } from '../logic/relics/inventory';
+import { acquireRelicEffect, canAcquireRelic, INITIAL_RELIC_SLOTS } from '../logic/relics/inventory';
 /**
  * Game Engine — the main entry point for processing player actions.
  *
@@ -1033,7 +1033,7 @@ function processScoreRound(state: GameState): ActionResult {
         preScore.criteria.forEach(c => {
             if (c.id === 'flush' || c.id.startsWith('flush_')) categoryCounts.flush++;
             if (c.id === 'straight' || c.id.startsWith('straight_')) categoryCounts.straight++;
-            if (c.id === 'rank' || c.id.startsWith('rank_') || c.id === 'pair' || c.id === 'three_kind') categoryCounts.rank++;
+            if (c.id === 'rank' || c.id.startsWith('rank_') || c.id === 'pair' || c.id === 'three_kind') categoryCounts.rank += c.count;
         });
     });
 
@@ -1169,7 +1169,7 @@ function processScoreRound(state: GameState): ActionResult {
     const completion = completeChallenges(challenges);
     events.push({ type: 'challenges_updated', challenges: completion.challenges });
     const rewards = [...completion.rewards, ...sideRewards];
-    if (completion.advance && state.bossId) rewards.push({ id: `boss-${state.challengeStage}`, title: 'Boss Defeated', tier: 'major', kind: 'table_action' });
+    if (completion.advance && state.bossId) rewards.push({ id: `boss-${state.challengeStage}`, title: 'Boss Defeated', tier: 'major' });
     const challengeRewards = [...state.challengeRewards, ...rewards];
     rewards.forEach(reward => events.push({ type: 'challenge_completed', reward }));
     const tableActionCharges = { ...state.tableActionCharges };
@@ -1260,12 +1260,7 @@ function processDebugAddRelic(state: GameState, relicId: string): ActionResult {
     const config = getRelicConfig(relicId);
     if (!config) return { nextState: state, events: [] };
 
-    const instance: RelicInstance = {
-        id: relicId,
-        state: config.properties ? { ...config.properties } : {}
-    };
-
-    const newInventory = [...state.inventory, instance];
+    const newInventory = acquireRelicEffect(state.inventory, relicId);
     const newCharges = { ...state.tableActionCharges };
     const newHeld = { ...state.tableActionHeldCards };
 
