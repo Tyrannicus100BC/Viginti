@@ -953,6 +953,8 @@ function processResolveHandOutcome(state: GameState): ActionResult {
     const events: GameEvent[] = [];
     const dVal = state.dealer.blackjackValue;
     const invArr = state.inventory as RelicInstance[];
+    const rules = getHandRules(state);
+    const dealerBustLimit = getDealerBustLimit(state);
 
     // 3. Evaluate each player hand
     const scoredHands = state.playerHands.map((h, i) => {
@@ -963,11 +965,16 @@ function processResolveHandOutcome(state: GameState): ActionResult {
             outcome = 'loss';
         } else if (h.isBust) {
             outcome = 'bust';
-        } else if (handBeatsDealer(h.blackjackValue, h.cards.length, dVal, getDealerBustLimit(state), getHandRules(state))) {
+        } else if (handBeatsDealer(h.blackjackValue, h.cards.length, dVal, dealerBustLimit, rules)) {
             outcome = 'win';
         }
 
-        events.push({ type: 'hand_outcome', handIndex: i, outcome, blackjackValue: h.blackjackValue });
+        // Bust and guaranteed Viginti results were already shown during play.
+        // Omit their events entirely so they add neither sound nor animation time.
+        const isGuaranteedViginti = isCompletedTwentyOne(h, rules) && dealerBustLimit <= 21 && !rules.winBelowDealer;
+        if (!h.isBust && !isGuaranteedViginti) {
+            events.push({ type: 'hand_outcome', handIndex: i, outcome, blackjackValue: h.blackjackValue });
+        }
 
         return { ...h, outcome, resultRevealed: true };
     });

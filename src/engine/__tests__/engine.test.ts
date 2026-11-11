@@ -299,6 +299,43 @@ describe('Game Engine', () => {
         });
 
         it.each([
+            [[21, 21, 20], [2]],
+            [[25, 21, 20], [2]],
+            [[20, 25, 18], [0, 2]],
+            [[20, 21, 25], [0]],
+            [[21, 25, 21], []],
+        ])('only animates unresolved hands for totals %j', (values, animatedIndices) => {
+            const base = startGame();
+            const resolving: GameState = {
+                ...base, phase: 'resolving_outcomes',
+                dealer: { cards: [], blackjackValue: 19, isRevealed: true },
+                playerHands: values.map((value, id) => ({
+                    id, cards: (value === 21 ? ['A', 'K'] : value === 25 ? ['K', 'Q', '5'] : ['K', value === 20 ? 'Q' : '8'])
+                        .map((rank, i) => testCard(`hand_${id}_${i}`, rank as Card['rank'], 'hearts')),
+                    blackjackValue: value, isHeld: false, isBust: value > 21,
+                })),
+            };
+            const result = processAction(resolving, { type: 'resolve_hand_outcome' });
+            expect(result.events.filter(event => event.type === 'hand_outcome').map(event => event.handIndex)).toEqual(animatedIndices);
+            expect(result.nextState.playerHands.map(hand => hand.outcome)).toEqual(
+                values.map(value => value > 21 ? 'bust' : value >= 19 ? 'win' : 'loss'),
+            );
+            expect(result.nextState.playerHands.every(hand => hand.resultRevealed)).toBe(true);
+        });
+
+        it.each(['high_limit', 'underhand', 'threes_company'])('still compares a 21 when %s makes it depend on the dealer', bossId => {
+            const resolving: GameState = {
+                ...startGame(), phase: 'resolving_outcomes', bossId,
+                dealer: { cards: [], blackjackValue: 22, isRevealed: true },
+                playerHands: [{ id: 0, cards: [testCard('ace', 'A', 'hearts'), testCard('king', 'K', 'hearts')],
+                    blackjackValue: 21, isHeld: true, isBust: false }],
+            };
+            const result = processAction(resolving, { type: 'resolve_hand_outcome' });
+            expect(result.events).toContainEqual({ type: 'hand_outcome', handIndex: 0,
+                outcome: bossId === 'underhand' ? 'win' : 'loss', blackjackValue: 21 });
+        });
+
+        it.each([
             ['one losing hand', [null, 'loss', null]],
             ['all losing hands', ['loss', 'loss', 'loss']],
             ['all busts', ['bust', 'bust', 'bust']],

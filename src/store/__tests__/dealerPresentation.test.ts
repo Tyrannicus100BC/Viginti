@@ -3,6 +3,7 @@ import { playEvents } from '../EventPlayer';
 import type { GameEvent } from '../../engine/GameEvent';
 import type { Card } from '../../types';
 import { animationDuration } from '../../utils/animationTiming';
+import { createInitialState, processAction } from '../../engine/engine';
 
 const card: Card = { id: 'dealer-hit', rank: '4', suit: 'clubs', isFaceUp: true, origin: 'deck' };
 
@@ -37,6 +38,42 @@ describe('dealer turn presentation', () => {
         });
         expect(play).toHaveBeenCalledWith('bust');
         expect(patches).toEqual([{ isShaking: true }, { isShaking: false }]);
+    });
+
+    it.each([
+        [18, [21, 21, 20]],
+        [24, [21, 21, 20]],
+        [18, [25, 21, 20]],
+        [24, [25, 21, 20]],
+    ])('resolves the third hand immediately after dealer total %s with player totals %j', async (dealerValue, values) => {
+        vi.useFakeTimers();
+        const patches: Record<string, any>[] = [];
+        const play = vi.fn();
+        const result = processAction({
+            ...createInitialState(), phase: 'resolving_outcomes',
+            dealer: { cards: [], blackjackValue: dealerValue, isRevealed: true },
+            playerHands: values.map((value, id) => ({
+                id, cards: (value === 21 ? ['A', 'K'] : value === 25 ? ['K', 'Q', '5'] : ['K', 'Q'])
+                    .map((rank, i) => ({ ...card, id: `hand_${id}_${i}`, rank: rank as Card['rank'] })),
+                blackjackValue: value, isHeld: true, isBust: value > 21,
+            })),
+        }, { type: 'resolve_hand_outcome' });
+        const playing = playEvents(result.events, {
+            updateUI: patch => patches.push(patch), sfx: { play }, getSpeed: () => 1,
+        });
+
+        // No elapsed time: the first presented result belongs to hand three.
+        expect(patches[0].playerHands([{ id: 0 }, { id: 1 }, { id: 2 }])).toEqual([
+            { id: 0 }, { id: 1 }, { id: 2, outcome: 'win', resultRevealed: true, blackjackValue: 20 },
+        ]);
+        expect(play.mock.calls).toEqual([['win']]);
+        await vi.advanceTimersByTimeAsync(animationDuration(300) - 1);
+        expect(patches.some(patch => patch.dealerVisible === false)).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(patches.some(patch => patch.dealerVisible === false)).toBe(true);
+        await vi.runAllTimersAsync();
+        await playing;
+        expect(play.mock.calls).toEqual([['win']]);
     });
 
     it('clears stand when the next deal begins', async () => {
