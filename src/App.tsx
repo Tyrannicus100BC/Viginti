@@ -1251,8 +1251,8 @@ export default function App() {
                         <a href="/balance" target="_blank" rel="noreferrer" className={styles.debugMenuButton} style={{ marginTop: 10 }}>
                             Balance Lab ↗
                         </a>
-                        <a href="/raises" target="_blank" rel="noreferrer" className={styles.debugMenuButton} style={{ marginTop: 10 }}>
-                            Raise Gallery (Debug) ↗
+                        <a href="/rewards" target="_blank" rel="noreferrer" className={styles.debugMenuButton} style={{ marginTop: 10 }}>
+                            Reward Gallery (Debug) ↗
                         </a>
                     </>)}
                     {debugEnabled && (

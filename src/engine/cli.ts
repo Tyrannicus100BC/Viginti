@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { getBoss, getBustLimit, getHandRules } from './bosses';
 import { formatChipMultiplier, formatMultPercent } from '../logic/formatters';
-import { getPackDefinition, describePackChoices, getTargetedPackReward } from '../logic/packs';
+import { getPackDefinition, describePackChoices } from '../logic/packs';
 import { canPlayHand } from './economy';
 import { getRewardCard } from '../logic/rewardCards';
 import { getRaise } from '../logic/handScoring';
@@ -164,11 +164,8 @@ export function describeAction(action: PlayerAction, _state?: GameState): string
                 ? getRaise(row.raiseId)!.description : row.kind === 'deck'
                     ? getPackCard(row.cardId)!.benefits.map(benefit => `${benefit.label}: ${benefit.change}`).join(' · ')
                     : RELIC_REGISTRY[row.relicId].name).join(' · ')}`;
-            const pack = getTargetedPackReward(action.cardId);
-            return pack ? `Choose ${pack.name}: ${pack.description}` : `Choose reward ${action.cardId}`;
+            return `Choose reward ${action.cardId}`;
         }
-        case 'choose_raise':
-            return 'Choose raise ' + action.raiseId;
         case 'activate_table_action': {
             const name = RELIC_REGISTRY[action.relicId]?.name ?? action.relicId;
             return `Activate ${name}`;
@@ -244,7 +241,7 @@ export const greedyStrategy: Strategy = (state, actions) => {
     // Priority order for remaining actions
     const priority = [
         'select_drawn_card', 'draw',
-        'deal', 'choose_raise', 'choose_pack_card', 'skip_pack', 'open_pack', 'finish_pack',
+        'deal', 'choose_pack_card', 'skip_pack', 'open_pack', 'finish_pack',
         'stand', 'deal', 'complete_deal_early',
     ];
 
@@ -617,7 +614,6 @@ async function runJsonMode(cityId: string) {
                     id: r.id,
                     name: RELIC_REGISTRY[r.id]?.name ?? r.id,
                 })),
-                pendingRaiseChoices: state.pendingRaiseChoices,
                 pendingPackChoices: state.pendingPackChoices,
                 pendingPack: state.pendingPack,
                 relicSlots: state.relicSlots,

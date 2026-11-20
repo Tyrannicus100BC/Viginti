@@ -43,7 +43,7 @@ import {
     processSelectTableActionCard,
     processSelectTableActionDrawCard,
 } from './actions/tableActions';
-import { openReward, processBeginChallengeRewards, processDebugOpenPack, processOpenPack, processFinishPack, processChooseRaise, processChoosePackCard, processSkipPack } from './actions/packActions';
+import { openReward, processBeginChallengeRewards, processDebugOpenPack, processOpenPack, processFinishPack, processChoosePackCard, processSkipPack } from './actions/packActions';
 import {
     checkTutorialTriggers,
     handleTutorialAction,
@@ -130,8 +130,6 @@ function processCoreAction(state: GameState, action: PlayerAction): ActionResult
             return processSkipPack(state);
         case 'choose_pack_card':
             return processChoosePackCard(state, action.cardId);
-        case 'choose_raise':
-            return processChooseRaise(state, action.raiseId);
         // Debug actions
         case 'debug_open_pack':
             return processDebugOpenPack(state, action.packId);
@@ -313,7 +311,6 @@ export function getValidActions(state: GameState): PlayerAction[] {
                         actions.push({ type: 'choose_pack_card', cardId });
                     }
                 });
-                state.pendingRaiseChoices.forEach(raiseId => actions.push({ type: 'choose_raise', raiseId }));
                 actions.push({ type: 'skip_pack' });
             } else if (state.offeredPacks.length) {
                 state.offeredPacks.forEach(packId => actions.push({ type: 'open_pack', packId }));
@@ -388,7 +385,6 @@ export function createInitialState(): GameState {
         activeTableActionId: null,
         inventory: [],
         relicSlots: INITIAL_RELIC_SLOTS,
-        pendingRaiseChoices: [],
         pendingPackChoices: [],
         pendingPack: null,
         offeredPacks: [],
@@ -479,7 +475,6 @@ function processStartGame(
         activeTableActionId: null,
         inventory,
         relicSlots: INITIAL_RELIC_SLOTS,
-        pendingRaiseChoices: [],
         pendingPackChoices: [],
         pendingPack: null,
         offeredPacks: [],

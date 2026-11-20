@@ -161,7 +161,9 @@
     margin-right: -60px;
     /* Overlap increased to tighten spacing */
     transition: transform calc(0.3s * var(--animation-time-scale, 1)) cubic-bezier(0.34, 1.56, 0.64, 1), filter calc(0.3s * var(--animation-time-scale, 1)) ease;
-    transform-style: preserve-3d;
+    /* Keep each card's internal 3D scene inside its brightness filter.
+       Safari can otherwise leave drawn cards undimmed after a discard. */
+    transform-style: flat;
     position: relative;
 }
 

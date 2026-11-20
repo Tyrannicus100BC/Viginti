@@ -1,10 +1,7 @@
-import type { CSSProperties } from 'react';
 import { RAISE_HAND_TYPES, formatRaiseCash, formatRaiseMult, type Raise } from '../logic/handScoring';
-import { getRelicRarityFrameColor, getRelicRarityTextColor } from '../logic/relics/rarity';
 import { HandIcon } from './HandIcon';
 import { RewardRowTooltip } from './RewardRowTooltip';
 import { describeRaiseReward } from '../logic/rewardDescriptions';
-import { PACK_FAMILY_COLORS, RaisePackArt } from './RaisePackArt';
 import styles from './RaisePackChoice.module.css';
 
 export function RaiseCard({ raise }: { raise: Raise }) {
@@ -17,7 +14,7 @@ export function RaiseCard({ raise }: { raise: Raise }) {
         <span className={styles.modifiers}>
             {modifiers.map((effect, index) => {
                 const hand = RAISE_HAND_TYPES.find(hand => hand.id === effect.handTypeId)!;
-                return <RewardRowTooltip key={index} className={styles.modifier} description={describeRaiseReward(effect)}>
+                return <RewardRowTooltip key={index} className={styles.modifier} title={hand.name} icon={<HandIcon icon={hand.icon} />} subtitle="Hand score" description={describeRaiseReward(effect)}>
                     <span className={styles.handName}><HandIcon icon={hand.icon} /> {hand.name}</span>
                     <strong className={effect.chips < 0 || effect.mult < 0 ? styles.negative : effect.chips ? styles.cash : styles.mult}>
                         {effect.chips ? formatRaiseCash(effect.chips) : formatRaiseMult(effect.mult)}
@@ -26,15 +23,4 @@ export function RaiseCard({ raise }: { raise: Raise }) {
             })}
         </span>
     </>;
-}
-
-/** Non-interactive version of the same reward card used by pack choices. */
-export function RaisePreviewCard({ raise }: { raise: Raise }) {
-    return <article aria-label={`${raise.rarity} Raise`} data-raise-preview
-        className={`${styles.card} ${raise.modifiers.length > 3 ? styles.denseCard : ''}`}
-        style={{ '--rarity-color': getRelicRarityFrameColor(raise.rarity), '--card-type-color': PACK_FAMILY_COLORS.raise, cursor: 'default' } as CSSProperties}>
-        <span className={styles.rarity} style={{ color: getRelicRarityTextColor(raise.rarity) }}>{raise.rarity}</span>
-        <span className={styles.cardBody}><RaiseCard raise={raise} /></span>
-        <span className={styles.cardType}><RaisePackArt family="raise" />Raise</span>
-    </article>;
 }

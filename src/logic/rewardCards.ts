@@ -19,7 +19,10 @@ export interface RewardCard {
 
 const RARITIES = ['Common', 'Uncommon', 'Rare'] as const;
 export const REWARD_ROW_COUNTS = { Common: 2, Uncommon: 3, Rare: 4 } as const;
+export const MAX_REWARD_LINES = 5;
 const rowId = (row: RewardRow) => row.kind === 'raise' ? row.raiseId : row.kind === 'deck' ? row.cardId : row.relicId;
+const rowLineCount = (row: RewardRow) => row.kind === 'raise' ? getRaise(row.raiseId)!.modifiers.length
+    : row.kind === 'deck' ? getPackCard(row.cardId)!.benefits.length : 1;
 
 /** The complete composition lives in the ID, so offers survive export/import. */
 export function createRewardCard(rarity: RelicRarity, rows: readonly RewardRow[]): RewardCard {
@@ -45,26 +48,39 @@ export function getRewardCard(id: string): RewardCard | undefined {
     } catch { return undefined; }
 }
 
+/** Shared production composition for live offers and rarity-filtered previews. */
+export function generateRewardCard(rng: SeededRNG, rarity: RelicRarity, probabilities: DeckProbabilities,
+    inventory: readonly RelicInstance[], quality: PackQuality = 'average'): RewardCard {
+    const relicId = generateRelicPackChoices(rng, 1, inventory, [], quality)[0];
+    const kinds = rng.shuffle(relicId ? ['raise', 'deck', 'relic'] as const : ['raise', 'deck'] as const);
+    const rows: RewardRow[] = [];
+    let lineCount = 0;
+    while (rows.length < REWARD_ROW_COUNTS[rarity]) {
+        const kind = kinds[rows.length] ?? rng.pick(['raise', 'deck'] as const);
+        const row: RewardRow = kind === 'raise' ? { kind, raiseId: generateRaise(rng, 'Common').id }
+            : kind === 'deck' ? { kind, cardId: generatePackCard(rng, 'Common', probabilities).id }
+            : { kind, relicId };
+        const lines = rowLineCount(row);
+        // Keep every tradeoff intact and reserve one visible line per remaining upgrade.
+        const remaining = REWARD_ROW_COUNTS[rarity] - rows.length - 1;
+        if (lineCount + lines + remaining > MAX_REWARD_LINES) continue;
+        if (!rows.some(existing => rowId(existing) === rowId(row))) {
+            rows.push(row);
+            lineCount += lines;
+        }
+    }
+    return createRewardCard(rarity, rows);
+}
+
 export function generateRewardCardChoices(rng: SeededRNG, count: number, probabilities: DeckProbabilities,
     inventory: readonly RelicInstance[], quality: PackQuality = 'average'): RewardCard[] {
     const choices: RewardCard[] = [];
     while (choices.length < count) {
-        const rarity = rollPackRarity(rng.next(), quality);
-        const relicId = generateRelicPackChoices(rng, 1, inventory, [], quality)[0];
-        const kinds = rng.shuffle(relicId ? ['raise', 'deck', 'relic'] as const : ['raise', 'deck'] as const);
-        const rows: RewardRow[] = [];
-        while (rows.length < REWARD_ROW_COUNTS[rarity]) {
-            const kind = kinds[rows.length] ?? rng.pick(['raise', 'deck'] as const);
-            const row: RewardRow = kind === 'raise' ? { kind, raiseId: generateRaise(rng, 'Common').id }
-                : kind === 'deck' ? { kind, cardId: generatePackCard(rng, 'Common', probabilities).id }
-                : { kind, relicId };
-            if (!rows.some(existing => rowId(existing) === rowId(row))) rows.push(row);
-        }
-        const card = createRewardCard(rarity, rows);
+        const card = generateRewardCard(rng, rollPackRarity(rng.next(), quality), probabilities, inventory, quality);
         if (!choices.some(choice => choice.id === card.id)) choices.push(card);
     }
     return choices;
 }
 
 export const getRewardLineCount = (card: RewardCard) => card.rows.reduce((total, row) =>
-    total + (row.kind === 'raise' ? getRaise(row.raiseId)!.modifiers.length : row.kind === 'deck' ? getPackCard(row.cardId)!.benefits.length : 1), 0);
+    total + rowLineCount(row), 0);

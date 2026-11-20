@@ -5,7 +5,7 @@ import { pickRandomRelic } from '../../logic/relics/selection';
 import { generateRelicPackChoices } from '../../logic/relicPacks';
 import { generateShopItems } from '../../logic/rewards/generator';
 import { createInitialState, processAction } from '../engine';
-import { getPackDefinition } from '../../logic/packs';
+import { getRewardCard } from '../../logic/rewardCards';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -47,18 +47,20 @@ describe.each(Object.entries(generators))('%s relic rarity selection', (_, gener
     });
 });
 
-describe('relic pack ownership exclusions', () => {
-    it.each(['relic_basic', 'relic_jumbo', 'relic_mega'] as const)('%s excludes owned relics and costs no cash', packId => {
-        const pack = getPackDefinition(packId);
+describe('reward effect ownership exclusions', () => {
+    it('excludes owned effects from live rewards without charging cash', () => {
         const inventory = [{ id: allRelics[0].id, state: {} }];
-        const state = { ...createInitialState(), phase: 'pack_choice' as const, cash: 0, rngState: 42, inventory, offeredPacks: [packId] };
-        const opened = processAction(state, { type: 'open_pack', packId }).nextState;
-        expect(opened.pendingPackChoices).toHaveLength(pack.offerCount);
-        expect(new Set(opened.pendingPackChoices).size).toBe(pack.offerCount);
-        expect(opened.pendingPackChoices).not.toContain(inventory[0].id);
+        const state = { ...createInitialState(), phase: 'pack_choice' as const, cash: 0, rngState: 42, inventory, offeredPacks: ['mixed_major' as const] };
+        const opened = processAction(state, { type: 'open_pack', packId: 'mixed_major' }).nextState;
+        expect(opened.pendingPackChoices).toHaveLength(6);
+        for (const id of opened.pendingPackChoices) {
+            const reward = getRewardCard(id)!;
+            expect(reward).toBeDefined();
+            expect(reward.rows.filter(row => row.kind === 'relic').map(row => row.relicId)).not.toContain(inventory[0].id);
+        }
         expect(opened.cash).toBe(0);
-        expect(opened.pendingPack?.picksRemaining).toBe(pack.pickCount);
-        expect(processAction(state, { type: 'open_pack', packId }).nextState).toEqual(opened);
+        expect(opened.pendingPack?.picksRemaining).toBe(1);
+        expect(processAction(state, { type: 'open_pack', packId: 'mixed_major' }).nextState).toEqual(opened);
     });
 });
 

@@ -95,11 +95,10 @@ export function runRaiseGame(config: RaiseRunConfig, strategy: BuildStrategy, tr
         const legal = getValidActions(state);
         let action: PlayerAction | undefined;
         if (state.phase === 'pack_choice') {
-            const offers = [...state.pendingRaiseChoices, ...state.pendingPackChoices].filter(id => getRaise(id));
+            const offers = state.pendingPackChoices.filter(id => getRaise(id));
             const chosen = chooseRaiseOffer(offers, strategy, state.handUpgrades, counts, policyRng);
             if (chosen) {
-                action = legal.find(candidate => candidate.type === 'choose_raise' && candidate.raiseId === chosen
-                    || candidate.type === 'choose_pack_card' && candidate.cardId === chosen);
+                action = legal.find(candidate => candidate.type === 'choose_pack_card' && candidate.cardId === chosen);
                 picks.push({ round: rounds.length, offers, chosen, description: getRaise(chosen)!.description });
             } else action = legal.find(candidate => candidate.type === 'skip_pack') ?? legal.find(candidate => candidate.type === 'finish_pack')
                 ?? legal.find(candidate => candidate.type === 'open_pack');

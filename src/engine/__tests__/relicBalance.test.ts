@@ -1,3 +1,4 @@
+import { getRewardCard } from '../../logic/rewardCards';
 import { finishOpeningPack } from './fixtures';
 import { describe, expect, it } from 'vitest';
 import { createInitialState, processAction } from '../engine';
@@ -175,8 +176,8 @@ describe('relic balance', () => {
         expect(result.events).toContainEqual({ type: 'deal_scoring_complete', totalChips: 10, totalMult: 1.15, finalScore: 11 });
     });
 
-    it('imports the new balance while preserving progress, charge depletion and remaining pack choices', () => {
-        const legacy: GameState = { ...start(), inventory: [
+    it('imports the new balance while preserving progress and charge depletion and replacing retired offers', () => {
+        const legacy = { ...start(), inventory: [
             { id: 'faded_tag', state: { amount: 0.3, decay_amount: 0.5 } },
             { id: 'faded_bill', state: { amount: 20, decay_amount: 10 } },
             { id: 'lucky_acorn', state: { bonus_mult: 1 } },
@@ -199,14 +200,16 @@ describe('relic balance', () => {
         expect(states.redraw.rounds_since_recharge).toBe(1);
         expect(loaded.tableActionCharges.redraw).toBe(0);
         expect(states.deft).toBeUndefined();
-        expect(loaded.pendingPackChoices).toEqual(['star_bead']);
+        expect(loaded.pendingPack?.packId).toBe('mixed_major');
+        expect(loaded.pendingPackChoices).toHaveLength(6);
+        expect(loaded.pendingPackChoices.every(id => !!getRewardCard(id))).toBe(true);
         expect(useGameBridge.getState().loadGameState(JSON.stringify(loaded))).toBe(true);
         expect(useGameBridge.getState().gameState.inventory).toEqual(loaded.inventory);
     });
 
     it.each(['double_down', 'surrender', 'discard', 'redraw', 'hold', 'switch'])('%s starts fully charged when selected from a pack', id => {
         const config = RelicManager.getRelicConfig(id)!;
-        const pack: GameState = { ...start(), phase: 'pack_choice', pendingPack: { packId: 'relic_basic', picksRemaining: 1 }, pendingPackChoices: [id] };
+        const pack: GameState = { ...start(), phase: 'pack_choice', pendingPack: { packId: 'relic_boss', picksRemaining: 1 }, pendingPackChoices: [id] };
         const chosen = act(pack, { type: 'choose_pack_card', cardId: id });
         expect(chosen.tableActionCharges[id]).toBe(config.tableAction!.maxCharges);
         expect(chosen.inventory[0].state.rounds_since_recharge).toBe(0);

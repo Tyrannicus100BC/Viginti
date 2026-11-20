@@ -1,3 +1,4 @@
+import { createRewardCard } from '../../logic/rewardCards';
 import { describe, expect, it } from 'vitest';
 import { createInitialState, getValidActions, processAction } from '../engine';
 import type { GameState } from '../GameState';
@@ -15,10 +16,11 @@ const cards: Card[] = [
     { id: 'a', rank: '7', suit: 'hearts' },
     { id: 'b', rank: '7', suit: 'clubs' },
 ];
+const rewardId = (id = 'raise_pair_mult') => createRewardCard('Common', [{ kind: 'raise', raiseId: id }, { kind: 'deck', cardId: 'deck_v3_0_0' }]).id;
 const stocked = (id = 'raise_pair_mult'): GameState => ({
     ...act(createInitialState(), { type: 'start_game', cityId: 'atlantic_city', gamblerId: 'newbie', seed: 42, globalTutorialsCompleted: TUTORIAL_STEPS.map(step => step.id) }),
     phase: 'pack_choice', cash: 10000, offeredPacks: [],
-    pendingPack: { packId: 'raise_basic', picksRemaining: 1 }, pendingRaiseChoices: [id],
+    pendingPack: { packId: 'mixed_minor', picksRemaining: 1 }, pendingPackChoices: [rewardId(id)],
 });
 
 describe('permanent hand scoring and Raises', () => {
@@ -96,21 +98,21 @@ describe('permanent hand scoring and Raises', () => {
         state = { ...state, inventory: RelicManager.getAllRelics().slice(0, 10).map(config => ({ id: config.id, state: { ...config.properties } })) };
         const original = state;
         for (let i = 0; i < 25; i++) {
-            state = { ...state, pendingPack: { packId: 'raise_basic', picksRemaining: 1 }, pendingRaiseChoices: ['raise_pair_mult'] };
-            expect(getValidActions(state)).toContainEqual({ type: 'choose_raise', raiseId: 'raise_pair_mult' });
-            state = act(state, { type: 'choose_raise', raiseId: 'raise_pair_mult' });
+            state = { ...state, pendingPack: { packId: 'mixed_minor', picksRemaining: 1 }, pendingPackChoices: [rewardId()] };
+            expect(getValidActions(state)).toContainEqual({ type: 'choose_pack_card', cardId: rewardId() });
+            state = act(state, { type: 'choose_pack_card', cardId: rewardId() });
         }
         expect(state.handUpgrades.raise_pair_mult).toBe(25);
         expect(getHandPayout('pair', state.handUpgrades).mult).toBe(6.3);
         expect(state.inventory).toEqual(original.inventory);
         expect(original.handUpgrades).toEqual({});
         expect(state.cash).toBe(original.cash);
-        expect(act(state, { type: 'choose_raise', raiseId: 'raise_pair_mult' })).toEqual(state);
+        expect(act(state, { type: 'choose_pack_card', cardId: rewardId() })).toEqual(state);
         expect(act(state, { type: 'start_game', cityId: 'atlantic_city', gamblerId: 'newbie' }).handUpgrades).toEqual({});
     });
 
     it('retains Raises through state export/import', () => {
-        let state = act(stocked(), { type: 'choose_raise', raiseId: 'raise_pair_mult' });
+        let state = act(stocked(), { type: 'choose_pack_card', cardId: rewardId() });
         expect(state.handUpgrades).toEqual({ raise_pair_mult: 1 });
         expect(useGameBridge.getState().loadGameState(JSON.stringify(state))).toBe(true);
         expect(useGameBridge.getState().handUpgrades).toEqual(state.handUpgrades);

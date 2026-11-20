@@ -142,7 +142,7 @@ describe('CLI Simulator', () => {
         });
 
         it('renders free rewards', () => {
-            const state = { ...startGame(), phase: 'pack_choice' as const, offeredPacks: ['raise_basic' as const] };
+            const state = { ...startGame(), phase: 'pack_choice' as const, offeredPacks: ['mixed_major' as const] };
             expect(renderState(state)).toContain('Free reward');
         });
     });
@@ -161,7 +161,7 @@ describe('CLI Simulator', () => {
         });
 
         it('describes opening a pack', () => {
-            expect(describeAction({ type: 'open_pack', packId: 'raise_basic' })).toContain('Raise Pack');
+            expect(describeAction({ type: 'open_pack', packId: 'mixed_major' })).toContain('Major Reward');
         });
 
         it('describes all action types without throwing', () => {

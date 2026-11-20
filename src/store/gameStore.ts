@@ -59,7 +59,6 @@ export const useGameStore = <T>(selector?: (state: any) => T): any => {
         selectTableActionDrawCard: (drawIndex: number) => dispatch({ type: 'select_table_action_draw_card', drawIndex }),
         
         // Pack rewards
-        chooseRaise: (raiseId: string) => dispatch({ type: 'choose_raise', raiseId }),
 
         // Debug
         triggerDebugChips: () => {

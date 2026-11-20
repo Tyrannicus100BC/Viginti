@@ -49,14 +49,14 @@ export function advanceChallenges(challenges: readonly Challenge[], amounts: Par
     });
 }
 
-/** Count every scored pattern, including multiple patterns in a losing or busted hand. */
+/** Count every scored bonus, including longer patterns in a losing or busted hand. */
 export function getHandChallengeProgress(hand: Pick<PlayerHand, 'cards' | 'outcome'>, rules: HandRules = {}): Partial<Record<ChallengeMetric, number>> {
     const progress = { pairs: 0, straights: 0, flushes: 0, wins: hand.outcome === 'win' ? 1 : 0 };
     if (rules.noBustPatterns && hand.outcome === 'bust') return progress;
     for (const pattern of getHandPatterns(hand.cards)) {
         if (pattern.id === 'pair') progress.pairs++;
-        if (pattern.id === 'straight') progress.straights++;
-        if (pattern.id === 'flush') progress.flushes++;
+        if (pattern.id === 'straight') progress.straights += pattern.cards.length - 1;
+        if (pattern.id === 'flush') progress.flushes += pattern.cards.length - 1;
     }
     return progress;
 }

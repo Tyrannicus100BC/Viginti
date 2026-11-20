@@ -14,8 +14,10 @@
 
 .flexible {
     width: max-content !important;
-    max-width: 380px;
-    min-width: 240px;
+    box-sizing: border-box;
+    max-width: min(380px, calc(100vw - 16px));
+    min-width: min(240px, calc(100vw - 16px));
+    overflow-wrap: anywhere;
 }
 
 .containerHorizontal {
@@ -118,6 +120,14 @@
     opacity: 0.95;
     pointer-events: none;
     white-space: nowrap;
+}
+
+.flexible .titleBlock, .flexible .content {
+    min-width: 0;
+}
+
+.flexible .titleBlock {
+    flex: 1;
 }
 
 .flexible .title {

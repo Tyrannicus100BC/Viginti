@@ -33,7 +33,7 @@ describe('quick-start URL', () => {
         const bridge = useGameBridge.getState();
         expect(bridge.gameState).toMatchObject({ phase: 'playing', cash: 50, ante: 50,
             dealsTaken: 1, inventory: [], handUpgrades: {},
-            offeredPacks: [], pendingPack: null, pendingRaiseChoices: [], pendingPackChoices: [] });
+            offeredPacks: [], pendingPack: null, pendingPackChoices: [] });
         expect(bridge.phase).toBe('playing');
         expect(bridge.playerHands[1].cards).toHaveLength(1);
         expect(bridge.dealer.cards).toHaveLength(2);

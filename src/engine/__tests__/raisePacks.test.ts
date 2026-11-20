@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createInitialState, getValidActions, processAction } from '../engine';
+import { createInitialState, processAction } from '../engine';
 import type { GameState } from '../GameState';
 import type { PlayerAction } from '../PlayerAction';
 import { generateRaise, generateRaiseChoices, getHandPayout, getHandRaiseChanges, getRaise, HAND_TYPES, RAISE_HAND_TYPES, PACK_RAISES, RAISE_AFFIXES, RAISE_AFFIX_SLOTS, formatRaiseCash, formatRaiseMult } from '../../logic/handScoring';
@@ -9,7 +9,7 @@ import { generateShopItems } from '../../logic/rewards/generator';
 import { TUTORIAL_STEPS } from '../tutorial/definitions';
 import { useGameBridge } from '../../store/gameBridge';
 import { evaluateHandScore } from '../../logic/scoring';
-import { PACKS, rollPackDefinition } from '../../logic/packs';
+import { createRewardCard } from '../../logic/rewardCards';
 import { RAISE_BONUS_RANGES, V9_RAISE_BONUS_RANGES, RAISE_LOSS_PENALTY_RANGES, RAISE_VALUE_WEIGHTS } from '../../logic/upgradeTuning';
 
 const act = (state: GameState, action: PlayerAction) => processAction(state, action).nextState;
@@ -18,37 +18,19 @@ const shop = (): GameState => act(createInitialState(), {
     globalTutorialsCompleted: TUTORIAL_STEPS.map(step => step.id),
 });
 
-describe('relic slots and raise packs', () => {
+
+const chooseUpgrade = (state: GameState, id: string) => {
+    const reward = createRewardCard('Common', [{ kind: 'raise', raiseId: id }, { kind: 'deck', cardId: 'deck_v3_0_0' }]);
+    return act({ ...state, phase: 'pack_choice', pendingPack: { packId: 'mixed_minor', picksRemaining: 1 }, pendingPackChoices: [reward.id] },
+        { type: 'choose_pack_card', cardId: reward.id });
+};
+
+describe('relic slots and hand-score rewards', () => {
     it('starts with four effect slots in the upper left', () => {
         expect(shop().relicSlots).toBe(4);
         expect(Array.from({ length: 4 }, (_, i) => getRelicSide(i))).toEqual(['left', 'left', 'left', 'left']);
         expect(getSideSlotCount('left', 4)).toBe(4);
         expect(getSideSlotCount('right', 4)).toBe(0);
-    });
-
-    it.each(PACKS.filter(pack => pack.family === 'raise'))('opens $name for free and applies exactly its allowed picks', pack => {
-        const initial = { ...shop(), pendingPack: null, pendingPackChoices: [], offeredPacks: [pack.id] };
-        let state = act(initial, { type: 'open_pack', packId: pack.id });
-        expect(state.pendingRaiseChoices).toHaveLength(pack.offerCount);
-        for (let pick = 0; pick < pack.pickCount; pick++) {
-            expect(act(state, { type: 'finish_pack' })).toEqual(state);
-            const id = state.pendingRaiseChoices[0];
-            expect(getValidActions(state)).toContainEqual({ type: 'choose_raise', raiseId: id });
-            const previous = state;
-            state = act(state, { type: 'choose_raise', raiseId: id });
-            expect(state.handUpgrades[id]).toBe(1);
-            expect(previous.handUpgrades[id]).toBeUndefined();
-            expect(act(state, { type: 'choose_raise', raiseId: id })).toEqual(state);
-        }
-        expect(state.pendingPack).toBeNull();
-        expect(state.cash).toBe(initial.cash);
-        expect(act(state, { type: 'open_pack', packId: pack.id })).toEqual(state);
-        expect(act(state, { type: 'finish_pack' }).phase).toBe('entering_casino');
-    });
-
-    it('keeps the existing 60/30/10 pack size distribution', () => {
-        expect([0, .599, .6, .899, .9, .999].map(roll => rollPackDefinition(roll).id))
-            .toEqual(['raise_basic', 'raise_basic', 'raise_jumbo', 'raise_jumbo', 'raise_mega', 'raise_mega']);
     });
 
     it('settles decimal penalties without losing a dollar to floating point rounding', () => {
@@ -333,8 +315,7 @@ describe('relic slots and raise packs', () => {
         expect(score(twentyOne, true, 'win', drawback)).toMatchObject({ id: 'viginti', chips: 16 });
         let state = shop();
         for (const id of ids) {
-            const pending = { ...state, phase: 'pack_choice' as const, pendingRaiseChoices: [id], pendingPack: { packId: 'raise_basic' as const, picksRemaining: 1 } };
-            state = act(pending, { type: 'choose_raise', raiseId: id });
+            state = chooseUpgrade(state, id);
         }
         expect(state.handUpgrades).toEqual(upgrades);
         expect(useGameBridge.getState().loadGameState(JSON.stringify(state))).toBe(true);
@@ -362,8 +343,7 @@ describe('relic slots and raise packs', () => {
             { handTypeId: 'loss', chips: 0, mult: -.03 },
             { handTypeId: 'win', chips: 0, mult: .07 },
         ]);
-        const pending = { ...shop(), pendingRaiseChoices: [id], pendingPack: { packId: 'raise_basic' as const, picksRemaining: 1 } };
-        const chosen = act(pending, { type: 'choose_raise', raiseId: id });
+        const chosen = chooseUpgrade(shop(), id);
         expect(chosen.handUpgrades[id]).toBe(1);
         expect(useGameBridge.getState().loadGameState(JSON.stringify(chosen))).toBe(true);
         const upgrades = { ...useGameBridge.getState().gameState.handUpgrades, [id]: 2 };
@@ -403,8 +383,7 @@ describe('relic slots and raise packs', () => {
         const id = 'raise_v3_2_tradeoff_pair_cash_flush_mult.double_win_mult';
         const raise = getRaise(id)!;
         expect(raise.rarity).toBe('Rare');
-        const state = { ...shop(), pendingRaiseChoices: [id], pendingPack: { packId: 'raise_basic' as const, picksRemaining: 1 } };
-        const chosen = act(state, { type: 'choose_raise', raiseId: id });
+        const chosen = chooseUpgrade(shop(), id);
         expect(getHandPayout('pair', chosen.handUpgrades)).toMatchObject({ chips: 20, mult: 0.05 });
         expect(getHandPayout('flush', chosen.handUpgrades)).toMatchObject({ mult: -0.05 });
         expect(getHandPayout('win', chosen.handUpgrades)).toMatchObject({ mult: 0.15, variant: { mult: 0.25 } });
@@ -432,8 +411,7 @@ describe('relic slots and raise packs', () => {
             { handTypeId: 'flush', chips: 0, mult: -0.02 },
             { handTypeId: 'loss', chips: 0, mult: 0.09 },
         ]);
-        const pending = { ...shop(), pendingRaiseChoices: [id], pendingPack: { packId: 'raise_basic' as const, picksRemaining: 1 } };
-        const chosen = act(pending, { type: 'choose_raise', raiseId: id });
+        const chosen = chooseUpgrade(shop(), id);
         expect(getHandPayout('straight', chosen.handUpgrades).chips).toBe(22);
         expect(getHandPayout('flush', chosen.handUpgrades).mult).toBe(-0.02);
         expect(getHandPayout('loss', chosen.handUpgrades)).toMatchObject({ mult: 0.09, variant: { mult: -0.01 } });
@@ -452,11 +430,11 @@ describe('relic slots and raise packs', () => {
         expect(getHandPayout('loss', { raise_v5_0_tradeoff_loss_cash_flush_mult: 1 }).chips).toBe(-1);
     });
 
-    it('formats increases and decreases without visible signs', () => {
+    it('formats decreases with explicit minus signs', () => {
         expect(formatRaiseCash(15)).toBe('$15');
-        expect(formatRaiseCash(-5)).toBe('$5');
+        expect(formatRaiseCash(-5)).toBe('-$5');
         expect(formatRaiseMult(0.1)).toBe('10%');
-        expect(formatRaiseMult(-0.1)).toBe('10%');
+        expect(formatRaiseMult(-0.1)).toBe('-10%');
         expect(formatRaiseMult(0.1 + 0.2)).toBe('30%');
     });
 
@@ -481,8 +459,7 @@ describe('relic slots and raise packs', () => {
         expect(settlement.events).toContainEqual({ type: 'scoring_row_mult', handIndex: 0, criterionId: 'flush', multiplier: -0.1 });
         expect(settlement.nextState.cash).toBe(45); // ($10 win + $25 straight + $15 flush) * 0.9
 
-        const before = shop(), pending = { ...before, pendingRaiseChoices: [raise.id] };
-        const picked = act(pending, { type: 'choose_raise', raiseId: raise.id });
+        const picked = chooseUpgrade(shop(), raise.id);
         for (const hand of HAND_TYPES) {
             const payout = getHandPayout(hand.id, picked.handUpgrades);
             expect(Number.isFinite(payout.chips + payout.mult)).toBe(true);

@@ -1,35 +1,23 @@
-import { getChallengeCard, type ChallengeCard } from '../logic/challengeCards';
-import { ChallengeProgress } from './ChallengeProgress';
 import { RelicManager } from '../logic/relics/manager';
 import { canAcquireRelic } from '../logic/relics/inventory';
 import { RelicTooltip } from './RelicTooltip';
-import { PackCardDetails } from './PackCardDetails';
-import { getPackCard } from '../logic/packCards';
-import { getRewardCard, getRewardLineCount } from '../logic/rewardCards';
-import { DeckRewardRows, RewardCardRows } from './RewardCardRows';
+import { getRewardCard } from '../logic/rewardCards';
+import { RewardCardRows } from './RewardCardRows';
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useGameBridge } from '../store/gameBridge';
-import { getRaise } from '../logic/handScoring';
-import { RaiseCard } from './RaiseCard';
 import { getRelicRarityFrameColor, getRelicRarityTextColor } from '../logic/relics/rarity';
 import { sfxEngine } from '../utils/sfxEngine';
 import { PackVisual } from './PackVisual';
 import { PACK_FAMILY_COLORS, PACK_FAMILY_LABELS, RaisePackArt } from './RaisePackArt';
-import { getPackDefinition, getTargetedPackReward, type PackId, type PendingPack } from '../logic/packs';
+import { getPackDefinition, type PackId, type PendingPack } from '../logic/packs';
 import { useLayout } from './ResponsiveLayout';
 import styles from './RaisePackChoice.module.css';
 
 export interface PackSourceRect { left: number; top: number; width: number; height: number; packId?: PackId }
 type RevealStage = 'growing' | 'charging' | 'bursting' | 'revealing' | 'ready' | 'flying' | 'received';
 
-function ChallengeOption({ card }: { card: ChallengeCard }) {
-    return <PackCardDetails icon={<ChallengeProgress challenge={card.challenge} />} name={card.name}>
-        {card.challenge.description} to earn a {card.challenge.rewardTier === 'major' ? 'Major' : 'Minor'} Pack.
-    </PackCardDetails>;
-}
-
-function PackReveal({ choices, pendingPack, sourceRect, arrivedFromChallenge, onComplete, onOpenPack }: {
-    choices: readonly string[]; pendingPack: PendingPack | null; sourceRect: PackSourceRect | null; arrivedFromChallenge: boolean; onComplete: () => void; onOpenPack: (cardId: string, source: PackSourceRect) => Promise<void>;
+function PackReveal({ choices, pendingPack, sourceRect, arrivedFromChallenge, onComplete }: {
+    choices: readonly string[]; pendingPack: PendingPack | null; sourceRect: PackSourceRect | null; arrivedFromChallenge: boolean; onComplete: () => void;
 }) {
     const [stage, setStage] = useState<RevealStage>(arrivedFromChallenge ? 'charging' : 'growing');
     const [selected, setSelected] = useState<string | null>(null);
@@ -38,9 +26,8 @@ function PackReveal({ choices, pendingPack, sourceRect, arrivedFromChallenge, on
     const inventory = useGameBridge(state => state.inventory);
     const relicSlots = useGameBridge(state => state.relicSlots);
     const definition = useRef(getPackDefinition(pendingPack?.packId ?? sourceRect?.packId)).current;
-    const progressionPack = useGameBridge(state => !state.gameState.debugPackReturn);
     const unified = definition.id === 'mixed_major' || definition.id === 'mixed_minor';
-    const familyLabel = unified ? 'Reward' : definition.id === 'relic_boss' ? 'Table Action' : PACK_FAMILY_LABELS[definition.family];
+    const familyLabel = unified ? 'Reward' : 'Table Action';
     const rewardTitle = definition.id === 'mixed_major' ? 'Major Reward'
         : definition.id === 'mixed_minor' ? 'Minor Reward'
         : definition.id === 'relic_boss' ? 'Boss Reward' : definition.name;
@@ -150,33 +137,15 @@ function PackReveal({ choices, pendingPack, sourceRect, arrivedFromChallenge, on
 
     const choose = async (id: string) => {
         const isRelic = !!RelicManager.getRelicConfig(id);
-        const isRaise = !!getRaise(id);
         if (stage !== 'ready' || selecting.current || (isRelic && !canAcquireRelic(id, inventory, relicSlots))) return;
         selecting.current = true;
-        // Keep the original card positions for the remaining picks in a multi-pick pack.
+        // Keep the selected card mounted through its departure animation.
         if (!offers) setOffers(choices);
-        const lastPick = picksRemaining <= 1;
-        setFinishing(lastPick);
+        setFinishing(true);
         setSelected(id);
         setStage('flying');
         scene.current?.querySelector<HTMLElement>('[role="region"]')?.focus({ preventScroll: true });
         const card = cards.current.get(id)!;
-        const targeted = getTargetedPackReward(id);
-        if (targeted) {
-            // Carry the sealed reward straight into the next opening scene.
-            const { left, top, width, height } = card.getBoundingClientRect();
-            try {
-                await onOpenPack(id, { left, top, width, height, packId: targeted.id });
-            } catch {
-                if (alive.current) {
-                    selecting.current = false;
-                    setFinishing(false);
-                    setSelected(null);
-                    setStage('ready');
-                }
-            }
-            return;
-        }
         sfxEngine.play('cardPlace');
         const reward = getRewardCard(id);
         const hasEffect = reward?.rows.some(row => row.kind === 'relic');
@@ -186,7 +155,7 @@ function PackReveal({ choices, pendingPack, sourceRect, arrivedFromChallenge, on
             : document.querySelector<HTMLElement>(`[aria-label="Empty relic slot ${effectCount + 1}"]`);
         const button = hasEffect || isRelic ? effectTarget : reward
             ? document.getElementById(reward.rows.some(row => row.kind === 'raise') ? 'hand-scores-button' : 'deck-view-button')
-            : document.getElementById(isRaise ? 'hand-scores-button' : getChallengeCard(id) ? 'challenges-label' : 'deck-view-button');
+            : null;
         let flightCard = card;
         try {
             if (isRelic && scene.current) {
@@ -248,17 +217,10 @@ function PackReveal({ choices, pendingPack, sourceRect, arrivedFromChallenge, on
                 sfxEngine.play('score');
             })()]);
             if (!alive.current) return;
-            await useGameBridge.getState().dispatch(definition.family === 'raise' ? { type: 'choose_raise', raiseId: id } : { type: 'choose_pack_card', cardId: id });
+            await useGameBridge.getState().dispatch({ type: 'choose_pack_card', cardId: id });
             const bridge = useGameBridge.getState();
-            if ([...bridge.pendingRaiseChoices, ...bridge.pendingPackChoices].includes(id)) throw new Error('Pack selection was not accepted');
-            if (getTargetedPackReward(id) && bridge.pendingPack) return;
-            if (lastPick) {
-                complete.current();
-            } else {
-                selecting.current = false;
-                setSelected(null);
-                setStage('ready');
-            }
+            if (bridge.pendingPackChoices.includes(id)) throw new Error('Pack selection was not accepted');
+            complete.current();
         } catch {
             if (alive.current) {
                 card.style.opacity = '1';
@@ -321,10 +283,9 @@ function PackReveal({ choices, pendingPack, sourceRect, arrivedFromChallenge, on
                 })}
             </div>}
         </div>
-        <section className={`${styles.choices} ${definition.offerCount > 3 ? styles.multiRowChoices : ''} ${definition.offerCount === 2 ? styles.twoChoices : ''} ${finishing ? styles.dismissedChoices : ''} ${definition.offerCount === 5 ? styles.fiveCompact : ''}`} role="region" tabIndex={-1} aria-labelledby="raise-pack-title" aria-busy={stage !== 'ready'}>
+        <section className={`${styles.choices} ${definition.offerCount > 3 ? styles.multiRowChoices : ''} ${definition.offerCount === 2 ? styles.twoChoices : ''} ${finishing ? styles.dismissedChoices : ''}`} role="region" tabIndex={-1} aria-labelledby="raise-pack-title" aria-busy={stage !== 'ready'}>
             <h2 id="raise-pack-title" className={showChoices ? styles.title : styles.hiddenTitle}>
-                {progressionPack ? rewardTitle : <>Choose Your {definition.family === 'mixed' ? 'Upgrades' : definition.family === 'deck' ? 'Deck Upgrade' : familyLabel}{definition.family !== 'mixed' && definition.pickCount > 1 ? 's' : ''}</>}
-                {!unified && (!progressionPack || definition.pickCount > 1) && <span className={styles.pickCount}>{`${picksRemaining} ${picksRemaining === 1 ? 'choice' : 'choices'} remaining`}</span>}
+                {rewardTitle}
             </h2>
             <p className={styles.srOnly} aria-live="polite">{stage === 'ready' ? `${choices.length} cards available. ${picksRemaining} ${picksRemaining === 1 ? 'choice' : 'choices'} remaining.` : stage === 'received' ? `${familyLabel} added.` : stage === 'flying' ? `Adding your ${familyLabel.toLowerCase()}.` : `Opening your ${definition.family} pack.`}</p>
             {(definition.family === 'relic' || definition.family === 'mixed') && inventory.filter(instance => !RelicManager.getRelicConfig(instance.id)?.tableAction).length >= relicSlots && definition.id !== 'relic_boss' && <p className={styles.slotStatus}>
@@ -332,15 +293,11 @@ function PackReveal({ choices, pendingPack, sourceRect, arrivedFromChallenge, on
             </p>}
             <div className={styles.options}>
                 {(offers ?? choices).map(id => {
-                    const raise = getRaise(id);
-                    const upgrade = getPackCard(id);
                     const relic = RelicManager.getRelicConfig(id);
-                    const challenge = getChallengeCard(id);
-                    const targeted = getTargetedPackReward(id);
                     const reward = getRewardCard(id);
-                    const card = reward ?? raise ?? upgrade ?? relic ?? challenge ?? targeted;
+                    const card = reward ?? relic;
                     if (!card) return null;
-                    const cardFamily = reward ? 'mixed' : targeted?.family ?? (raise ? 'raise' : relic ? 'relic' : challenge ? 'challenge' : 'deck');
+                    const cardFamily = reward ? 'mixed' : 'relic';
                     const consumed = !choices.includes(id);
                     const blocked = !!relic && !canAcquireRelic(id, inventory, relicSlots);
                     return <div key={id} ref={element => { if (element) options.current.set(id, element); else options.current.delete(id); }}
@@ -352,18 +309,18 @@ function PackReveal({ choices, pendingPack, sourceRect, arrivedFromChallenge, on
                             disabled={stage !== 'ready' || consumed || blocked}
                             aria-label={`Select ${card.name} card, ${card.rarity}`}
                             onClick={() => void choose(id)}
-                            className={`${styles.card} ${targeted ? styles.packCard : ''} ${blocked ? styles.blockedCard : ''} ${(reward ? getRewardLineCount(reward) : raise?.modifiers.length ?? 0) > 3 ? styles.denseCard : ''}`}>
-                            {targeted ? <PackVisual packId={targeted.id} /> : <>
+                            className={`${styles.card} ${blocked ? styles.blockedCard : ''}`}>
+                            <>
                                 <span className={styles.rarity} style={{ color: getRelicRarityTextColor(card.rarity) }}>{relic?.tableAction ? 'TABLE ACTION' : card.rarity}</span>
                                 <span className={styles.cardBody}>
-                                    {reward ? <RewardCardRows card={reward} inventory={inventory} /> : raise ? <RaiseCard raise={raise} /> : relic ? <RelicTooltip relic={relic} layout="card" displayValues={relic.properties ?? {}} /> : challenge ? <ChallengeOption card={challenge} /> : <DeckRewardRows card={upgrade!} />}
+                                    {reward ? <RewardCardRows card={reward} inventory={inventory} /> : <RelicTooltip relic={relic!} layout="card" displayValues={relic!.properties ?? {}} />}
                                 </span>
                                 <span className={styles.cardType}>
                                     <RaisePackArt family={cardFamily} />
                                     {reward ? 'Reward' : relic?.tableAction ? 'Table Action' : PACK_FAMILY_LABELS[cardFamily]}
                                 </span>
                                 {blocked && <span className={styles.blockedLabel}>Relic slots full</span>}
-                            </>}
+                            </>
                         </button>
                         <button data-choose-raise className={`${styles.chooseButton} ${selected === id ? styles.fadeOut : ''}`}
                             disabled={stage !== 'ready' || consumed || blocked} aria-label={`Choose ${card.name}, ${card.rarity}`}
@@ -374,24 +331,15 @@ function PackReveal({ choices, pendingPack, sourceRect, arrivedFromChallenge, on
             </div>
             <button type="button" className={`${styles.skipButton} ${showChoices ? '' : styles.fadeOut}`}
                 disabled={stage !== 'ready'} onClick={() => void skip()}>
-                {definition.pickCount === 2 && picksRemaining < 2 ? 'SKIP REMAINING' : 'SKIP'}
+                SKIP
             </button>
         </section>
     </div>;
 }
 
 export function RaisePackChoice({ sourceRect, arrivedFromChallenge = false, onComplete }: { sourceRect: PackSourceRect | null; arrivedFromChallenge?: boolean; onComplete: () => void }) {
-    const [nestedSource, setNestedSource] = useState<PackSourceRect | null>(null);
-    const raises = useGameBridge(state => state.pendingRaiseChoices);
-    const upgrades = useGameBridge(state => state.pendingPackChoices);
-    const choices = upgrades.length ? upgrades : raises;
+    const choices = useGameBridge(state => state.pendingPackChoices);
     const pendingPack = useGameBridge(state => state.pendingPack);
     if (!sourceRect && !choices.length && !pendingPack) return null;
-    const openNestedPack = async (cardId: string, source: PackSourceRect) => {
-        setNestedSource(source);
-        await useGameBridge.getState().dispatch({ type: 'choose_pack_card', cardId });
-        if (useGameBridge.getState().pendingPack?.packId !== source.packId) throw new Error('Pack selection was not accepted');
-    };
-    const openingSource = nestedSource?.packId === pendingPack?.packId ? nestedSource : sourceRect;
-    return <PackReveal key={pendingPack?.packId ?? sourceRect?.packId} choices={choices} pendingPack={pendingPack} sourceRect={openingSource} arrivedFromChallenge={arrivedFromChallenge && !openingSource} onComplete={onComplete} onOpenPack={openNestedPack} />;
+    return <PackReveal key={pendingPack?.packId ?? sourceRect?.packId} choices={choices} pendingPack={pendingPack} sourceRect={sourceRect} arrivedFromChallenge={arrivedFromChallenge && !sourceRect} onComplete={onComplete} />;
 }

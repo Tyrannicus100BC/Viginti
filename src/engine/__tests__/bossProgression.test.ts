@@ -11,7 +11,6 @@ import { generateShopItems } from '../../logic/rewards/generator';
 import { SeededRNG } from '../rng';
 import { evaluateHandScore, getBlackjackScore } from '../../logic/scoring';
 import { getRewardCard } from '../../logic/rewardCards';
-import { getPackDefinition, getTargetedPackReward, PACKS, rollPackDefinition } from '../../logic/packs';
 import { useGameBridge } from '../../store/gameBridge';
 
 const act = (state: GameState, action: Parameters<typeof processAction>[1]) => processAction(state, action).nextState;
@@ -33,58 +32,9 @@ describe('direct mixed rewards', () => {
                 const reward = getRewardCard(id)!;
                 expect(reward).toBeDefined();
                 expect(new Set(reward.rows.map(row => row.kind)).size).toBeGreaterThanOrEqual(2);
-                expect(getTargetedPackReward(id)).toBeUndefined();
             }
             expect(start(seed)).toEqual(state);
         }
-    });
-
-    it.each(['reward_deck_pack', 'reward_challenge_pack'])('resumes a legacy %s offer through import', id => {
-        let state = act({ ...start(), pendingPackChoices: [id] }, { type: 'choose_pack_card', cardId: id });
-        expect(state.pendingPack?.packId).toBe(id === 'reward_deck_pack' ? 'deck_basic' : 'challenge_basic');
-        expect(state.pendingPackChoices).toHaveLength(3);
-        expect(state.pendingPack?.picksRemaining).toBe(id === 'reward_deck_pack' ? 1 : 2);
-        expect(useGameBridge.getState().loadGameState(JSON.stringify(state))).toBe(true);
-        expect(useGameBridge.getState().gameState).toEqual(state);
-        const selected = state.pendingPackChoices[0];
-        state = act(state, { type: 'choose_pack_card', cardId: selected });
-        if (id === 'reward_challenge_pack') {
-            expect(state.pendingPack).toEqual({ packId: 'challenge_basic', picksRemaining: 1 });
-            expect(state.pendingPackChoices).toHaveLength(2);
-            expect(state.pendingPackChoices).not.toContain(selected);
-            expect(getValidActions(state)).not.toContainEqual({ type: 'finish_pack' });
-            const second = state.pendingPackChoices[0];
-            state = act(state, { type: 'choose_pack_card', cardId: second });
-            expect(state.challenges.some(goal => goal.id === second)).toBe(true);
-        }
-        expect(state.pendingPack).toBeNull();
-        state = act(state, { type: 'finish_pack' });
-        expect(state).toMatchObject({ ante: 50, phase: 'entering_casino' });
-        if (id === 'reward_deck_pack') expect(state.deckProbabilities).not.toEqual(start().deckProbabilities);
-        else expect(state.challenges.some(goal => goal.id === selected)).toBe(true);
-    });
-
-    it.each(PACKS.filter(pack => pack.family === 'challenge'))('grants exactly two challenges from $id', pack => {
-        let state = act({ ...start(), pendingPack: null, pendingPackChoices: [], offeredPacks: [pack.id] }, { type: 'open_pack', packId: pack.id });
-        expect([3, 5]).toContain(state.pendingPackChoices.length);
-        expect(state.pendingPack?.picksRemaining).toBe(2);
-        const before = state.challenges.length;
-        const [first, second] = state.pendingPackChoices;
-        state = act(state, { type: 'choose_pack_card', cardId: first });
-        expect(state.pendingPack?.picksRemaining).toBe(1);
-        expect(act(state, { type: 'choose_pack_card', cardId: first })).toEqual(state);
-        state = act(state, { type: 'choose_pack_card', cardId: second });
-        expect(state.challenges).toHaveLength(before + 2);
-        expect(state.pendingPack).toBeNull();
-        expect(state.pendingPackChoices).toEqual([]);
-    });
-
-    it('offers only two-of-three and two-of-five challenge packs, including legacy pack IDs', () => {
-        const packs = PACKS.filter(pack => pack.family === 'challenge');
-        expect(packs).toHaveLength(6);
-        expect(new Set(packs.map(pack => `${pack.pickCount}/${pack.offerCount}`))).toEqual(new Set(['2/3', '2/5']));
-        expect(getPackDefinition('challenge_jumbo_excellent')).toMatchObject({ id: 'challenge_mega_excellent', pickCount: 2, offerCount: 5 });
-        expect(rollPackDefinition(.7, 'challenge')).toMatchObject({ id: 'challenge_mega', pickCount: 2, offerCount: 5 });
     });
 
     it('draws three unified minor rewards with no challenges or table actions', () => {
@@ -98,7 +48,7 @@ describe('direct mixed rewards', () => {
             const types = state.pendingPackChoices.flatMap(id => getRewardCard(id)!.rows.map(row => row.kind));
             types.forEach(type => families.add(type));
             repeatedFamily ||= new Set(types).size < 3;
-            expect(state.pendingPackChoices.some(id => getTargetedPackReward(id) || id.startsWith('challenge_') || RelicManager.getRelicConfig(id)?.tableAction)).toBe(false);
+            expect(state.pendingPackChoices.some(id => id.startsWith('challenge_') || RelicManager.getRelicConfig(id)?.tableAction)).toBe(false);
         }
         expect(families).toEqual(new Set(['raise', 'deck', 'relic']));
         expect(repeatedFamily).toBe(true);

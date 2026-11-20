@@ -138,7 +138,6 @@ export interface GameState {
     // === Relics & Modifiers ===
     readonly inventory: readonly RelicInstance[];
     readonly relicSlots: number;
-    readonly pendingRaiseChoices: readonly string[];
     readonly pendingPackChoices: readonly string[];
     readonly pendingPack: PendingPack | null;
     readonly offeredPacks: readonly PackId[];

@@ -30,7 +30,6 @@ export type PlayerAction =
 
     // === Pack Rewards ===
     | { type: 'open_pack'; packId: PackId }
-    | { type: 'choose_raise'; raiseId: string }
     | { type: 'choose_pack_card'; cardId: string }
     | { type: 'skip_pack' }
     | { type: 'finish_pack' }

@@ -17,7 +17,6 @@ import type { TutorialDisplayConfig, TutorialScope } from './tutorial/types';
 // ─── Event Type Union ───────────────────────────────────
 
 export type GameEvent =
-    | { type: 'raise_chosen'; raiseId: string }
     | { type: 'pack_card_chosen'; cardId: string }
     | { type: 'pack_skipped' }
     | { type: 'pack_opened'; packId: PackId }

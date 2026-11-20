@@ -21,13 +21,13 @@ describe('debug pack opening', () => {
         let state = result.nextState;
         expect(state.phase).toBe('pack_choice');
         expect(state.pendingPack).toEqual({ packId: pack.id, picksRemaining: pack.pickCount });
-        expect([...state.pendingRaiseChoices, ...state.pendingPackChoices]).toHaveLength(pack.offerCount);
+        expect(state.pendingPackChoices).toHaveLength(pack.offerCount);
         expect(state.offeredPacks).toEqual([]);
         expect(result.events).toContainEqual({ type: 'pack_opened', packId: pack.id });
         expect(act(state, { type: 'finish_pack' })).toEqual(state);
         for (let pick = 0; pick < pack.pickCount; pick++) {
-            const id = (pack.family === 'raise' ? state.pendingRaiseChoices : state.pendingPackChoices)[0];
-            state = act(state, pack.family === 'raise' ? { type: 'choose_raise', raiseId: id } : { type: 'choose_pack_card', cardId: id });
+            const id = state.pendingPackChoices[0];
+            state = act(state, { type: 'choose_pack_card', cardId: id });
         }
         const selected = state;
         state = act(state, { type: 'finish_pack' });
@@ -40,10 +40,7 @@ describe('debug pack opening', () => {
         expect(state.inventory).toEqual(selected.inventory);
         expect(state.handUpgrades).toEqual(selected.handUpgrades);
         expect(state.deckProbabilities).toEqual(selected.deckProbabilities);
-        if (pack.family === 'challenge') expect(state.challenges).toHaveLength(before.challenges.length + pack.pickCount);
         if (pack.family === 'relic') expect(state.inventory).toHaveLength(pack.pickCount);
-        if (pack.family === 'raise') expect(Object.keys(state.handUpgrades)).toHaveLength(pack.pickCount);
-        if (pack.family === 'deck') expect(state.deckProbabilities).not.toEqual(before.deckProbabilities);
         expect(JSON.stringify(before)).toBe(original);
     });
 
@@ -51,9 +48,9 @@ describe('debug pack opening', () => {
         const before = { ...start(), pendingPack: null, pendingPackChoices: [], offeredPacks: ['mixed_major' as const] };
         expect(useGameBridge.getState().loadGameState(JSON.stringify(before))).toBe(true);
         useGameBridge.setState({ headless: true });
-        await useGameBridge.getState().dispatch({ type: 'debug_open_pack', packId: 'raise_mega' });
-        expect(useGameBridge.getState().pendingPack).toEqual({ packId: 'raise_mega', picksRemaining: 2 });
-        expect(useGameBridge.getState().pendingRaiseChoices).toHaveLength(5);
+        await useGameBridge.getState().dispatch({ type: 'debug_open_pack', packId: 'mixed_major' });
+        expect(useGameBridge.getState().pendingPack).toEqual({ packId: 'mixed_major', picksRemaining: 1 });
+        expect(useGameBridge.getState().pendingPackChoices).toHaveLength(6);
         expect(useGameBridge.getState().isProcessingEvents).toBe(false);
         await useGameBridge.getState().dispatch({ type: 'skip_pack' });
         await useGameBridge.getState().dispatch({ type: 'finish_pack' });
@@ -64,7 +61,7 @@ describe('debug pack opening', () => {
 
     it('preserves the normal three-pack reward when a debug pack is opened first', () => {
         const before = { ...start(), pendingPack: null, pendingPackChoices: [], offeredPacks: ['mixed_major' as const] };
-        const opened = act(before, { type: 'debug_open_pack', packId: 'deck_mega' });
+        const opened = act(before, { type: 'debug_open_pack', packId: 'mixed_minor' });
         const skipped = act(opened, { type: 'skip_pack' });
         const returned = act(skipped, { type: 'finish_pack' });
         expect(returned.phase).toBe('pack_choice');
@@ -79,12 +76,12 @@ describe('debug pack opening', () => {
         let before = act(ready(), { type: 'deal' });
         before = act(before, { type: 'draw' });
         before = { ...before, interactionMode: 'select_hand', activeTableActionId: 'hold' };
-        const opened = act(before, { type: 'debug_open_pack', packId: 'raise_basic' });
+        const opened = act(before, { type: 'debug_open_pack', packId: 'mixed_minor' });
         expect(useGameBridge.getState().loadGameState(JSON.stringify(opened))).toBe(true);
         let state = useGameBridge.getState().gameState;
         expect(state.debugPackReturn).toEqual(opened.debugPackReturn);
-        const id = state.pendingRaiseChoices[0];
-        state = act(state, { type: 'choose_raise', raiseId: id });
+        const id = state.pendingPackChoices[0];
+        state = act(state, { type: 'choose_pack_card', cardId: id });
         state = act(state, { type: 'finish_pack' });
         expect(state).toMatchObject({ phase: 'playing', cash: before.cash,
             dealsTaken: before.dealsTaken, ante: before.ante, challenges: before.challenges,
@@ -92,7 +89,7 @@ describe('debug pack opening', () => {
         expect(state.playerHands).toEqual(before.playerHands);
         expect(state.dealer).toEqual(before.dealer);
         expect(state.drawnCards).toEqual(before.drawnCards);
-        expect(state.handUpgrades[id]).toBe(1);
+        expect(state.handUpgrades).not.toEqual(before.handUpgrades);
     });
 
     it('supports repeated debug packs between rounds without granting or consuming a normal reward', () => {
@@ -111,14 +108,14 @@ describe('debug pack opening', () => {
         expect(act(before, { type: 'debug_open_pack', packId: 'unknown' as PackId })).toEqual(before);
         const reward = start();
         const pendingReward = act(reward, { type: 'open_pack', packId: reward.offeredPacks[0] });
-        const pendingDebug = act(before, { type: 'debug_open_pack', packId: 'relic_mega' });
+        const pendingDebug = act(before, { type: 'debug_open_pack', packId: 'relic_boss' });
         for (const state of [pendingReward, pendingDebug]) {
-            expect(act(state, { type: 'debug_open_pack', packId: 'raise_basic' })).toEqual(state);
+            expect(act(state, { type: 'debug_open_pack', packId: 'mixed_minor' })).toEqual(state);
         }
     });
 
     it.each(['init', 'dealer_turn', 'resolving_outcomes', 'scoring', 'game_over', 'victory'] as const)('cannot interrupt %s', phase => {
         const state = { ...ready(), phase };
-        expect(act(state, { type: 'debug_open_pack', packId: 'raise_basic' })).toEqual(state);
+        expect(act(state, { type: 'debug_open_pack', packId: 'mixed_minor' })).toEqual(state);
     });
 });

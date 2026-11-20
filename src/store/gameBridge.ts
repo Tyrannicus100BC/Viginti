@@ -1,3 +1,4 @@
+import { generateRewardCardChoices, getRewardCard } from '../logic/rewardCards';
 import { chooseBoss, getBustLimit } from '../engine/bosses';
 import { createChallenges, CHALLENGE_ROUNDS } from '../engine/challenges';
 import type { Challenge, ChallengeReward } from '../engine/challenges';
@@ -6,7 +7,7 @@ import { SeededRNG } from '../engine/rng';
 import { capRelicEffects, INITIAL_RELIC_SLOTS } from '../logic/relics/inventory';
 import { normalizeRelicInstance } from '../logic/relics/state';
 import { normalizeDeckProbabilities } from '../logic/specialCards';
-import { getPackDefinition, type PackId, type PendingPack } from '../logic/packs';
+import { PACKS, getPackDefinition, type PackId, type PendingPack } from '../logic/packs';
 import { RelicManager } from '../logic/relics/manager';
 /**
  * GameBridge — Zustand store that wraps the pure game engine.
@@ -63,8 +64,6 @@ function isActionEquivalent(a: PlayerAction, b: PlayerAction): boolean {
             return a.packId === (b as Extract<PlayerAction, { type: 'open_pack' }>).packId;
         case 'choose_pack_card':
             return a.cardId === (b as Extract<PlayerAction, { type: 'choose_pack_card' }>).cardId;
-        case 'choose_raise':
-            return (a as any).raiseId === (b as any).raiseId;
         case 'acknowledge_tutorial':
             return a.stepId === b.stepId;
         default:
@@ -202,7 +201,6 @@ interface GameBridgeState extends UIState {
     readonly handsRemaining: number;
     readonly inventory: readonly RelicInstance[];
     readonly relicSlots: number;
-    readonly pendingRaiseChoices: readonly string[];
     readonly pendingPackChoices: readonly string[];
     readonly pendingPack: PendingPack | null;
     readonly offeredPacks: readonly PackId[];
@@ -273,7 +271,6 @@ export const useGameBridge = create<GameBridgeState>((set, get) => {
         handsRemaining: gs.handsRemaining,
         inventory: gs.inventory,
         relicSlots: gs.relicSlots,
-        pendingRaiseChoices: gs.pendingRaiseChoices,
         pendingPackChoices: gs.pendingPackChoices,
         pendingPack: gs.pendingPack,
         offeredPacks: gs.offeredPacks,
@@ -599,14 +596,24 @@ export const useGameBridge = create<GameBridgeState>((set, get) => {
                 // Drop the retired economy while retaining earned cards and relics.
                 const migratedState = { ...rawState };
                 for (const key of ['handsUntilAnteIncrease', 'comps', 'shopItems', 'shopHasNewStock', 'shopStockInitialized',
-                    'shopDealsAtLastFreeRestock', 'shopReturnPhase', 'giftShopRestockCost', 'shopRewardSummary']) {
+                    'pendingRaiseChoices', 'shopDealsAtLastFreeRestock', 'shopReturnPhase', 'giftShopRestockCost', 'shopRewardSummary']) {
                     delete migratedState[key];
                 }
                 const rng = new SeededRNG(rawState.rngState);
+                const initialRngState = rng.getState();
                 const offeredPacks = rawState.offeredPacks ?? (rawState.phase === 'gift_shop' &&
                     !rawState.pendingPack && !rawState.pendingRaiseChoices?.length && !rawState.pendingPackChoices?.length
                     ? generatePackOffers(rng) : []);
-                const initialRngState = rng.getState();
+                const retiredPack = rawState.pendingPack && !PACKS.some(pack => pack.id === rawState.pendingPack.packId)
+                    || rawState.pendingRaiseChoices?.length > 0
+                    || (rawState.pendingPack?.packId !== 'relic_boss' && rawState.pendingPackChoices?.some((id: string) => !getRewardCard(id)));
+                const pendingPack = retiredPack ? { packId: 'mixed_major' as const, picksRemaining: 1 }
+                    : rawState.pendingPack ?? null;
+                const pendingPackChoices = retiredPack
+                    ? generateRewardCardChoices(rng, getPackDefinition(pendingPack!.packId).offerCount,
+                        normalizeDeckProbabilities(rawState.deckProbabilities), inventory).map(card => card.id)
+                    : (rawState.pendingPackChoices ?? []).filter((id: string) => pendingPack?.packId === 'relic_boss'
+                        ? !!RelicManager.getRelicConfig(id)?.tableAction : !!getRewardCard(id));
                 const bossId = rawState.bossId !== undefined ? rawState.bossId : chooseBoss(rawState.challengeStage ?? 0, rng);
                 const nextGameState = {
                     ...migratedState,
@@ -620,18 +627,14 @@ export const useGameBridge = create<GameBridgeState>((set, get) => {
                     relicSlots: INITIAL_RELIC_SLOTS,
                     playerHands: rawState.playerHands.map((hand: PlayerHand) => ({ ...hand, isInactive: false })),
                     phase: rawState.phase === 'gift_shop' ? 'pack_choice' : rawState.phase,
-                    offeredPacks,
+                    offeredPacks: [...new Set(offeredPacks.map((id: string) => getPackDefinition(id).id))],
                     rngState: rng.getState() === initialRngState ? rawState.rngState : rng.getState(),
                     packReturnPhase: rawState.packReturnPhase ?? rawState.shopReturnPhase ?? 'deal_over',
-                    debugPackReturn: rawState.debugPackReturn ?? null,
-                    pendingRaiseChoices: rawState.pendingRaiseChoices ?? [],
-                    pendingPackChoices: getPackDefinition(rawState.pendingPack?.packId).family === 'relic'
-                        ? (rawState.pendingPackChoices ?? []).filter((id: string) => RelicManager.getRelicConfig(id))
-                        : rawState.pendingPackChoices ?? [],
-                    pendingPack: (rawState.pendingPack || rawState.pendingRaiseChoices?.length || rawState.pendingPackChoices?.length) ? {
-                        packId: getPackDefinition(rawState.pendingPack?.packId).id,
-                        picksRemaining: rawState.pendingPack?.picksRemaining ?? 1,
+                    debugPackReturn: rawState.debugPackReturn ? { ...rawState.debugPackReturn,
+                        offeredPacks: [...new Set((rawState.debugPackReturn.offeredPacks ?? []).map((id: string) => getPackDefinition(id).id))],
                     } : null,
+                    pendingPackChoices,
+                    pendingPack,
                     ante: rawState.ante ?? BASE_ANTE,
                     challengeStage: rawState.challengeStage ?? 0,
                     bossId,

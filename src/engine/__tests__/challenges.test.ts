@@ -205,6 +205,38 @@ describe('hand-pattern challenge progress', () => {
             expect(state.challenges.find(goal => goal.metric === metric)?.progress).toBe(1);
             expect(state.challenges.find(goal => goal.metric === 'wins')?.progress).toBe(outcome === 'win' ? 1 : 0);
         });
+
+        it.each([2, 3, 4, 5])('counts every straight and flush bonus in a %i-card group', length => {
+            const cards: Card[] = (['2', '3', '4', '5', '6'] as const).slice(0, length)
+                .map((rank, index) => ({ id: `long-${index}`, rank, suit: 'hearts' }));
+            const state = settle({ ...start(), challenges: [createChallenges(1)[1], createChallenges(2)[1]] }, 0, [{
+                ...pair, cards, blackjackValue: outcome === 'bust' ? 25 : 20, isBust: outcome === 'bust', outcome,
+            }]);
+            for (const [id, metric] of [['straight', 'straights'], ['flush', 'flushes']] as const) {
+                expect(state.playerHands[0].finalScore!.criteria.find(row => row.id === id)?.count).toBe(length - 1);
+                expect(state.challenges.find(goal => goal.metric === metric)?.progress).toBe(length - 1);
+            }
+        });
+    });
+
+    it.each([3, 4, 5])('keeps %i of a kind capped at three pair bonuses', length => {
+        const cards: Card[] = Array.from({ length }, (_, index) => ({ id: `pair-${index}`, rank: '2', suit: 'hearts' }));
+        const state = settle(start(), 0, [{ ...pair, cards, blackjackValue: length * 2 }]);
+        expect(state.playerHands[0].finalScore!.criteria.find(row => row.id === 'pair')?.count).toBe(3);
+        expect(state.challenges.find(goal => goal.metric === 'pairs')?.progress).toBe(3);
+    });
+
+    it('completes a minor challenge with both bonuses from a three-card straight', () => {
+        const goals = createChallenges(1).map(goal => goal.metric === 'straights'
+            ? { ...goal, progress: goal.target - 2 } : goal);
+        const cards: Card[] = [
+            { id: 's1', rank: '2', suit: 'hearts' },
+            { id: 's2', rank: '3', suit: 'clubs' },
+            { id: 's3', rank: '4', suit: 'spades' },
+        ];
+        const state = settle({ ...start(), challenges: goals }, 0, [{ ...pair, cards, blackjackValue: 9 }]);
+        expect(state.challenges.find(goal => goal.metric === 'straights')).toMatchObject({ progress: 5, completed: true });
+        expect(state.challengeRewards).toMatchObject([{ tier: 'minor', title: 'Straight Shooter' }]);
     });
 
     it.each([1, 2])('counts a losing flush even when tradeoffs remove its positive payout (%i penalties)', count => {
@@ -230,17 +262,21 @@ describe('hand-pattern challenge progress', () => {
 });
 
 
-it.each<{ name: string; stage: number; metric: string; ranks: Rank[]; suits?: Card['suit'][]; outcome: PlayerHand['outcome']; value: number; count: number }>([
+it.each<{ name: string; stage: number; metric: string; ranks: Rank[]; suits?: Card['suit'][]; outcome: PlayerHand['outcome']; value: number; count: number; rows?: number }>([
     { name: 'two separate straights in a loss', stage: 1, metric: 'straights', ranks: ['2', '3', '7', '8'], outcome: 'loss', value: 20, count: 2 },
     { name: 'two separate straights in a bust', stage: 1, metric: 'straights', ranks: ['3', '4', '8', '9'], outcome: 'bust', value: 24, count: 2 },
     { name: 'two flushes in different suits', stage: 2, metric: 'flushes', ranks: ['2', '3', '7', '8'], suits: ['hearts', 'hearts', 'clubs', 'clubs'], outcome: 'loss', value: 20, count: 2 },
-    { name: 'one maximal straight, without counting its sub-runs', stage: 1, metric: 'straights', ranks: ['A', '2', '3', '4'], outcome: 'loss', value: 20, count: 1 },
+    { name: 'one maximal straight, without counting its sub-runs', stage: 1, metric: 'straights', ranks: ['A', '2', '3', '4'], outcome: 'loss', value: 20, count: 3, rows: 1 },
+    { name: 'a longer straight and a separate straight', stage: 1, metric: 'straights', ranks: ['A', '2', '3', '7', '8'], outcome: 'loss', value: 21, count: 3, rows: 2 },
+    { name: 'a longer flush and a separate flush', stage: 2, metric: 'flushes', ranks: ['A', '2', '3', '7', '8'], suits: ['hearts', 'hearts', 'hearts', 'clubs', 'clubs'], outcome: 'loss', value: 21, count: 3, rows: 2 },
     { name: 'separate Ace-high and Ace-low straights', stage: 1, metric: 'straights', ranks: ['K', 'A', '2'], outcome: 'loss', value: 13, count: 2 },
-])('matches the scored pattern count for $name', ({ stage, metric, ranks, suits, outcome, value, count }) => {
+])('matches the scored pattern count for $name', ({ stage, metric, ranks, suits, outcome, value, count, rows = count }) => {
     const cards: Card[] = ranks.map((rank, index) => ({ id: `multi-${index}`, rank, suit: suits?.[index] ?? 'hearts' }));
     const state = settle({ ...start(), challenges: createChallenges(stage) }, 0, [{ ...pair, cards,
         blackjackValue: value, isBust: outcome === 'bust', outcome }]);
     const criterionId = metric === 'flushes' ? 'flush' : 'straight';
-    expect(state.playerHands[0].finalScore!.criteria.filter(row => row.id === criterionId)).toHaveLength(count);
+    const criteria = state.playerHands[0].finalScore!.criteria.filter(row => row.id === criterionId);
+    expect(criteria).toHaveLength(rows);
+    expect(criteria.reduce((sum, row) => sum + (row.count ?? 1), 0)).toBe(count);
     expect(state.challenges.find(goal => goal.metric === metric)?.progress).toBe(count);
 });

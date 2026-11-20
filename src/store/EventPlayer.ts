@@ -620,12 +620,6 @@ const handlers: Partial<Record<GameEvent['type'], EventHandler>> = {
         config.sfx?.play('click');
     },
 
-    async raise_chosen(_event, config) {
-        config.sfx?.play('click');
-    },
-
-    // === Deck Management ===
-
     async card_enhanced(_event, config) {
         config.sfx?.play('click');
         await wait(200, config);

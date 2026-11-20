@@ -4,11 +4,11 @@ import { pickRandomRelic } from '../relics/selection';
 import type { RelicInstance, RelicRarity } from '../relics/types';
 import { SeededRNG } from '../../engine/rng';
 import { generateRaiseChoices, getRaise } from '../handScoring';
-import { rollPackDefinition, isPackItem, PACK_ITEM_TYPES, type PackId, type PackItemType } from '../packs';
+import type { PackId } from '../packs';
 
 export interface ShopItem {
     id: string;
-    type: 'Relic' | PackItemType | 'SpecialPack' | 'Control' | 'Score' | 'Raise' | 'TableAction';
+    type: 'Relic' | 'Control' | 'Score' | 'Raise' | 'TableAction';
     purchased?: boolean;
     cost: number;
     nameOverride?: string;
@@ -50,12 +50,6 @@ export function generateShopItems(
 
     for (const config of configList) {
         for (let i = 0; i < config.count; i++) {
-            if (isPackItem(config)) {
-                const family = config.type === 'RelicPack' ? 'relic' : config.type === 'DeckPack' || config.type === 'SpecialPack' ? 'deck' : 'raise';
-                const pack = rollPackDefinition(nextRandom(), family);
-                items.push({ id: `${family}_pack_${items.length}`, type: PACK_ITEM_TYPES[family], packId: pack.id, cost: pack.cost, nameOverride: pack.name });
-                continue;
-            }
             if (config.type === 'Raise') {
                 const candidates = config.specificIds?.length
                     ? config.specificIds.map(getRaise).filter(raise => raise && !pickedRelicIds.has(raise.id)

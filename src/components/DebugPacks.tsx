@@ -50,7 +50,7 @@ export function DebugPacks({ onClose }: { onClose: () => void }) {
                 </div>
                 <button className={styles.close} aria-label="Close debug packs" onClick={onClose}>×</button>
             </header>
-            <p><a href="/raises" target="_blank" rel="noreferrer">Raise Gallery — preview nine cards by rarity ↗</a></p>
+            <p><a href="/rewards" target="_blank" rel="noreferrer">Reward Gallery — preview nine cards by rarity ↗</a></p>
             <div className={styles.families}>
                 <section>
                     <h3>Reward Cards</h3>

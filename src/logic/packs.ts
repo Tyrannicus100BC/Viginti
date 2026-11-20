@@ -1,16 +1,8 @@
 import type { RelicRarity } from './relics/types';
 
-export const PACK_FAMILIES = ['raise', 'deck', 'relic', 'mixed', 'challenge'] as const;
-export type PackFamily = typeof PACK_FAMILIES[number];
+export type PackFamily = 'mixed' | 'relic';
 export type PackQuality = 'average' | 'excellent' | 'exceptional';
-type PackFormat = 'basic' | 'jumbo' | 'mega';
-// Original IDs remain valid for saved runs; size names are internal only.
-export type PackId = `${PackFamily}_${PackFormat}` | `${PackFamily}_${PackFormat}_${Exclude<PackQuality, 'average'>}` | 'mixed_major' | 'mixed_minor' | 'relic_boss';
-export type PackItemType = 'RaisePack' | 'DeckPack' | 'RelicPack' | 'MixedPack' | 'ChallengePack';
-export const PACK_ITEM_TYPES: Readonly<Record<PackFamily, PackItemType>> = {
-    raise: 'RaisePack', deck: 'DeckPack', relic: 'RelicPack', mixed: 'MixedPack', challenge: 'ChallengePack',
-};
-export const isPackItem = (item: { type: string }): boolean => item.type === 'SpecialPack' || Object.values(PACK_ITEM_TYPES).includes(item.type as PackItemType);
+export type PackId = 'mixed_major' | 'mixed_minor' | 'relic_boss';
 
 export const PACK_QUALITY_LABELS: Record<PackQuality, string> = { average: 'Average', excellent: 'Great', exceptional: 'Exceptional' };
 export const PACK_RARITY_WEIGHTS: Readonly<Record<PackQuality, Readonly<Record<RelicRarity, number>>>> = {
@@ -36,46 +28,17 @@ export interface PackDefinition {
     readonly pickCount: number;
     readonly stockWeight: number;
 }
-const FORMATS = [
-    { format: 'basic', cost: 40, offerCount: 3, pickCount: 1, stockWeight: 60 },
-    { format: 'jumbo', cost: 60, offerCount: 5, pickCount: 1, stockWeight: 30 },
-    { format: 'mega', cost: 80, offerCount: 5, pickCount: 2, stockWeight: 10 },
-] as const;
 export const RAISE_PACK_COST = 40;
-export const PACKS: readonly PackDefinition[] = [...PACK_FAMILIES.flatMap(family =>
-    (['average', 'excellent', 'exceptional'] as const).flatMap((quality, tier) => FORMATS
-        .filter(({ format }) => family !== 'challenge' || format !== 'jumbo')
-        .map(({ format, ...counts }) => ({
-        ...counts,
-        // Challenge packs trade an immediate reward for two extra goals.
-        ...(family === 'challenge' ? { pickCount: 2 } : {}),
-        id: `${family}_${format}${quality === 'average' ? '' : `_${quality}`}` as PackId,
-        family, name: `${family[0].toUpperCase() + family.slice(1)} Pack`, quality,
-        rarity: (['Common', 'Uncommon', 'Rare'] as const)[tier], cost: counts.cost + tier * 20,
-    })))),
+export const PACKS: readonly PackDefinition[] = [
     { id: 'mixed_major', family: 'mixed', name: 'Major Reward', quality: 'average', rarity: 'Common', cost: 0, offerCount: 6, pickCount: 1, stockWeight: 0 },
     { id: 'mixed_minor', family: 'mixed', name: 'Minor Reward', quality: 'average', rarity: 'Common', cost: 0, offerCount: 3, pickCount: 1, stockWeight: 0 },
     { id: 'relic_boss', family: 'relic', name: 'Boss Reward', quality: 'average', rarity: 'Common', cost: 0, offerCount: 2, pickCount: 1, stockWeight: 0 },
 ];
 
-export const TARGETED_PACK_REWARDS = {
-    reward_deck_pack: { id: 'deck_basic', name: 'Deck Pack', family: 'deck', rarity: 'Common', description: 'Open a Deck Pack and choose one of three deck upgrades.' },
-    reward_challenge_pack: { id: 'challenge_basic', name: 'Challenge Pack', family: 'challenge', rarity: 'Common', description: 'Open a Challenge Pack and choose two of three extra challenges.' },
-} as const;
-export const getTargetedPackReward = (id: string) => TARGETED_PACK_REWARDS[id as keyof typeof TARGETED_PACK_REWARDS];
-
-// Retired challenge jumbo packs resolve to the two-of-five format in old saves.
-export const getPackDefinition = (id?: string | null): PackDefinition => PACKS.find(pack => pack.id === id?.replace(/^special_/, 'deck_').replace(/^challenge_jumbo/, 'challenge_mega')) ?? PACKS[0];
-
-/** Roll quantity and quality independently. Omitting qualityRoll retains legacy average packs. */
-export function rollPackDefinition(random: number, family: PackFamily = 'raise', qualityRoll = 0): PackDefinition {
-    const format = random < .6 ? 'basic' : random < .9 ? 'jumbo' : 'mega';
-    const quality = qualityRoll < .65 ? 'average' : qualityRoll < .9 ? 'excellent' : 'exceptional';
-    return getPackDefinition(`${family}_${format}${quality === 'average' ? '' : `_${quality}`}`);
-}
+export const getPackDefinition = (id?: string | null): PackDefinition => PACKS.find(pack => pack.id === id) ?? PACKS[0];
 
 export interface PendingPack {
     readonly packId: PackId;
     readonly picksRemaining: number;
 }
-export const hasPendingPack = (state: { pendingRaiseChoices: readonly string[]; pendingPackChoices: readonly string[]; pendingPack?: PendingPack | null }): boolean => !!state.pendingPack || state.pendingRaiseChoices.length > 0 || state.pendingPackChoices.length > 0;
+export const hasPendingPack = (state: { pendingPackChoices: readonly string[]; pendingPack?: PendingPack | null }): boolean => !!state.pendingPack || state.pendingPackChoices.length > 0;

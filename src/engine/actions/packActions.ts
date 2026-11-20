@@ -1,13 +1,11 @@
-import { generateChallengeCardChoices, getChallengeCard } from '../../logic/challengeCards';
 import { createChallenges, renewSideChallenges, type RewardTier } from '../challenges';
 import { chooseBoss } from '../bosses';
 import { getNextAnte } from '../economy';
 import type { GameEvent } from '../GameEvent';
 /** Free opening packs and queued challenge rewards. */
 import { generateRelicPackChoices } from '../../logic/relicPacks';
-import { applyPackCard, generatePackCardChoices, getPackCard } from '../../logic/packCards';
-import { getRaise, generateRaiseChoices } from '../../logic/handScoring';
-import { getPackDefinition, hasPendingPack, PACKS, getTargetedPackReward, type PackId } from '../../logic/packs';
+import { applyPackCard, getPackCard } from '../../logic/packCards';
+import { getPackDefinition, hasPendingPack, PACKS, type PackId } from '../../logic/packs';
 import type { Card, PlayerHand } from '../../types';
 import type { RelicInstance } from '../../logic/relics/types';
 import type { GameState } from '../GameState';
@@ -53,39 +51,18 @@ export function processBeginChallengeRewards(state: GameState): ActionResult {
 }
 
 export function processOpenPack(state: GameState, packId: PackId): ActionResult {
-    if (state.phase !== 'pack_choice' || hasPendingPack(state) || !state.offeredPacks.includes(packId)) {
+    if (state.phase !== 'pack_choice' || !PACKS.some(pack => pack.id === packId) || hasPendingPack(state) || !state.offeredPacks.includes(packId)) {
         return { nextState: state, events: [] };
     }
     const rng = new SeededRNG(state.rngState);
     const pack = getPackDefinition(packId);
-    let choices: string[] = [];
-    if (pack.family === 'relic') choices = generateRelicPackChoices(rng, pack.offerCount, state.inventory, [], pack.quality, packId === 'relic_boss');
-    if (pack.family === 'deck') choices = generatePackCardChoices(rng, pack.offerCount, state.deckProbabilities, pack.quality).map(card => card.id);
-    if (pack.family === 'challenge') choices = generateChallengeCardChoices(rng, pack.offerCount, state.challengeStage, pack.quality).map(card => card.id);
-    if (pack.family === 'mixed' && (packId === 'mixed_major' || packId === 'mixed_minor')) {
-        choices = generateRewardCardChoices(rng, pack.offerCount, state.deckProbabilities, state.inventory, pack.quality).map(card => card.id);
-    } else if (pack.family === 'mixed') {
-        // Earlier mixed pack IDs remain available for imported runs.
-        const families = Array.from({ length: pack.offerCount }, (_, index) => index < 3
-            ? (['raise', 'deck', 'relic'] as const)[index] : rng.pick(['raise', 'deck', 'relic'] as const));
-        for (const family of families) {
-            let id: string | undefined;
-            if (family === 'relic') id = generateRelicPackChoices(rng, 1, state.inventory, choices, pack.quality)[0];
-            if (family === 'deck') {
-                do { id = generatePackCardChoices(rng, 1, state.deckProbabilities, pack.quality)[0].id; } while (choices.includes(id));
-            }
-            if (family === 'raise' || !id) {
-                do { id = generateRaiseChoices(rng, 1, pack.quality)[0].id; } while (choices.includes(id));
-            }
-            choices.push(id);
-        }
-        choices = rng.shuffle(choices);
-    }
+    const choices = packId === 'relic_boss'
+        ? generateRelicPackChoices(rng, pack.offerCount, state.inventory, [], pack.quality, true)
+        : generateRewardCardChoices(rng, pack.offerCount, state.deckProbabilities, state.inventory, pack.quality).map(card => card.id);
     return {
         nextState: {
             ...state,
             offeredPacks: [],
-            pendingRaiseChoices: pack.family === 'raise' ? generateRaiseChoices(rng, pack.offerCount, pack.quality).map(raise => raise.id) : [],
             pendingPackChoices: choices,
             pendingPack: { packId, picksRemaining: pack.pickCount },
             rngState: rng.getState(),
@@ -189,35 +166,13 @@ function buildTableActionHeldCards(
     return held;
 }
 
-export function processChooseRaise(state: GameState, raiseId: string): ActionResult {
-    if (state.phase !== 'pack_choice' || !state.pendingRaiseChoices.includes(raiseId) || !getRaise(raiseId)) {
-        return { nextState: state, events: [] };
-    }
-    const picksRemaining = (state.pendingPack?.picksRemaining ?? 1) - 1;
-    return {
-        nextState: {
-            ...state,
-            handUpgrades: { ...state.handUpgrades, [raiseId]: (state.handUpgrades[raiseId] ?? 0) + 1 },
-            pendingRaiseChoices: picksRemaining > 0 ? state.pendingRaiseChoices.filter(id => id !== raiseId) : [],
-            pendingPack: picksRemaining > 0 ? { packId: state.pendingPack!.packId, picksRemaining } : null,
-        },
-        events: [{ type: 'raise_chosen', raiseId }],
-    };
-}
-
 export function processChoosePackCard(state: GameState, cardId: string): ActionResult {
     if (state.phase !== 'pack_choice' || !state.pendingPackChoices.includes(cardId) || !state.pendingPack) {
         return { nextState: state, events: [] };
     }
-    const targeted = getTargetedPackReward(cardId);
-    if (targeted && state.pendingPack.packId === 'mixed_major') {
-        const opened = processOpenPack({ ...state, pendingPack: null, pendingPackChoices: [], offeredPacks: [targeted.id] }, targeted.id);
-        return { nextState: opened.nextState, events: [{ type: 'pack_card_chosen', cardId }, ...opened.events] };
-    }
-    const family = getPackDefinition(state.pendingPack.packId).family;
     let updated = state;
     const reward = getRewardCard(cardId);
-    if (reward && family === 'mixed') {
+    if (reward && state.pendingPack.packId !== 'relic_boss') {
         // Validate before changing anything; a reward's rows are one atomic choice.
         if (reward.rows.some(row => row.kind === 'relic' && !canAcquireRelic(row.relicId, state.inventory))) return { nextState: state, events: [] };
         for (const row of reward.rows) {
@@ -229,34 +184,24 @@ export function processChoosePackCard(state: GameState, cardId: string): ActionR
         updated = { ...updated, relicSlots: INITIAL_RELIC_SLOTS,
             tableActionCharges: buildTableActionCharges(updated.inventory, updated.tableActionCharges),
             tableActionHeldCards: buildTableActionHeldCards(updated.inventory, updated.tableActionHeldCards) };
-    } else if ((family === 'relic' || family === 'mixed') && RelicManager.getRelicConfig(cardId)) {
+    } else if (state.pendingPack.packId === 'relic_boss' && RelicManager.getRelicConfig(cardId)?.tableAction) {
         if (!canAcquireRelic(cardId, state.inventory, state.relicSlots)) return { nextState: state, events: [] };
         const inventory = acquireRelicEffect(state.inventory, cardId);
         updated = { ...state, inventory,
             tableActionCharges: buildTableActionCharges(inventory, state.tableActionCharges),
             tableActionHeldCards: buildTableActionHeldCards(inventory, state.tableActionHeldCards) };
-    } else if (family === 'challenge') {
-        const card = getChallengeCard(cardId);
-        if (!card || state.challenges.some(challenge => challenge.id === cardId)) return { nextState: state, events: [] };
-        updated = { ...state, challenges: [...state.challenges, card.challenge] };
-    } else if (family === 'mixed' && getRaise(cardId)) {
-        updated = { ...state, handUpgrades: { ...state.handUpgrades, [cardId]: (state.handUpgrades[cardId] ?? 0) + 1 } };
-    } else {
-        const card = getPackCard(cardId);
-        if ((family !== 'deck' && family !== 'mixed') || !card) return { nextState: state, events: [] };
-        updated = { ...state, deckProbabilities: applyPackCard(state.deckProbabilities, card) };
-    }
+    } else return { nextState: state, events: [] };
     const picksRemaining = state.pendingPack.picksRemaining - 1;
     return {
         nextState: { ...updated,
             pendingPackChoices: picksRemaining > 0 ? state.pendingPackChoices.filter(id => id !== cardId) : [],
             pendingPack: picksRemaining > 0 ? { ...state.pendingPack, picksRemaining } : null },
-        events: [{ type: 'pack_card_chosen', cardId }, ...(family === 'challenge' ? [{ type: 'challenges_updated' as const, challenges: updated.challenges }] : [])],
+        events: [{ type: 'pack_card_chosen', cardId }],
     };
 }
 
 export function processSkipPack(state: GameState): ActionResult {
     if (state.phase !== 'pack_choice' || (!hasPendingPack(state) && !state.offeredPacks.length)) return { nextState: state, events: [] };
-    return { nextState: { ...state, offeredPacks: [], pendingRaiseChoices: [], pendingPackChoices: [], pendingPack: null }, events: [{ type: 'pack_skipped' }] };
+    return { nextState: { ...state, offeredPacks: [], pendingPackChoices: [], pendingPack: null }, events: [{ type: 'pack_skipped' }] };
 }
 
